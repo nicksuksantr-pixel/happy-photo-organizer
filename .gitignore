@@ -1,0 +1,45 @@
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+
+# PyInstaller
+*.spec.bak
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# OS
+Thumbs.db
+desktop.ini
+
+# Local config / runtime
+.happy-photo-organizer/
+*.log
+release-notes-*.md
+
+# Sensitive
+auth.json
+*.env
+
+# Claude Code session state
+.claude/scheduled_tasks.lock
+.claude/settings.local.json
+
+# Backups
+*.zip
+*.bak

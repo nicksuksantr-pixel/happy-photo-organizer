@@ -1,0 +1,3347 @@
+{
+  "version": 1,
+  "generated_at": "2026-05-18T12:55:21",
+  "sources": [
+    {
+      "ship": "Conquest",
+      "path": "D:\\+++++Nick folder+++++\\ENA\\Conquest\\Photo EE"
+    },
+    {
+      "ship": "Crystal",
+      "path": "D:\\+++++Nick folder+++++\\ENA\\Crystal\\Photo"
+    }
+  ],
+  "total_job_dirs_scanned": 127,
+  "unique_job_count": 121,
+  "jobs": [
+    {
+      "name": "Air condition ER",
+      "normalized": "air condition er",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/July 25"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Air condition ER"
+      ],
+      "keywords": [
+        "air",
+        "condition",
+        "er"
+      ]
+    },
+    {
+      "name": "Battery",
+      "normalized": "battery",
+      "occurrences": 1,
+      "ships": [
+        "Crystal"
+      ],
+      "months_seen": [],
+      "dates_seen": [],
+      "variants": [
+        "Battery"
+      ],
+      "keywords": [
+        "battery"
+      ]
+    },
+    {
+      "name": "Battery Inspected CCA Value",
+      "normalized": "battery inspected cca value",
+      "occurrences": 2,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Sep 25"
+      ],
+      "dates_seen": [
+        "2025-09-30",
+        "26-02-26"
+      ],
+      "variants": [
+        "40. 30-09-2025 Battery Inspected CCA Value"
+      ],
+      "keywords": [
+        "battery",
+        "inspected",
+        "cca",
+        "value"
+      ]
+    },
+    {
+      "name": "Battery Inspection",
+      "normalized": "battery inspection",
+      "occurrences": 26,
+      "ships": [
+        "Crystal"
+      ],
+      "months_seen": [
+        "Apr 26",
+        "Crystal/DEC 2025",
+        "Feb 26",
+        "Mar 26"
+      ],
+      "dates_seen": [
+        "07-03-26",
+        "14-04-26",
+        "16-04-26",
+        "18-04-26",
+        "21-04-26",
+        "22-03-26",
+        "26-02-26",
+        "27-02-26",
+        "28-02-26",
+        "30-04-26",
+        "31-03-26"
+      ],
+      "variants": [
+        "1.Battery Inspection"
+      ],
+      "keywords": [
+        "battery",
+        "inspection"
+      ]
+    },
+    {
+      "name": "Bow thrusters 2",
+      "normalized": "bow thrusters 2",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/July 25"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Bow thrusters 2"
+      ],
+      "keywords": [
+        "bow",
+        "thrusters"
+      ]
+    },
+    {
+      "name": "Bow Thuster Panel Inspection",
+      "normalized": "bow thuster panel inspection",
+      "occurrences": 1,
+      "ships": [
+        "Crystal"
+      ],
+      "months_seen": [
+        "Crystal/DEC 2025"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "2.Bow Thuster Panel Inspection"
+      ],
+      "keywords": [
+        "bow",
+        "thuster",
+        "panel",
+        "inspection"
+      ]
+    },
+    {
+      "name": "Carne",
+      "normalized": "carne",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/July 25"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Carne"
+      ],
+      "keywords": [
+        "carne"
+      ]
+    },
+    {
+      "name": "Change Battery DG No. 1",
+      "normalized": "change battery dg no.1",
+      "occurrences": 1,
+      "ships": [
+        "Crystal"
+      ],
+      "months_seen": [
+        "Crystal/JAN 2026"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Change Battery DG No. 1"
+      ],
+      "keywords": [
+        "change",
+        "battery",
+        "dg",
+        "no"
+      ]
+    },
+    {
+      "name": "Change bulbs passenger restroom",
+      "normalized": "change bulbs passenger restroom",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Oct 25"
+      ],
+      "dates_seen": [
+        "2025-10-03"
+      ],
+      "variants": [
+        "03-10-2025 Change bulbs passenger restroom"
+      ],
+      "keywords": [
+        "change",
+        "bulbs",
+        "passenger",
+        "restroom"
+      ]
+    },
+    {
+      "name": "Change Light Panel ECR",
+      "normalized": "change light panel ecr",
+      "occurrences": 1,
+      "ships": [
+        "Crystal"
+      ],
+      "months_seen": [
+        "Crystal/JAN 2026"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Change Light Panel ECR"
+      ],
+      "keywords": [
+        "change",
+        "light",
+        "panel",
+        "ecr"
+      ]
+    },
+    {
+      "name": "Change Mechanical Seal AC No.1",
+      "normalized": "change mechanical seal ac no.1",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Aug 25"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Change Mechanical Seal AC No.1"
+      ],
+      "keywords": [
+        "change",
+        "mechanical",
+        "seal",
+        "ac",
+        "no"
+      ]
+    },
+    {
+      "name": "Changed light bulb 15W T5 ECR",
+      "normalized": "changed light bulb 15w t5 ecr",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Aug 25"
+      ],
+      "dates_seen": [
+        "2025-08-19"
+      ],
+      "variants": [
+        "19-08-2025 Changed light bulb 15W T5 ECR"
+      ],
+      "keywords": [
+        "changed",
+        "light",
+        "bulb",
+        "ecr"
+      ]
+    },
+    {
+      "name": "Charger Rescue & Emer Gen",
+      "normalized": "charger rescue & emer gen",
+      "occurrences": 4,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Apr 26",
+        "Conquest/Aug 25"
+      ],
+      "dates_seen": [
+        "20-04-26",
+        "23-04-26",
+        "30-04-26"
+      ],
+      "variants": [
+        "Charger Rescue & Emer Gen"
+      ],
+      "keywords": [
+        "charger",
+        "rescue",
+        "emer",
+        "gen"
+      ]
+    },
+    {
+      "name": "Check CCA Battery",
+      "normalized": "check cca battery",
+      "occurrences": 1,
+      "ships": [
+        "Crystal"
+      ],
+      "months_seen": [
+        "Crystal/JAN 2026"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Check CCA Battery"
+      ],
+      "keywords": [
+        "check",
+        "cca",
+        "battery"
+      ]
+    },
+    {
+      "name": "Check  generator ground, No. 3",
+      "normalized": "check generator ground, no.3",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Sep 25"
+      ],
+      "dates_seen": [
+        "2025-09-30"
+      ],
+      "variants": [
+        "42. 30-09-2025 Check  generator ground, No. 3"
+      ],
+      "keywords": [
+        "check",
+        "generator",
+        "ground",
+        "no"
+      ]
+    },
+    {
+      "name": "Cleaned & Inspected BT no.1",
+      "normalized": "cleaned & inspected bt no.1",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Aug 25"
+      ],
+      "dates_seen": [
+        "2025-08-24"
+      ],
+      "variants": [
+        "24-08-2025 Cleaned & Inspected BT no.1"
+      ],
+      "keywords": [
+        "cleaned",
+        "inspected",
+        "bt",
+        "no"
+      ]
+    },
+    {
+      "name": "Cleaned condenser air provision no. 1",
+      "normalized": "cleaned condenser air provision no.1",
+      "occurrences": 1,
+      "ships": [
+        "Crystal"
+      ],
+      "months_seen": [
+        "Crystal/JAN 2026"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Cleaned condenser air provision no. 1"
+      ],
+      "keywords": [
+        "cleaned",
+        "condenser",
+        "air",
+        "provision",
+        "no"
+      ]
+    },
+    {
+      "name": "Cleaned condenser and filter on bridge",
+      "normalized": "cleaned condenser and filter on bridge",
+      "occurrences": 1,
+      "ships": [
+        "Crystal"
+      ],
+      "months_seen": [
+        "Crystal/JAN 2026"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Cleaned condenser and filter on bridge"
+      ],
+      "keywords": [
+        "cleaned",
+        "condenser",
+        "filter",
+        "bridge"
+      ]
+    },
+    {
+      "name": "Cleaned Condensor Main AC No.1",
+      "normalized": "cleaned condensor main ac no.1",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Oct 25"
+      ],
+      "dates_seen": [
+        "2025-10-21"
+      ],
+      "variants": [
+        "21-10-2025 Cleaned Condensor Main AC No.1"
+      ],
+      "keywords": [
+        "cleaned",
+        "condensor",
+        "main",
+        "ac",
+        "no"
+      ]
+    },
+    {
+      "name": "Cleaned Condensor Provition No.1",
+      "normalized": "cleaned condensor provition no.1",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Oct 25"
+      ],
+      "dates_seen": [
+        "2025-10-24"
+      ],
+      "variants": [
+        "24-10-2025 Cleaned Condensor Provition No.1"
+      ],
+      "keywords": [
+        "cleaned",
+        "condensor",
+        "provition",
+        "no"
+      ]
+    },
+    {
+      "name": "Cleaned Cooler & Run Provition No.2",
+      "normalized": "cleaned cooler & run provition no.2",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Aug 25"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Cleaned Cooler & Run Provition No.2"
+      ],
+      "keywords": [
+        "cleaned",
+        "cooler",
+        "run",
+        "provition",
+        "no"
+      ]
+    },
+    {
+      "name": "Cleaned Cooler Main AC No. 1",
+      "normalized": "cleaned cooler main ac no.1",
+      "occurrences": 2,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Apr 26",
+        "Conquest/May 26"
+      ],
+      "dates_seen": [
+        "2026-05-01"
+      ],
+      "variants": [
+        "01-05-26 Cleaned Cooler Main AC No. 1",
+        "Cleaned Cooler Main AC No. 1"
+      ],
+      "keywords": [
+        "cleaned",
+        "cooler",
+        "main",
+        "ac",
+        "no"
+      ]
+    },
+    {
+      "name": "Cleaned Cooler Main AC No. 2",
+      "normalized": "cleaned cooler main ac no.2",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Apr 26"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Cleaned Cooler Main AC No. 2"
+      ],
+      "keywords": [
+        "cleaned",
+        "cooler",
+        "main",
+        "ac",
+        "no"
+      ]
+    },
+    {
+      "name": "Cleaned cooler main compressor No.1",
+      "normalized": "cleaned cooler main compressor no.1",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Sep 25"
+      ],
+      "dates_seen": [
+        "2025-09-13"
+      ],
+      "variants": [
+        "13-09-2025 Cleaned cooler main compressor No.1"
+      ],
+      "keywords": [
+        "cleaned",
+        "cooler",
+        "main",
+        "compressor",
+        "no"
+      ]
+    },
+    {
+      "name": "Cleaned cooler main compressor No.2",
+      "normalized": "cleaned cooler main compressor no.2",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Sep 25"
+      ],
+      "dates_seen": [
+        "2025-09-13"
+      ],
+      "variants": [
+        "13-09-2025 Cleaned cooler main compressor No.2"
+      ],
+      "keywords": [
+        "cleaned",
+        "cooler",
+        "main",
+        "compressor",
+        "no"
+      ]
+    },
+    {
+      "name": "Cleaned Cooler Provision No.1",
+      "normalized": "cleaned cooler provision no.1",
+      "occurrences": 2,
+      "ships": [
+        "Conquest",
+        "Crystal"
+      ],
+      "months_seen": [
+        "Conquest/Sep 25",
+        "Crystal/DEC 2025"
+      ],
+      "dates_seen": [
+        "2025-09-13"
+      ],
+      "variants": [
+        "13-09-2025 Cleaned cooler Provision No.1",
+        "3.Cleaned Cooler Provision No.1"
+      ],
+      "keywords": [
+        "cleaned",
+        "cooler",
+        "provision",
+        "no"
+      ]
+    },
+    {
+      "name": "Cleaned cooler provisions No. 1",
+      "normalized": "cleaned cooler provisions no.1",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Apr 26"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Cleaned cooler provisions No. 1"
+      ],
+      "keywords": [
+        "cleaned",
+        "cooler",
+        "provisions",
+        "no"
+      ]
+    },
+    {
+      "name": "Cleaned Cooler Provition No.2",
+      "normalized": "cleaned cooler provition no.2",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Oct 25"
+      ],
+      "dates_seen": [
+        "2025-10-03"
+      ],
+      "variants": [
+        "03-10-2025 Cleaned Cooler Provition No.2"
+      ],
+      "keywords": [
+        "cleaned",
+        "cooler",
+        "provition",
+        "no"
+      ]
+    },
+    {
+      "name": "cleaned cooling main compressor 2",
+      "normalized": "cleaned cooling main compressor 2",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Aug 25"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "cleaned cooling main compressor 2"
+      ],
+      "keywords": [
+        "cleaned",
+        "cooling",
+        "main",
+        "compressor"
+      ]
+    },
+    {
+      "name": "Cleaned cooling pump main AC No. 2",
+      "normalized": "cleaned cooling pump main ac no.2",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Mar 26"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Cleaned cooling pump main AC No. 2"
+      ],
+      "keywords": [
+        "cleaned",
+        "cooling",
+        "pump",
+        "main",
+        "ac",
+        "no"
+      ]
+    },
+    {
+      "name": "Cleaned Filter AHU",
+      "normalized": "cleaned filter ahu",
+      "occurrences": 7,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Apr 26",
+        "Conquest/Apr 26",
+        "Conquest/Aug 25",
+        "Conquest/May 26",
+        "Conquest/Oct 25"
+      ],
+      "dates_seen": [
+        "01-04-26",
+        "02-04-26",
+        "2025-08-16",
+        "2025-10-13",
+        "2026-05-06",
+        "30-04-26"
+      ],
+      "variants": [
+        "06-05-26 Cleaned filter AHU",
+        "13-10-2025 Cleaned Filter AHU",
+        "16-08-2025 Cleaned Filter AHU",
+        "Cleaned filter AHU"
+      ],
+      "keywords": [
+        "cleaned",
+        "filter",
+        "ahu"
+      ]
+    },
+    {
+      "name": "Cleaned washing machine no.1",
+      "normalized": "cleaned washing machine no.1",
+      "occurrences": 14,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Mar 26",
+        "Mar 26"
+      ],
+      "dates_seen": [
+        "08-03-26",
+        "13-03-26",
+        "14-03-26",
+        "18-03-26",
+        "23-03-26",
+        "27-03-26",
+        "31-03-26"
+      ],
+      "variants": [
+        "Cleaned washing machine no.1"
+      ],
+      "keywords": [
+        "cleaned",
+        "washing",
+        "machine",
+        "no"
+      ]
+    },
+    {
+      "name": "Cleaned washing machine no.2",
+      "normalized": "cleaned washing machine no.2",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Mar 26"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Cleaned washing machine no.2"
+      ],
+      "keywords": [
+        "cleaned",
+        "washing",
+        "machine",
+        "no"
+      ]
+    },
+    {
+      "name": "Cooking stove",
+      "normalized": "cooking stove",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/July 25"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Cooking stove"
+      ],
+      "keywords": [
+        "cooking",
+        "stove"
+      ]
+    },
+    {
+      "name": "cooling main AC compressor 2",
+      "normalized": "cooling main ac compressor 2",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/July 25"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "cooling main AC compressor 2"
+      ],
+      "keywords": [
+        "cooling",
+        "main",
+        "ac",
+        "compressor"
+      ]
+    },
+    {
+      "name": "CPP System Inspection",
+      "normalized": "cpp system inspection",
+      "occurrences": 1,
+      "ships": [
+        "Crystal"
+      ],
+      "months_seen": [
+        "Crystal/DEC 2025"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "4.CPP System Inspection"
+      ],
+      "keywords": [
+        "cpp",
+        "system",
+        "inspection"
+      ]
+    },
+    {
+      "name": "DG2 Inspection",
+      "normalized": "dg2 inspection",
+      "occurrences": 1,
+      "ships": [
+        "Crystal"
+      ],
+      "months_seen": [
+        "Crystal/DEC 2025"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "5.DG2 Inspection"
+      ],
+      "keywords": [
+        "dg",
+        "inspection"
+      ]
+    },
+    {
+      "name": "Emergency generator Back out",
+      "normalized": "emergency generator back out",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/July 25"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Emergency generator Back out"
+      ],
+      "keywords": [
+        "emergency",
+        "generator",
+        "back",
+        "out"
+      ]
+    },
+    {
+      "name": "filter Sea water cooler Ac 1",
+      "normalized": "filter sea water cooler ac 1",
+      "occurrences": 3,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Aug 25"
+      ],
+      "dates_seen": [
+        "03-03-26"
+      ],
+      "variants": [
+        "filter Sea water cooler Ac 1"
+      ],
+      "keywords": [
+        "filter",
+        "sea",
+        "water",
+        "cooler",
+        "ac"
+      ]
+    },
+    {
+      "name": "filter Sea water cooler Ac 2",
+      "normalized": "filter sea water cooler ac 2",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Aug 25"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "filter Sea water cooler Ac 2"
+      ],
+      "keywords": [
+        "filter",
+        "sea",
+        "water",
+        "cooler",
+        "ac"
+      ]
+    },
+    {
+      "name": "Filter Sea water cooler Ac Com No.1",
+      "normalized": "filter sea water cooler ac com no.1",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Sep 25"
+      ],
+      "dates_seen": [
+        "2025-09-13"
+      ],
+      "variants": [
+        "13-09-2025 Filter Sea water cooler Ac Com No.1"
+      ],
+      "keywords": [
+        "filter",
+        "sea",
+        "water",
+        "cooler",
+        "ac",
+        "com",
+        "no"
+      ]
+    },
+    {
+      "name": "Fire alarm",
+      "normalized": "fire alarm",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/July 25"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Fire alarm"
+      ],
+      "keywords": [
+        "fire",
+        "alarm"
+      ]
+    },
+    {
+      "name": "Fixed base of fire alarm device nut loosened. Steering gear room",
+      "normalized": "fixed base of fire alarm device nut loosened. steering gear room",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Mar 26"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Fixed base of fire alarm device nut loosened. Steering gear room"
+      ],
+      "keywords": [
+        "fixed",
+        "base",
+        "fire",
+        "alarm",
+        "device",
+        "nut",
+        "loosened",
+        "steering",
+        "gear",
+        "room"
+      ]
+    },
+    {
+      "name": "FRC Motor Inspection",
+      "normalized": "frc motor inspection",
+      "occurrences": 1,
+      "ships": [
+        "Crystal"
+      ],
+      "months_seen": [
+        "Crystal/DEC 2025"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "6.FRC Motor Inspection"
+      ],
+      "keywords": [
+        "frc",
+        "motor",
+        "inspection"
+      ]
+    },
+    {
+      "name": "Gyro No. 1 Liquid Maintenance",
+      "normalized": "gyro no.1 liquid maintenance",
+      "occurrences": 6,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Mar 26",
+        "Mar 26"
+      ],
+      "dates_seen": [
+        "12-03-26",
+        "26-03-26",
+        "31-03-26"
+      ],
+      "variants": [
+        "Gyro No. 1 Liquid Maintenance"
+      ],
+      "keywords": [
+        "gyro",
+        "no",
+        "liquid",
+        "maintenance"
+      ]
+    },
+    {
+      "name": "Hyd.Cylinder of Shark Jaw STBD. Overhaul",
+      "normalized": "hyd.cylinder of shark jaw stbd. overhaul",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Oct 25"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Hyd.Cylinder of Shark Jaw STBD. Overhaul"
+      ],
+      "keywords": [
+        "hyd",
+        "cylinder",
+        "shark",
+        "jaw",
+        "stbd",
+        "overhaul"
+      ]
+    },
+    {
+      "name": "Inspect Sharp Generator Port",
+      "normalized": "inspect sharp generator port",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Aug 25"
+      ],
+      "dates_seen": [
+        "2025-08-09"
+      ],
+      "variants": [
+        "09-08-2025 Inspect Sharp Generator Port"
+      ],
+      "keywords": [
+        "inspect",
+        "sharp",
+        "generator",
+        "port"
+      ]
+    },
+    {
+      "name": "Inspect Sharp Generator Stbd",
+      "normalized": "inspect sharp generator stbd",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Aug 25"
+      ],
+      "dates_seen": [
+        "2025-08-09"
+      ],
+      "variants": [
+        "09-08-2025 Inspect Sharp Generator Stbd"
+      ],
+      "keywords": [
+        "inspect",
+        "sharp",
+        "generator",
+        "stbd"
+      ]
+    },
+    {
+      "name": "Inspected and replaced the indicator light on the steering gear panel",
+      "normalized": "inspected and replaced the indicator light on the steering gear panel",
+      "occurrences": 1,
+      "ships": [
+        "Crystal"
+      ],
+      "months_seen": [
+        "Crystal/JAN 2026"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Inspected and replaced the indicator light on the steering gear panel"
+      ],
+      "keywords": [
+        "inspected",
+        "replaced",
+        "indicator",
+        "light",
+        "steering",
+        "gear",
+        "panel"
+      ]
+    },
+    {
+      "name": "Inspected Battery Emergency Gen",
+      "normalized": "inspected battery emergency gen",
+      "occurrences": 3,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Apr 26"
+      ],
+      "dates_seen": [
+        "06-03-26"
+      ],
+      "variants": [
+        "Inspected Battery Emergency Gen"
+      ],
+      "keywords": [
+        "inspected",
+        "battery",
+        "emergency",
+        "gen"
+      ]
+    },
+    {
+      "name": "Inspected battery GMDSS, GA no. 1, 2",
+      "normalized": "inspected battery gmdss, ga no.1, 2",
+      "occurrences": 1,
+      "ships": [
+        "Crystal"
+      ],
+      "months_seen": [
+        "Crystal/JAN 2026"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Inspected battery GMDSS, GA no. 1, 2"
+      ],
+      "keywords": [
+        "inspected",
+        "battery",
+        "gmdss",
+        "ga",
+        "no"
+      ]
+    },
+    {
+      "name": "Inspected checked the battery in April",
+      "normalized": "inspected checked the battery in april",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Apr 26"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Inspected checked the battery in April"
+      ],
+      "keywords": [
+        "inspected",
+        "checked",
+        "battery",
+        "april"
+      ]
+    },
+    {
+      "name": "Inspected checked the battery in March",
+      "normalized": "inspected checked the battery in march",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Mar 26"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Inspected checked the battery in March"
+      ],
+      "keywords": [
+        "inspected",
+        "checked",
+        "battery",
+        "march"
+      ]
+    },
+    {
+      "name": "Inspected FRC",
+      "normalized": "inspected frc",
+      "occurrences": 1,
+      "ships": [
+        "Crystal"
+      ],
+      "months_seen": [
+        "Crystal/JAN 2026"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Inspected FRC"
+      ],
+      "keywords": [
+        "inspected",
+        "frc"
+      ]
+    },
+    {
+      "name": "Inspected light main deck stbd",
+      "normalized": "inspected light main deck stbd",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Aug 25"
+      ],
+      "dates_seen": [
+        "2025-08-19"
+      ],
+      "variants": [
+        "19-08-2025 Inspected light main deck stbd"
+      ],
+      "keywords": [
+        "inspected",
+        "light",
+        "main",
+        "deck",
+        "stbd"
+      ]
+    },
+    {
+      "name": "Inspected Sensor High Level Cement TK.2",
+      "normalized": "inspected sensor high level cement tk.2",
+      "occurrences": 2,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Apr 26",
+        "Conquest/Oct 25"
+      ],
+      "dates_seen": [
+        "2025-10-07",
+        "24-04-26"
+      ],
+      "variants": [
+        "07-10-2025 Inspected Sensor High Level Cement TK.2"
+      ],
+      "keywords": [
+        "inspected",
+        "sensor",
+        "high",
+        "level",
+        "cement",
+        "tk"
+      ]
+    },
+    {
+      "name": "Inspection and Grease AHU",
+      "normalized": "inspection and grease ahu",
+      "occurrences": 1,
+      "ships": [
+        "Crystal"
+      ],
+      "months_seen": [
+        "Crystal/DEC 2025"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "7.Inspection and Grease AHU"
+      ],
+      "keywords": [
+        "inspection",
+        "grease",
+        "ahu"
+      ]
+    },
+    {
+      "name": "Inspection DG No. 1",
+      "normalized": "inspection dg no.1",
+      "occurrences": 1,
+      "ships": [
+        "Crystal"
+      ],
+      "months_seen": [
+        "Crystal/JAN 2026"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Inspection DG No. 1"
+      ],
+      "keywords": [
+        "inspection",
+        "dg",
+        "no"
+      ]
+    },
+    {
+      "name": "Inspection DG no. 3",
+      "normalized": "inspection dg no.3",
+      "occurrences": 4,
+      "ships": [
+        "Crystal"
+      ],
+      "months_seen": [
+        "Apr 26",
+        "Crystal/JAN 2026",
+        "Mar 26"
+      ],
+      "dates_seen": [
+        "06-04-26",
+        "28-03-26",
+        "29-03-26"
+      ],
+      "variants": [
+        "Inspection DG no. 3"
+      ],
+      "keywords": [
+        "inspection",
+        "dg",
+        "no"
+      ]
+    },
+    {
+      "name": "Inspection heating stove",
+      "normalized": "inspection heating stove",
+      "occurrences": 1,
+      "ships": [
+        "Crystal"
+      ],
+      "months_seen": [
+        "Crystal/DEC 2025"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "8.Inspection heating stove"
+      ],
+      "keywords": [
+        "inspection",
+        "heating",
+        "stove"
+      ]
+    },
+    {
+      "name": "Inspection Panel Agitator",
+      "normalized": "inspection panel agitator",
+      "occurrences": 1,
+      "ships": [
+        "Crystal"
+      ],
+      "months_seen": [
+        "Crystal/JAN 2026"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Inspection Panel Agitator"
+      ],
+      "keywords": [
+        "inspection",
+        "panel",
+        "agitator"
+      ]
+    },
+    {
+      "name": "Inspection Valve Control Bluk",
+      "normalized": "inspection valve control bluk",
+      "occurrences": 1,
+      "ships": [
+        "Crystal"
+      ],
+      "months_seen": [
+        "Crystal/JAN 2026"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Inspection Valve Control Bluk"
+      ],
+      "keywords": [
+        "inspection",
+        "valve",
+        "control",
+        "bluk"
+      ]
+    },
+    {
+      "name": "Inspections DG 1",
+      "normalized": "inspections dg 1",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Aug 25"
+      ],
+      "dates_seen": [
+        "2025-07-30"
+      ],
+      "variants": [
+        "30-07-2025 Inspections DG 1"
+      ],
+      "keywords": [
+        "inspections",
+        "dg"
+      ]
+    },
+    {
+      "name": "Inspections DG 2",
+      "normalized": "inspections dg 2",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Aug 25"
+      ],
+      "dates_seen": [
+        "2025-08-02"
+      ],
+      "variants": [
+        "02-08-2025 Inspections DG 2"
+      ],
+      "keywords": [
+        "inspections",
+        "dg"
+      ]
+    },
+    {
+      "name": "Inspections DG 3",
+      "normalized": "inspections dg 3",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Aug 25"
+      ],
+      "dates_seen": [
+        "2025-07-30"
+      ],
+      "variants": [
+        "30-07-2025 Inspections DG 3"
+      ],
+      "keywords": [
+        "inspections",
+        "dg"
+      ]
+    },
+    {
+      "name": "Inspections pulley Belt Provition no.2",
+      "normalized": "inspections pulley belt provition no.2",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Aug 25"
+      ],
+      "dates_seen": [
+        "2025-08-01"
+      ],
+      "variants": [
+        "01-08-2025 Inspections pulley Belt Provition no.2"
+      ],
+      "keywords": [
+        "inspections",
+        "pulley",
+        "belt",
+        "provition",
+        "no"
+      ]
+    },
+    {
+      "name": "Installed electrical outlets on Engine Rm",
+      "normalized": "installed electrical outlets on engine rm",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/May 26"
+      ],
+      "dates_seen": [
+        "2026-05-04"
+      ],
+      "variants": [
+        "04-05-26 Installed electrical outlets on Engine Rm"
+      ],
+      "keywords": [
+        "installed",
+        "electrical",
+        "outlets",
+        "engine",
+        "rm"
+      ]
+    },
+    {
+      "name": "Installed Lighter",
+      "normalized": "installed lighter",
+      "occurrences": 2,
+      "ships": [
+        "Crystal"
+      ],
+      "months_seen": [
+        "Crystal/DEC 2025"
+      ],
+      "dates_seen": [
+        "05-03-26"
+      ],
+      "variants": [
+        "9.Installed Lighter"
+      ],
+      "keywords": [
+        "installed",
+        "lighter"
+      ]
+    },
+    {
+      "name": "Liquid Mud Pump Inspection",
+      "normalized": "liquid mud pump inspection",
+      "occurrences": 1,
+      "ships": [
+        "Crystal"
+      ],
+      "months_seen": [
+        "Crystal/DEC 2025"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "10.Liquid Mud Pump Inspection"
+      ],
+      "keywords": [
+        "liquid",
+        "mud",
+        "pump",
+        "inspection"
+      ]
+    },
+    {
+      "name": "Oil separator",
+      "normalized": "oil separator",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/July 25"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Oil separator"
+      ],
+      "keywords": [
+        "oil",
+        "separator"
+      ]
+    },
+    {
+      "name": "Power Pack Motor Inspection",
+      "normalized": "power pack motor inspection",
+      "occurrences": 1,
+      "ships": [
+        "Crystal"
+      ],
+      "months_seen": [
+        "Crystal/DEC 2025"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "11.Power Pack Motor Inspection"
+      ],
+      "keywords": [
+        "power",
+        "pack",
+        "motor",
+        "inspection"
+      ]
+    },
+    {
+      "name": "Renew Lighter Smoke",
+      "normalized": "renew lighter smoke",
+      "occurrences": 1,
+      "ships": [
+        "Crystal"
+      ],
+      "months_seen": [
+        "Crystal/JAN 2026"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Renew Lighter Smoke"
+      ],
+      "keywords": [
+        "renew",
+        "lighter",
+        "smoke"
+      ]
+    },
+    {
+      "name": "Repair alarm at the door",
+      "normalized": "repair alarm at the door",
+      "occurrences": 1,
+      "ships": [
+        "Crystal"
+      ],
+      "months_seen": [
+        "Crystal/JAN 2026"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Repair alarm at the door"
+      ],
+      "keywords": [
+        "repair",
+        "alarm",
+        "door"
+      ]
+    },
+    {
+      "name": "Repair Cargo Spotlight Port",
+      "normalized": "repair cargo spotlight port",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Aug 25"
+      ],
+      "dates_seen": [
+        "2025-07-08"
+      ],
+      "variants": [
+        "08-07-2025 Repair Cargo Spotlight Port"
+      ],
+      "keywords": [
+        "repair",
+        "cargo",
+        "spotlight",
+        "port"
+      ]
+    },
+    {
+      "name": "Repair exhaust fan bathroom Main Deck",
+      "normalized": "repair exhaust fan bathroom main deck",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Sep 25"
+      ],
+      "dates_seen": [
+        "2025-09-30"
+      ],
+      "variants": [
+        "41. 30-09-2025 Repair exhaust fan bathroom Main Deck"
+      ],
+      "keywords": [
+        "repair",
+        "exhaust",
+        "fan",
+        "bathroom",
+        "main",
+        "deck"
+      ]
+    },
+    {
+      "name": "Repair Level Alarm Sensor Base Oil TK. 2 Center",
+      "normalized": "repair level alarm sensor base oil tk. 2 center",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Sep 25"
+      ],
+      "dates_seen": [
+        "2025-09-30"
+      ],
+      "variants": [
+        "38. 30-09-2025 Repair Level Alarm Sensor Base Oil TK. 2 Center"
+      ],
+      "keywords": [
+        "repair",
+        "level",
+        "alarm",
+        "sensor",
+        "base",
+        "oil",
+        "tk",
+        "center"
+      ]
+    },
+    {
+      "name": "Repair Navigation Light Stbd",
+      "normalized": "repair navigation light stbd",
+      "occurrences": 1,
+      "ships": [
+        "Crystal"
+      ],
+      "months_seen": [
+        "Crystal/JAN 2026"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Repair Navigation Light Stbd"
+      ],
+      "keywords": [
+        "repair",
+        "navigation",
+        "light",
+        "stbd"
+      ]
+    },
+    {
+      "name": "Repair Radio Deck",
+      "normalized": "repair radio deck",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Apr 26"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Repair Radio Deck"
+      ],
+      "keywords": [
+        "repair",
+        "radio",
+        "deck"
+      ]
+    },
+    {
+      "name": "Repair Stbd (Center Aft) flooding light",
+      "normalized": "repair stbd (center aft) flooding light",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Sep 25"
+      ],
+      "dates_seen": [
+        "2025-09-30"
+      ],
+      "variants": [
+        "39. 30-09-2025 Repair Stbd (Center Aft) flooding light"
+      ],
+      "keywords": [
+        "repair",
+        "stbd",
+        "center",
+        "aft",
+        "flooding",
+        "light"
+      ]
+    },
+    {
+      "name": "Repair Switch Battery No. 1",
+      "normalized": "repair switch battery no.1",
+      "occurrences": 1,
+      "ships": [
+        "Crystal"
+      ],
+      "months_seen": [
+        "Crystal/JAN 2026"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Repair Switch Battery No. 1"
+      ],
+      "keywords": [
+        "repair",
+        "switch",
+        "battery",
+        "no"
+      ]
+    },
+    {
+      "name": "Repair Switch Cover Emergency Generator Vent Fan",
+      "normalized": "repair switch cover emergency generator vent fan",
+      "occurrences": 1,
+      "ships": [
+        "Crystal"
+      ],
+      "months_seen": [
+        "Crystal/JAN 2026"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Repair Switch Cover Emergency Generator Vent Fan"
+      ],
+      "keywords": [
+        "repair",
+        "switch",
+        "cover",
+        "emergency",
+        "generator",
+        "vent",
+        "fan"
+      ]
+    },
+    {
+      "name": "Repaired air condenser , bearing fan motor on bridge no. 2",
+      "normalized": "repaired air condenser , bearing fan motor on bridge no.2",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Mar 26"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Repaired air condenser , bearing fan motor on bridge no. 2"
+      ],
+      "keywords": [
+        "repaired",
+        "air",
+        "condenser",
+        "bearing",
+        "fan",
+        "motor",
+        "bridge",
+        "no"
+      ]
+    },
+    {
+      "name": "Repaired connector for Navigation Light",
+      "normalized": "repaired connector for navigation light",
+      "occurrences": 5,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Mar 26",
+        "Mar 26"
+      ],
+      "dates_seen": [
+        "05-03-26",
+        "21-03-26"
+      ],
+      "variants": [
+        "Repaired connector for Navigation Light"
+      ],
+      "keywords": [
+        "repaired",
+        "connector",
+        "navigation",
+        "light"
+      ]
+    },
+    {
+      "name": "Repaired Fan Cooling Power Supply Gyro No.1",
+      "normalized": "repaired fan cooling power supply gyro no.1",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/May 26"
+      ],
+      "dates_seen": [
+        "2026-05-05"
+      ],
+      "variants": [
+        "05-05-26 Repaired Fan Cooling Power Supply Gyro No.1"
+      ],
+      "keywords": [
+        "repaired",
+        "fan",
+        "cooling",
+        "power",
+        "supply",
+        "gyro",
+        "no"
+      ]
+    },
+    {
+      "name": "Repaired Fan Cooling Power Supply Gyro No.2",
+      "normalized": "repaired fan cooling power supply gyro no.2",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/May 26"
+      ],
+      "dates_seen": [
+        "2026-05-07"
+      ],
+      "variants": [
+        "07-05-26 Repaired Fan Cooling Power Supply Gyro No.2"
+      ],
+      "keywords": [
+        "repaired",
+        "fan",
+        "cooling",
+        "power",
+        "supply",
+        "gyro",
+        "no"
+      ]
+    },
+    {
+      "name": "Repaired Fan Cooling Power Supply Gyro No.3",
+      "normalized": "repaired fan cooling power supply gyro no.3",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Apr 26"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Repaired Fan Cooling Power Supply Gyro No.3"
+      ],
+      "keywords": [
+        "repaired",
+        "fan",
+        "cooling",
+        "power",
+        "supply",
+        "gyro",
+        "no"
+      ]
+    },
+    {
+      "name": "Repaired Holder Spotlight Bulb AFT PORT",
+      "normalized": "repaired holder spotlight bulb aft port",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Apr 26"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Repaired Holder Spotlight Bulb AFT PORT"
+      ],
+      "keywords": [
+        "repaired",
+        "holder",
+        "spotlight",
+        "bulb",
+        "aft",
+        "port"
+      ]
+    },
+    {
+      "name": "Repaired Holder Spotlight Bulb AFT STBD",
+      "normalized": "repaired holder spotlight bulb aft stbd",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Apr 26"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Repaired Holder Spotlight Bulb AFT STBD"
+      ],
+      "keywords": [
+        "repaired",
+        "holder",
+        "spotlight",
+        "bulb",
+        "aft",
+        "stbd"
+      ]
+    },
+    {
+      "name": "Repaired hydraulic oil level sensor Shark Jaw, Towing Pin",
+      "normalized": "repaired hydraulic oil level sensor shark jaw, towing pin",
+      "occurrences": 2,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Apr 26",
+        "Conquest/Mar 26"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Repaired hydraulic oil level sensor Shark Jaw, Towing Pin"
+      ],
+      "keywords": [
+        "repaired",
+        "hydraulic",
+        "oil",
+        "level",
+        "sensor",
+        "shark",
+        "jaw",
+        "towing",
+        "pin"
+      ]
+    },
+    {
+      "name": "Repaired lamp steering gear , no electricity",
+      "normalized": "repaired lamp steering gear , no electricity",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Mar 26"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Repaired lamp steering gear , no electricity"
+      ],
+      "keywords": [
+        "repaired",
+        "lamp",
+        "steering",
+        "gear",
+        "no",
+        "electricity"
+      ]
+    },
+    {
+      "name": "Repaired Low Insulation 220V Search Light",
+      "normalized": "repaired low insulation 220v search light",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/May 26"
+      ],
+      "dates_seen": [
+        "2026-05-08"
+      ],
+      "variants": [
+        "08-05-26 Repaired Low Insulation 220V Search Light"
+      ],
+      "keywords": [
+        "repaired",
+        "low",
+        "insulation",
+        "search",
+        "light"
+      ]
+    },
+    {
+      "name": "Repaired washing machine no. 2",
+      "normalized": "repaired washing machine no.2",
+      "occurrences": 3,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Mar 26"
+      ],
+      "dates_seen": [
+        "08-03-26"
+      ],
+      "variants": [
+        "Repaired washing machine no. 2"
+      ],
+      "keywords": [
+        "repaired",
+        "washing",
+        "machine",
+        "no"
+      ]
+    },
+    {
+      "name": "Repeat Ups Monitor DP 2",
+      "normalized": "repeat ups monitor dp 2",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Aug 25"
+      ],
+      "dates_seen": [
+        "2025-08-06"
+      ],
+      "variants": [
+        "06-08-2025 Repeat Ups Monitor DP 2"
+      ],
+      "keywords": [
+        "repeat",
+        "ups",
+        "monitor",
+        "dp"
+      ]
+    },
+    {
+      "name": "Replaced alarm bulb sewage system",
+      "normalized": "replaced alarm bulb sewage system",
+      "occurrences": 3,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Mar 26"
+      ],
+      "dates_seen": [
+        "08-03-26"
+      ],
+      "variants": [
+        "Replaced alarm bulb sewage system"
+      ],
+      "keywords": [
+        "replaced",
+        "alarm",
+        "bulb",
+        "sewage",
+        "system"
+      ]
+    },
+    {
+      "name": "Replaced and reinstalled the ventilation fan bearings",
+      "normalized": "replaced and reinstalled the ventilation fan bearings",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Aug 25"
+      ],
+      "dates_seen": [
+        "2025-08-20"
+      ],
+      "variants": [
+        "20-08-2025 Replaced and reinstalled the ventilation fan bearings"
+      ],
+      "keywords": [
+        "replaced",
+        "reinstalled",
+        "ventilation",
+        "fan",
+        "bearings"
+      ]
+    },
+    {
+      "name": "Replaced Battery Emergency Generator No.2",
+      "normalized": "replaced battery emergency generator no.2",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Oct 25"
+      ],
+      "dates_seen": [
+        "2025-10-10"
+      ],
+      "variants": [
+        "10-10-2025 Replaced Battery Emergency Generator No.2"
+      ],
+      "keywords": [
+        "replaced",
+        "battery",
+        "emergency",
+        "generator",
+        "no"
+      ]
+    },
+    {
+      "name": "Replaced Battery GMDSS",
+      "normalized": "replaced battery gmdss",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Oct 25"
+      ],
+      "dates_seen": [
+        "2025-10-14"
+      ],
+      "variants": [
+        "14-10-2025 Replaced Battery GMDSS"
+      ],
+      "keywords": [
+        "replaced",
+        "battery",
+        "gmdss"
+      ]
+    },
+    {
+      "name": "Replaced Battery Ups Kstar For Internet Sys",
+      "normalized": "replaced battery ups kstar for internet sys",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Oct 25"
+      ],
+      "dates_seen": [
+        "2025-10-11"
+      ],
+      "variants": [
+        "11-10-2025 Replaced Battery Ups Kstar For Internet Sys"
+      ],
+      "keywords": [
+        "replaced",
+        "battery",
+        "ups",
+        "kstar",
+        "internet",
+        "sys"
+      ]
+    },
+    {
+      "name": "Replaced Bearings SW Provition Motor No.2",
+      "normalized": "replaced bearings sw provition motor no.2",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Oct 25"
+      ],
+      "dates_seen": [
+        "2025-10-12"
+      ],
+      "variants": [
+        "12-10-2025 Replaced Bearings SW Provition Motor No.2"
+      ],
+      "keywords": [
+        "replaced",
+        "bearings",
+        "sw",
+        "provition",
+        "motor",
+        "no"
+      ]
+    },
+    {
+      "name": "Replaced Davit Carne limit switch",
+      "normalized": "replaced davit carne limit switch",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Sep 25"
+      ],
+      "dates_seen": [
+        "2025-09-21"
+      ],
+      "variants": [
+        "21-09-2025 Replaced Davit Carne limit switch"
+      ],
+      "keywords": [
+        "replaced",
+        "davit",
+        "carne",
+        "limit",
+        "switch"
+      ]
+    },
+    {
+      "name": "Replaced ECR room bulb",
+      "normalized": "replaced ecr room bulb",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Apr 26"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Replaced ECR room bulb"
+      ],
+      "keywords": [
+        "replaced",
+        "ecr",
+        "room",
+        "bulb"
+      ]
+    },
+    {
+      "name": "Replaced FloodLight",
+      "normalized": "replaced floodlight",
+      "occurrences": 5,
+      "ships": [
+        "Crystal"
+      ],
+      "months_seen": [
+        "Apr 26",
+        "Crystal/DEC 2025",
+        "Mar 26"
+      ],
+      "dates_seen": [
+        "04-04-26",
+        "05-03-26",
+        "17-03-26",
+        "18-03-26"
+      ],
+      "variants": [
+        "12.Replaced FloodLight"
+      ],
+      "keywords": [
+        "replaced",
+        "floodlight"
+      ]
+    },
+    {
+      "name": "Replaced indicator light panel provision No. 1",
+      "normalized": "replaced indicator light panel provision no.1",
+      "occurrences": 4,
+      "ships": [
+        "Crystal"
+      ],
+      "months_seen": [
+        "Crystal/JAN 2026",
+        "Mar 26"
+      ],
+      "dates_seen": [
+        "11-03-26",
+        "25-03-26"
+      ],
+      "variants": [
+        "Replaced indicator light panel provision No. 1"
+      ],
+      "keywords": [
+        "replaced",
+        "indicator",
+        "light",
+        "panel",
+        "provision",
+        "no"
+      ]
+    },
+    {
+      "name": "Replaced magnetic compact lamp",
+      "normalized": "replaced magnetic compact lamp",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Apr 26"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Replaced magnetic compact lamp"
+      ],
+      "keywords": [
+        "replaced",
+        "magnetic",
+        "compact",
+        "lamp"
+      ]
+    },
+    {
+      "name": "Replaced magnetic compass lamp",
+      "normalized": "replaced magnetic compass lamp",
+      "occurrences": 4,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Apr 26",
+        "Conquest/Mar 26",
+        "Mar 26"
+      ],
+      "dates_seen": [
+        "07-04-26",
+        "30-03-26",
+        "31-03-26"
+      ],
+      "variants": [
+        "Replaced magnetic compass lamp"
+      ],
+      "keywords": [
+        "replaced",
+        "magnetic",
+        "compass",
+        "lamp"
+      ]
+    },
+    {
+      "name": "Replaced MCB Agitator No. 1P",
+      "normalized": "replaced mcb agitator no.1p",
+      "occurrences": 1,
+      "ships": [
+        "Crystal"
+      ],
+      "months_seen": [
+        "Crystal/JAN 2026"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Replaced MCB Agitator No. 1P"
+      ],
+      "keywords": [
+        "replaced",
+        "mcb",
+        "agitator",
+        "no"
+      ]
+    },
+    {
+      "name": "Replaced oil seal provision compressor No.2",
+      "normalized": "replaced oil seal provision compressor no.2",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Sep 25"
+      ],
+      "dates_seen": [
+        "2025-09-03"
+      ],
+      "variants": [
+        "03-09-2025 Replaced oil seal provision compressor No.2"
+      ],
+      "keywords": [
+        "replaced",
+        "oil",
+        "seal",
+        "provision",
+        "compressor",
+        "no"
+      ]
+    },
+    {
+      "name": "Replaced Oring Capstan Port",
+      "normalized": "replaced oring capstan port",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Oct 25"
+      ],
+      "dates_seen": [
+        "2025-10-21"
+      ],
+      "variants": [
+        "21-10-2025 Replaced Oring Capstan Port"
+      ],
+      "keywords": [
+        "replaced",
+        "oring",
+        "capstan",
+        "port"
+      ]
+    },
+    {
+      "name": "Replaced Plug & Socket Flood Light STBD FWD",
+      "normalized": "replaced plug & socket flood light stbd fwd",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Oct 25"
+      ],
+      "dates_seen": [
+        "2025-10-20"
+      ],
+      "variants": [
+        "20-10-2025 Replaced Plug & Socket Flood Light STBD FWD"
+      ],
+      "keywords": [
+        "replaced",
+        "plug",
+        "socket",
+        "flood",
+        "light",
+        "stbd",
+        "fwd"
+      ]
+    },
+    {
+      "name": "Replaced RPM Sensor SME",
+      "normalized": "replaced rpm sensor sme",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Oct 25"
+      ],
+      "dates_seen": [
+        "2025-10-15"
+      ],
+      "variants": [
+        "15-10-2025 Replaced RPM Sensor SME"
+      ],
+      "keywords": [
+        "replaced",
+        "rpm",
+        "sensor",
+        "sme"
+      ]
+    },
+    {
+      "name": "Replaced Socket Solenoid Deck Crane",
+      "normalized": "replaced socket solenoid deck crane",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Oct 25"
+      ],
+      "dates_seen": [
+        "2025-10-24"
+      ],
+      "variants": [
+        "24-10-2025 Replaced Socket Solenoid Deck Crane"
+      ],
+      "keywords": [
+        "replaced",
+        "socket",
+        "solenoid",
+        "deck",
+        "crane"
+      ]
+    },
+    {
+      "name": "Replaced Speaker For Deck Area",
+      "normalized": "replaced speaker for deck area",
+      "occurrences": 7,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Apr 26",
+        "Conquest/Apr 26"
+      ],
+      "dates_seen": [
+        "19-04-26",
+        "22-04-26",
+        "26-04-26",
+        "28-04-26",
+        "30-04-26"
+      ],
+      "variants": [
+        "Replaced Speaker For Deck Area"
+      ],
+      "keywords": [
+        "replaced",
+        "speaker",
+        "deck",
+        "area"
+      ]
+    },
+    {
+      "name": "Replaced windshield wipers",
+      "normalized": "replaced windshield wipers",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Aug 25"
+      ],
+      "dates_seen": [
+        "2025-08-19"
+      ],
+      "variants": [
+        "19-08-2025 Replaced windshield wipers"
+      ],
+      "keywords": [
+        "replaced",
+        "windshield",
+        "wipers"
+      ]
+    },
+    {
+      "name": "Rewired Cable",
+      "normalized": "rewired cable",
+      "occurrences": 2,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Apr 26",
+        "Conquest/Aug 25"
+      ],
+      "dates_seen": [
+        "12-04-26",
+        "2025-08-19"
+      ],
+      "variants": [
+        "19-08-2025 Rewired Cable"
+      ],
+      "keywords": [
+        "rewired",
+        "cable"
+      ]
+    },
+    {
+      "name": "Sensor tension dump",
+      "normalized": "sensor tension dump",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/July 25"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Sensor tension dump"
+      ],
+      "keywords": [
+        "sensor",
+        "tension",
+        "dump"
+      ]
+    },
+    {
+      "name": "Socket Plug 415 Freezer Deck",
+      "normalized": "socket plug 415 freezer deck",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/July 25"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Socket Plug 415 Freezer Deck"
+      ],
+      "keywords": [
+        "socket",
+        "plug",
+        "freezer",
+        "deck"
+      ]
+    },
+    {
+      "name": "Specification Heating Stove",
+      "normalized": "specification heating stove",
+      "occurrences": 1,
+      "ships": [
+        "Crystal"
+      ],
+      "months_seen": [
+        "Crystal/JAN 2026"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "Specification Heating Stove"
+      ],
+      "keywords": [
+        "specification",
+        "heating",
+        "stove"
+      ]
+    },
+    {
+      "name": "System setup & installed Brake Slip Alarm Winch",
+      "normalized": "system setup & installed brake slip alarm winch",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/Apr 26"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "System setup & installed Brake Slip Alarm Winch"
+      ],
+      "keywords": [
+        "system",
+        "setup",
+        "installed",
+        "brake",
+        "slip",
+        "alarm",
+        "winch"
+      ]
+    },
+    {
+      "name": "System setup & installed HYD Auto Cooling Power Pack",
+      "normalized": "system setup & installed hyd auto cooling power pack",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/May 26"
+      ],
+      "dates_seen": [
+        "2026-05-04"
+      ],
+      "variants": [
+        "04-05-26 System setup & installed HYD Auto Cooling Power Pack"
+      ],
+      "keywords": [
+        "system",
+        "setup",
+        "installed",
+        "hyd",
+        "auto",
+        "cooling",
+        "power",
+        "pack"
+      ]
+    },
+    {
+      "name": "WT 6",
+      "normalized": "wt 6",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [
+        "Conquest/July 25"
+      ],
+      "dates_seen": [],
+      "variants": [
+        "WT 6"
+      ],
+      "keywords": [
+        "wt"
+      ]
+    },
+    {
+      "name": "งาน",
+      "normalized": "งาน",
+      "occurrences": 1,
+      "ships": [
+        "Conquest"
+      ],
+      "months_seen": [],
+      "dates_seen": [],
+      "variants": [
+        "งาน"
+      ],
+      "keywords": []
+    },
+    {
+      "name": "Battery Inspection Emergency Genneartor",
+      "normalized": "battery inspection emergency genneartor",
+      "occurrences": 2,
+      "ships": [],
+      "months_seen": [],
+      "dates_seen": [
+        "06-03-26",
+        "26-02-26"
+      ],
+      "variants": [
+        "Battery Inspection Emergency Genneartor"
+      ],
+      "keywords": [
+        "battery",
+        "inspection",
+        "emergency",
+        "genneartor"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Cleaned Sea Water Strainer / Filter",
+      "normalized": "cleaned sea water strainer / filter",
+      "occurrences": 4,
+      "ships": [],
+      "months_seen": [
+        "Mar 26"
+      ],
+      "dates_seen": [
+        "03-03-26",
+        "19-03-26",
+        "28-03-26",
+        "31-03-26"
+      ],
+      "variants": [
+        "Cleaned Sea Water Strainer / Filter"
+      ],
+      "keywords": [
+        "cleaned",
+        "sea",
+        "water",
+        "strainer",
+        "filter"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Battery Inspection GMDSS , GA no.1 , GA no.2",
+      "normalized": "battery inspection gmdss , ga no.1 , ga no.2",
+      "occurrences": 1,
+      "ships": [],
+      "months_seen": [],
+      "dates_seen": [
+        "27-02-26"
+      ],
+      "variants": [
+        "Battery Inspection GMDSS , GA no.1 , GA no.2"
+      ],
+      "keywords": [
+        "battery",
+        "inspection",
+        "gmdss",
+        "ga",
+        "no",
+        "ga",
+        "no"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Battery Inspection FRC",
+      "normalized": "battery inspection frc",
+      "occurrences": 1,
+      "ships": [],
+      "months_seen": [],
+      "dates_seen": [
+        "28-02-26"
+      ],
+      "variants": [
+        "Battery Inspection FRC"
+      ],
+      "keywords": [
+        "battery",
+        "inspection",
+        "frc"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Cleaned Sea Water Main AC Strainer / Filter",
+      "normalized": "cleaned sea water main ac strainer / filter",
+      "occurrences": 1,
+      "ships": [],
+      "months_seen": [],
+      "dates_seen": [
+        "03-03-26"
+      ],
+      "variants": [
+        "Cleaned Sea Water Main AC Strainer / Filter"
+      ],
+      "keywords": [
+        "cleaned",
+        "sea",
+        "water",
+        "main",
+        "ac",
+        "strainer",
+        "filter"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Replaced Light Passegeway",
+      "normalized": "replaced light passegeway",
+      "occurrences": 0,
+      "ships": [],
+      "months_seen": [],
+      "dates_seen": [],
+      "variants": [
+        "Replaced Light Passegeway"
+      ],
+      "keywords": [
+        "replaced",
+        "light",
+        "passegeway"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Replaced Light Passageway",
+      "normalized": "replaced light passageway",
+      "occurrences": 5,
+      "ships": [],
+      "months_seen": [
+        "Mar 26"
+      ],
+      "dates_seen": [
+        "05-03-26",
+        "20-03-26",
+        "29-03-26",
+        "31-03-26"
+      ],
+      "variants": [
+        "Replaced Light Passageway"
+      ],
+      "keywords": [
+        "replaced",
+        "light",
+        "passageway"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Battery Emergency Genneartor",
+      "normalized": "battery emergency genneartor",
+      "occurrences": 0,
+      "ships": [],
+      "months_seen": [],
+      "dates_seen": [],
+      "variants": [
+        "Battery Emergency Genneartor"
+      ],
+      "keywords": [
+        "battery",
+        "emergency",
+        "genneartor"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Inspection of Emergency Generator Battery",
+      "normalized": "inspection of emergency generator battery",
+      "occurrences": 2,
+      "ships": [],
+      "months_seen": [],
+      "dates_seen": [
+        "10-03-26",
+        "28-02-26"
+      ],
+      "variants": [
+        "Inspection of Emergency Generator Battery"
+      ],
+      "keywords": [
+        "inspection",
+        "emergency",
+        "generator",
+        "battery"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Inspection of GMDSS Battery, GA No.1, and GA No.2",
+      "normalized": "inspection of gmdss battery, ga no.1, and ga no.2",
+      "occurrences": 1,
+      "ships": [],
+      "months_seen": [],
+      "dates_seen": [
+        "28-02-26"
+      ],
+      "variants": [
+        "Inspection of GMDSS Battery, GA No.1, and GA No.2"
+      ],
+      "keywords": [
+        "inspection",
+        "gmdss",
+        "battery",
+        "ga",
+        "no",
+        "ga",
+        "no"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Inspection of FRC Battery",
+      "normalized": "inspection of frc battery",
+      "occurrences": 1,
+      "ships": [],
+      "months_seen": [],
+      "dates_seen": [
+        "28-02-26"
+      ],
+      "variants": [
+        "Inspection of FRC Battery"
+      ],
+      "keywords": [
+        "inspection",
+        "frc",
+        "battery"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Cleaned Sea Water Main A/C Strainer/Filter",
+      "normalized": "cleaned sea water main a/c strainer/filter",
+      "occurrences": 1,
+      "ships": [],
+      "months_seen": [],
+      "dates_seen": [
+        "04-03-26"
+      ],
+      "variants": [
+        "Cleaned Sea Water Main A/C Strainer/Filter"
+      ],
+      "keywords": [
+        "cleaned",
+        "sea",
+        "water",
+        "main",
+        "strainer",
+        "filter"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Replaced Passageway Light",
+      "normalized": "replaced passageway light",
+      "occurrences": 1,
+      "ships": [],
+      "months_seen": [],
+      "dates_seen": [
+        "07-03-26"
+      ],
+      "variants": [
+        "Replaced Passageway Light"
+      ],
+      "keywords": [
+        "replaced",
+        "passageway",
+        "light"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Repaired navigation light connector",
+      "normalized": "repaired navigation light connector",
+      "occurrences": 4,
+      "ships": [],
+      "months_seen": [
+        "Mar 26"
+      ],
+      "dates_seen": [
+        "06-03-26",
+        "09-03-26",
+        "30-03-26",
+        "31-03-26"
+      ],
+      "variants": [
+        "Repaired navigation light connector"
+      ],
+      "keywords": [
+        "repaired",
+        "navigation",
+        "light",
+        "connector"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Replaced sewage system alarm bulb",
+      "normalized": "replaced sewage system alarm bulb",
+      "occurrences": 5,
+      "ships": [],
+      "months_seen": [
+        "Mar 26"
+      ],
+      "dates_seen": [
+        "09-03-26",
+        "15-03-26",
+        "24-03-26",
+        "31-03-26"
+      ],
+      "variants": [
+        "Replaced sewage system alarm bulb"
+      ],
+      "keywords": [
+        "replaced",
+        "sewage",
+        "system",
+        "alarm",
+        "bulb"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Replaced indicator light panel for provision crane No. 1",
+      "normalized": "replaced indicator light panel for provision crane no.1",
+      "occurrences": 1,
+      "ships": [],
+      "months_seen": [],
+      "dates_seen": [
+        "16-03-26"
+      ],
+      "variants": [
+        "Replaced indicator light panel for provision crane No. 1"
+      ],
+      "keywords": [
+        "replaced",
+        "indicator",
+        "light",
+        "panel",
+        "provision",
+        "crane",
+        "no"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Gyro No. 1 Liquid Refilling and Maintenance",
+      "normalized": "gyro no.1 liquid refilling and maintenance",
+      "occurrences": 2,
+      "ships": [],
+      "months_seen": [
+        "Mar 26"
+      ],
+      "dates_seen": [
+        "17-03-26",
+        "31-03-26"
+      ],
+      "variants": [
+        "Gyro No. 1 Liquid Refilling and Maintenance"
+      ],
+      "keywords": [
+        "gyro",
+        "no",
+        "liquid",
+        "refilling",
+        "maintenance"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Replaced indicator lights",
+      "normalized": "replaced indicator lights",
+      "occurrences": 3,
+      "ships": [],
+      "months_seen": [
+        "Mar 26"
+      ],
+      "dates_seen": [
+        "11-03-26",
+        "31-03-26"
+      ],
+      "variants": [
+        "Replaced indicator lights"
+      ],
+      "keywords": [
+        "replaced",
+        "indicator",
+        "lights"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Cleaned Heat Exchanger",
+      "normalized": "cleaned heat exchanger",
+      "occurrences": 2,
+      "ships": [],
+      "months_seen": [
+        "Apr 26",
+        "Mar 26"
+      ],
+      "dates_seen": [
+        "17-04-26",
+        "19-03-26"
+      ],
+      "variants": [
+        "Cleaned Heat Exchanger"
+      ],
+      "keywords": [
+        "cleaned",
+        "heat",
+        "exchanger"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Cleaned and Inspected Heat Exchanger",
+      "normalized": "cleaned and inspected heat exchanger",
+      "occurrences": 7,
+      "ships": [],
+      "months_seen": [
+        "Apr 26",
+        "Mar 26"
+      ],
+      "dates_seen": [
+        "03-04-26",
+        "05-04-26",
+        "15-04-26",
+        "20-03-26",
+        "26-03-26",
+        "27-03-26",
+        "30-04-26"
+      ],
+      "variants": [
+        "Cleaned and Inspected Heat Exchanger"
+      ],
+      "keywords": [
+        "cleaned",
+        "inspected",
+        "heat",
+        "exchanger"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Repaired handheld radio",
+      "normalized": "repaired handheld radio",
+      "occurrences": 3,
+      "ships": [],
+      "months_seen": [
+        "Apr 26"
+      ],
+      "dates_seen": [
+        "08-04-26",
+        "09-04-26",
+        "30-04-26"
+      ],
+      "variants": [
+        "Repaired handheld radio"
+      ],
+      "keywords": [
+        "repaired",
+        "handheld",
+        "radio"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Installed electrical junction box and wiring",
+      "normalized": "installed electrical junction box and wiring",
+      "occurrences": 3,
+      "ships": [],
+      "months_seen": [
+        "Apr 26"
+      ],
+      "dates_seen": [
+        "10-04-26",
+        "11-04-26",
+        "30-04-26"
+      ],
+      "variants": [
+        "Installed electrical junction box and wiring"
+      ],
+      "keywords": [
+        "installed",
+        "electrical",
+        "junction",
+        "box",
+        "wiring"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Repaired Cooling Fan for Power Supply",
+      "normalized": "repaired cooling fan for power supply",
+      "occurrences": 3,
+      "ships": [],
+      "months_seen": [
+        "Apr 26"
+      ],
+      "dates_seen": [
+        "25-04-26",
+        "29-04-26",
+        "30-04-26"
+      ],
+      "variants": [
+        "Repaired Cooling Fan for Power Supply"
+      ],
+      "keywords": [
+        "repaired",
+        "cooling",
+        "fan",
+        "power",
+        "supply"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Repaired and rewired control panel relay module",
+      "normalized": "repaired and rewired control panel relay module",
+      "occurrences": 2,
+      "ships": [],
+      "months_seen": [
+        "Apr 26"
+      ],
+      "dates_seen": [
+        "13-04-26",
+        "30-04-26"
+      ],
+      "variants": [
+        "Repaired and rewired control panel relay module"
+      ],
+      "keywords": [
+        "repaired",
+        "rewired",
+        "control",
+        "panel",
+        "relay",
+        "module"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Repaired level sensor probe",
+      "normalized": "repaired level sensor probe",
+      "occurrences": 2,
+      "ships": [],
+      "months_seen": [
+        "Apr 26"
+      ],
+      "dates_seen": [
+        "27-04-26",
+        "30-04-26"
+      ],
+      "variants": [
+        "Repaired level sensor probe"
+      ],
+      "keywords": [
+        "repaired",
+        "level",
+        "sensor",
+        "probe"
+      ],
+      "user_added": true
+    }
+  ]
+}
