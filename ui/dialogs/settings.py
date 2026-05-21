@@ -1,0 +1,235 @@
+"""
+settings.py — Settings dialog (API key, model, UI scale, auto-update toggle).
+"""
+from __future__ import annotations
+
+import threading
+import webbrowser
+
+import customtkinter as ctk
+
+from core import auth
+from core.version import APP_TITLE
+from ui.paste_helper import enable_paste
+from ui.theme import (
+    COLOR_ACCENT,
+    COLOR_BG_INPUT,
+    COLOR_DANGER,
+    COLOR_MUTED,
+    COLOR_OK,
+    COLOR_PRIMARY,
+    COLOR_WARN,
+)
+
+
+class SettingsDialog(ctk.CTkToplevel):
+    def __init__(self, master, on_save=None):
+        super().__init__(master)
+        self.title(f"Settings — {APP_TITLE}")
+        self.geometry("560x460")
+        self.transient(master)
+        self.grab_set()
+        self.on_save = on_save
+
+        cfg = auth.load_config()
+
+        ctk.CTkLabel(self, text="Gemini API Key", anchor="w",
+                     font=("Segoe UI", 13, "bold")).pack(fill="x", padx=20, pady=(20, 4))
+        link_row = ctk.CTkFrame(self, fg_color="transparent")
+        link_row.pack(fill="x", padx=20)
+        ctk.CTkLabel(
+            link_row, text="Get one at  ", anchor="w",
+            text_color=COLOR_MUTED, font=("Segoe UI", 11),
+        ).pack(side="left")
+        url_label = ctk.CTkLabel(
+            link_row, text="aistudio.google.com/apikey  ↗",
+            text_color="#7DD3FC",
+            font=("Segoe UI", 11, "underline"),
+            cursor="hand2",
+        )
+        url_label.pack(side="left")
+        url_label.bind(
+            "<Button-1>",
+            lambda _e: webbrowser.open("https://aistudio.google.com/apikey"),
+        )
+        self.key_entry = ctk.CTkEntry(self, show="*", placeholder_text="AIzaSy...")
+        self.key_entry.pack(fill="x", padx=20, pady=8)
+        self.key_entry.insert(0, cfg.get("api_key", ""))
+        enable_paste(self.key_entry)
+
+        self.show_key = ctk.CTkCheckBox(self, text="Show key", command=self._toggle_show)
+        self.show_key.pack(anchor="w", padx=20)
+
+        ctk.CTkLabel(self, text="Model", anchor="w",
+                     font=("Segoe UI", 13, "bold")).pack(fill="x", padx=20, pady=(20, 4))
+
+        default_values = [
+            "gemini-3.1-pro-preview", "gemini-3.1-flash-lite",
+            "gemini-3-pro-preview", "gemini-3-flash-preview",
+            "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite",
+            "gemini-2.0-flash", "gemini-2.0-flash-lite",
+        ]
+        current = cfg.get("model", auth.DEFAULT_MODEL)
+        if current and current not in default_values:
+            default_values = [current] + default_values
+
+        self.model_var = ctk.StringVar(value=current)
+        self.model_menu = ctk.CTkOptionMenu(
+            self, values=default_values, variable=self.model_var,
+            fg_color=COLOR_PRIMARY, button_color=COLOR_ACCENT,
+        )
+        self.model_menu.pack(fill="x", padx=20, pady=8)
+
+        ctk.CTkButton(
+            self, text="Refresh models from API", height=32,
+            fg_color=COLOR_BG_INPUT, hover_color="#475569",
+            command=self._refresh_models,
+        ).pack(fill="x", padx=20, pady=(0, 8))
+
+        # UI Scale slider
+        scale_label_row = ctk.CTkFrame(self, fg_color="transparent")
+        scale_label_row.pack(fill="x", padx=20, pady=(16, 4))
+        ctk.CTkLabel(scale_label_row, text="UI Scale",
+                     font=("Segoe UI", 13, "bold")).pack(side="left")
+        self.scale_value_label = ctk.CTkLabel(
+            scale_label_row, text="", font=("Segoe UI", 11), text_color=COLOR_MUTED,
+        )
+        self.scale_value_label.pack(side="right")
+
+        self.scale_var = ctk.DoubleVar(value=float(cfg.get("ui_scale", 1.0)))
+        self.scale_slider = ctk.CTkSlider(
+            self, from_=0.7, to=1.3, number_of_steps=12,
+            variable=self.scale_var, command=self._on_scale_change,
+            progress_color=COLOR_PRIMARY, button_color=COLOR_ACCENT,
+        )
+        self.scale_slider.pack(fill="x", padx=20, pady=(0, 8))
+        self.scale_value_label.configure(text=f"{self.scale_var.get():.2f}x")
+
+        if cfg.get("api_key"):
+            self.after(200, self._refresh_models_silent)
+
+        # Updates section
+        ctk.CTkLabel(self, text="Updates", anchor="w",
+                     font=("Segoe UI", 13, "bold")).pack(fill="x", padx=20, pady=(16, 4))
+        self.auto_update_var = ctk.BooleanVar(value=bool(cfg.get("auto_check_updates", True)))
+        self.auto_update_cb = ctk.CTkCheckBox(
+            self, text="Check for updates on startup",
+            variable=self.auto_update_var,
+        )
+        self.auto_update_cb.pack(anchor="w", padx=20)
+
+        self.status = ctk.CTkLabel(self, text="", text_color=COLOR_MUTED, anchor="w")
+        self.status.pack(fill="x", padx=20, pady=10)
+
+        row = ctk.CTkFrame(self, fg_color="transparent")
+        row.pack(fill="x", padx=20, pady=20, side="bottom")
+        ctk.CTkButton(row, text="Test", width=100, height=36,
+                      fg_color=COLOR_BG_INPUT, hover_color="#475569",
+                      command=self._test).pack(side="left")
+        ctk.CTkButton(row, text="Cancel", width=100, height=36,
+                      fg_color=COLOR_BG_INPUT, hover_color="#475569",
+                      command=self.destroy).pack(side="right", padx=(8, 0))
+        ctk.CTkButton(row, text="Save", width=120, height=36,
+                      fg_color=COLOR_PRIMARY, hover_color=COLOR_ACCENT,
+                      command=self._save).pack(side="right")
+
+    def _toggle_show(self):
+        self.key_entry.configure(show="" if self.show_key.get() else "*")
+
+    def _test(self):
+        key = self.key_entry.get().strip()
+        if not key:
+            self.status.configure(text="Enter a key first", text_color=COLOR_WARN)
+            return
+        self.status.configure(text="Testing...", text_color=COLOR_MUTED)
+        threading.Thread(target=self._test_worker, args=(key,), daemon=True).start()
+
+    def _test_worker(self, key: str):
+        try:
+            client, err = auth.create_client(key)
+            if err:
+                self.after(0, lambda: self.status.configure(text=err, text_color=COLOR_DANGER))
+                return
+            ok, msg = auth.test_connection(client)
+            self.after(0, lambda: self.status.configure(
+                text=msg, text_color=COLOR_OK if ok else COLOR_DANGER,
+            ))
+        except Exception as e:
+            msg = str(e)[:200]
+            self.after(0, lambda: self.status.configure(text=msg, text_color=COLOR_DANGER))
+
+    def _refresh_models(self):
+        key = self.key_entry.get().strip()
+        if not key:
+            self.status.configure(text="Enter a key first", text_color=COLOR_WARN)
+            return
+        self.status.configure(text="Loading models...", text_color=COLOR_MUTED)
+        threading.Thread(
+            target=self._refresh_models_worker,
+            args=(key, False),
+            daemon=True,
+        ).start()
+
+    def _refresh_models_silent(self):
+        key = self.key_entry.get().strip()
+        if not key:
+            return
+        threading.Thread(
+            target=self._refresh_models_worker,
+            args=(key, True),
+            daemon=True,
+        ).start()
+
+    def _refresh_models_worker(self, key: str, silent: bool):
+        try:
+            client, err = auth.create_client(key)
+            if err:
+                if not silent:
+                    self.after(0, lambda: self.status.configure(text=err, text_color=COLOR_DANGER))
+                return
+            models = auth.list_vision_models(client)
+            if not models:
+                if not silent:
+                    self.after(0, lambda: self.status.configure(
+                        text="Failed to load models", text_color=COLOR_DANGER,
+                    ))
+                return
+            self.after(0, lambda m=models: self._apply_refreshed_models(m, silent))
+        except Exception as e:
+            if not silent:
+                msg = str(e)[:200]
+                self.after(0, lambda: self.status.configure(text=msg, text_color=COLOR_DANGER))
+
+    def _apply_refreshed_models(self, models: list, silent: bool):
+        try:
+            current = self.model_var.get()
+            self.model_menu.configure(values=models)
+            if current not in models:
+                self.model_var.set(models[0])
+            msg = (f"Found {len(models)} models (auto-loaded)" if silent
+                   else f"Refreshed {len(models)} models")
+            self.status.configure(text=msg, text_color=COLOR_OK)
+        except Exception:
+            pass
+
+    def _on_scale_change(self, value):
+        scale = float(value)
+        self.scale_value_label.configure(text=f"{scale:.2f}x")
+        try:
+            ctk.set_widget_scaling(scale)
+        except Exception:
+            pass
+
+    def _save(self):
+        key = self.key_entry.get().strip()
+        if not key:
+            self.status.configure(text="Enter a key first", text_color=COLOR_WARN)
+            return
+        ok, msg = auth.save_config(key, self.model_var.get(), self.scale_var.get())
+        if ok:
+            auth.update_config({"auto_check_updates": bool(self.auto_update_var.get())})
+            if self.on_save:
+                self.on_save()
+            self.destroy()
+        else:
+            self.status.configure(text=msg, text_color=COLOR_DANGER)

@@ -1,6 +1,6 @@
 # 🎨 Happy Photo Organizer — Project Summary
 
-**Status:** v1.029 (2026-05-22 — stale-mutex fallback + minimize-to-tray + download retry/Range + debug log + VERSION file + CHANGELOG)
+**Status:** v1.030 (2026-05-22 — refactor: main.py split into core/ + ui/ modules; -48% line count, behavior identical to v1.029)
 **Author:** Nick (with Codey — Claude Code)
 **Family:** Happy AI Family (siblings: HAPPY AI Agent)
 

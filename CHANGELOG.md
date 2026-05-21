@@ -3,6 +3,29 @@
 All notable changes to Happy Photo Organizer are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/). Latest on top.
 
+## [1.030] — 2026-05-22
+
+### Changed
+- **Refactor: `main.py` split into `core/` + `ui/` modules** per the
+  reference desktop project playbook. `main.py` now 1275 lines (was 2478);
+  the cut moved 1200 lines of widget/dialog code into focused modules:
+  - `core/version.py` (VERSION reader, APP_TITLE)
+  - `core/single_instance.py` (Win32 named-mutex guard + stale fallback)
+  - `core/tray.py` (HappyTray wrapper around pystray)
+  - `ui/theme.py` (COLOR_* + STEP_* palette)
+  - `ui/paste_helper.py` (cross-keyboard-layout copy/cut/paste)
+  - `ui/step_card.py` (StepCard widget)
+  - `ui/job_row.py` (JobRow review widget)
+  - `ui/dialogs/settings.py` (SettingsDialog)
+  - `ui/dialogs/ai_health.py` (AIHealthDialog)
+- `HappyPhotoOrganizer.spec`: added hidden imports for all `core.*` and
+  `ui.*` modules so PyInstaller never misses one in static analysis.
+
+### No behavioral changes
+- Visual layout, keybindings, batch processing, auto-update, tray, single-
+  instance lock, window state persistence, debug log, and download retry
+  all behave exactly as in v1.029.
+
 ## [1.029] — 2026-05-22
 
 ### Fixed
@@ -95,6 +118,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Latest on top.
 - English UI, dark theme, drag-drop sources + destination picker.
 - Three-phase workflow: resize+group, AI tagging, rename.
 
+[1.030]: https://github.com/nicksuksantr-pixel/happy-photo-organizer/releases/tag/v1.030
 [1.029]: https://github.com/nicksuksantr-pixel/happy-photo-organizer/releases/tag/v1.029
 [1.028]: https://github.com/nicksuksantr-pixel/happy-photo-organizer/releases/tag/v1.028
 [1.027]: https://github.com/nicksuksantr-pixel/happy-photo-organizer/releases/tag/v1.027
