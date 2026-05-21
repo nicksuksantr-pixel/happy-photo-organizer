@@ -19,6 +19,8 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[
+        # Plain-text version file — read at runtime by main.py:_read_version
+        ('VERSION', '.'),
         # bundled assets
         ('assets', 'assets'),
         ('data/job_catalog.json', 'data'),

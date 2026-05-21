@@ -11,6 +11,7 @@ a = Analysis(
     pathex=[str(ROOT)],
     binaries=[],
     datas=[
+        (str(ROOT / 'VERSION'), '.'),
         (str(ROOT / 'dist' / 'HappyPhotoOrganizer.zip'), 'payload'),
         (str(ROOT / 'assets'), 'assets'),
     ],

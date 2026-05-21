@@ -1,6 +1,6 @@
 # 🎨 Happy Photo Organizer — Project Summary
 
-**Status:** v1.028 (2026-05-22 — system tray + background auto-update + single-instance)
+**Status:** v1.029 (2026-05-22 — stale-mutex fallback + minimize-to-tray + download retry/Range + debug log + VERSION file + CHANGELOG)
 **Author:** Nick (with Codey — Claude Code)
 **Family:** Happy AI Family (siblings: HAPPY AI Agent)
 

@@ -156,7 +156,30 @@ ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 APP_TITLE = "Happy Photo Organizer"
-APP_VERSION = "1.028"
+
+
+def _read_version() -> str:
+    """Read VERSION from disk. Works in source mode and from a PyInstaller bundle.
+
+    Falls back to "0.0.0" if the file is missing — never raises.
+    """
+    candidates = []
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        candidates.append(Path(meipass) / "VERSION")
+    candidates.append(ROOT / "VERSION")
+    for p in candidates:
+        try:
+            if p.exists():
+                v = p.read_text(encoding="utf-8").strip()
+                if v:
+                    return v
+        except Exception:
+            pass
+    return "0.0.0"
+
+
+APP_VERSION = _read_version()
 
 
 # ─── Step Card ─────────────────────────────────────────────────
@@ -1281,7 +1304,10 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         self._pending_installer_version: str | None = None
         self._pending_update_info = None  # UpdateInfo found mid-batch (download deferred)
         self._update_after_id: str | None = None
+        self._update_in_progress = False  # True while a download is actively running
         self._batch_running = False  # True only between batch start and _reset_buttons()
+        # Window-state debounce
+        self._geo_save_after_id: str | None = None
         # System tray
         self._tray = None
         self._real_quit_requested = False
@@ -1293,6 +1319,10 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
 
         # Hide-to-tray on X button; real quit only via tray menu
         self.protocol("WM_DELETE_WINDOW", self._on_main_close)
+        # Minimize button — also hide to tray (instead of staying in taskbar)
+        self.bind("<Unmap>", self._on_window_unmap)
+        # Persist geometry on every resize/move (debounced 600 ms)
+        self.bind("<Configure>", self._on_window_configure)
         self._start_tray()
 
     # ─── UI build ───────────────────────────────
@@ -1692,6 +1722,22 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         except Exception:
             pass
 
+    def _on_window_unmap(self, event):
+        """Convert a minimize (—) into a hide-to-tray. <Unmap> also fires for
+        withdraw() and for child widgets — filter to the root in iconic state.
+        """
+        if event.widget is not self:
+            return
+        if self._tray is None or getattr(self._tray, "icon", None) is None:
+            return  # no tray available → leave the default minimize behavior
+        try:
+            state = self.state()
+        except Exception:
+            return
+        if state == "iconic":
+            # Defer the withdraw so Tk finishes the iconify transition first
+            self.after(50, self.withdraw)
+
     def _real_quit(self):
         """Final exit path — call from tray Quit menu."""
         self._real_quit_requested = True
@@ -1749,11 +1795,13 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
     def _begin_update_download(self, info):
         """Kick off a silent background download of the installer."""
         self._log(f"Downloading v{info.version} in background...", "ok")
+        self._update_in_progress = True
 
         def download_worker():
             from core import updater
             dest = updater.cache_dir() / f"HappyPhotoOrganizerSetup-v{info.version}.exe"
             ok, msg = updater.download_installer(info.download_url, dest)
+            self._update_in_progress = False
             if ok:
                 self.after(0, lambda d=dest, v=info.version: self._on_installer_ready(d, v))
             else:
@@ -1879,7 +1927,7 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
 
     def destroy(self):
         """Override to cancel pending after() callbacks + stop tray cleanly."""
-        # Save window geometry before tearing down — must happen while window is still valid
+        # Final geometry save — beat any pending debounce
         self._save_window_state()
         # Stop tray icon (idempotent)
         try:
@@ -1889,7 +1937,7 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
             pass
         # Cancel pending after() callbacks to avoid "invalid command" warnings
         try:
-            for attr in ("_poll_after_id", "_update_after_id"):
+            for attr in ("_poll_after_id", "_update_after_id", "_geo_save_after_id"):
                 aid = getattr(self, attr, None)
                 if aid:
                     self.after_cancel(aid)
@@ -1929,6 +1977,30 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
             })
         except Exception:
             pass
+
+    def _on_window_configure(self, event):
+        """Debounced save on resize/move. <Configure> fires dozens of times per
+        drag — coalesce to one save 600 ms after the last event.
+        """
+        if event.widget is not self:
+            return  # bubbled from a child widget
+        try:
+            if self._geo_save_after_id is not None:
+                self.after_cancel(self._geo_save_after_id)
+        except Exception:
+            pass
+        self._geo_save_after_id = self.after(600, self._debounced_save_geometry)
+
+    def _debounced_save_geometry(self):
+        self._geo_save_after_id = None
+        # Don't persist while iconic / withdrawn — those geometries aren't real
+        try:
+            st = self.wm_state()
+            if st in ("iconic", "withdrawn"):
+                return
+        except Exception:
+            return
+        self._save_window_state()
 
     def _safe_state(self, state: str):
         try:
@@ -2324,60 +2396,78 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
             pass
 
 
-def _acquire_single_instance() -> bool:
-    """Win32 named mutex — returns True if this is the only running instance.
-    On non-Windows or on failure, returns True (be permissive).
+_MUTEX_HANDLE = None
+APP_TITLE_PREFIX = "Happy Photo Organizer"
+MUTEX_NAME = "Local\\HappyPhotoOrganizer-SingleInstance-a1b2c3d4"
+
+
+def _ensure_single_instance() -> bool:
+    """Win32 single-instance check with stale-mutex fallback.
+
+    Returns True if we are the first/only instance (proceed to launch the app).
+    Returns False if another live HPO window exists (caller should exit silently
+    after the existing window has been raised).
+
+    Mutex-exists-but-no-window case is treated as STALE: a zombie dev-mode
+    python.exe may have died holding the named mutex. We proceed as the first
+    real instance rather than blocking the user forever.
     """
+    global _MUTEX_HANDLE
     if sys.platform != "win32":
         return True
     try:
         import ctypes
         from ctypes import wintypes
         kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
         kernel32.CreateMutexW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR]
         kernel32.CreateMutexW.restype = wintypes.HANDLE
-        # Per-session mutex (Local\\ prefix). UUID-like suffix avoids collisions.
-        name = "Local\\HappyPhotoOrganizer-SingleInstance-a1b2c3d4"
-        handle = kernel32.CreateMutexW(None, False, name)
+
+        _MUTEX_HANDLE = kernel32.CreateMutexW(None, False, MUTEX_NAME)
         ERROR_ALREADY_EXISTS = 183
-        if ctypes.get_last_error() == ERROR_ALREADY_EXISTS:
-            return False
-        # Keep handle alive for process lifetime
-        _acquire_single_instance._handle = handle  # type: ignore[attr-defined]
-        return True
-    except Exception:
-        return True
-
-
-def _focus_existing_instance() -> None:
-    """Find the running HPO main window and bring it to the foreground."""
-    if sys.platform != "win32":
-        return
-    try:
-        import ctypes
-        from ctypes import wintypes
-        user32 = ctypes.WinDLL("user32", use_last_error=True)
-        EnumWindowsProc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
-
-        def callback(hwnd, _lparam):
-            length = user32.GetWindowTextLengthW(hwnd)
-            if length:
-                buf = ctypes.create_unicode_buffer(length + 1)
-                user32.GetWindowTextW(hwnd, buf, length + 1)
-                if buf.value.startswith("Happy Photo Organizer"):
-                    user32.ShowWindow(hwnd, 9)  # SW_RESTORE
-                    user32.SetForegroundWindow(hwnd)
-                    return False
+        SW_RESTORE = 9
+        # CRITICAL: use ctypes.get_last_error(), NOT kernel32.GetLastError() —
+        # WinDLL(use_last_error=True) stashes it in a ctypes slot and the OS
+        # value may have been reset by intermediate Python Win32 calls.
+        if ctypes.get_last_error() != ERROR_ALREADY_EXISTS:
             return True
 
-        user32.EnumWindows(EnumWindowsProc(callback), 0)
+        # Mutex exists. Confirm a real Tk window is up before declining.
+        Proc = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
+        found = [False]
+
+        def _cb(hwnd, _lp):
+            # Gate on window CLASS prefix "Tk" — eliminates false positives like
+            # an Explorer window whose path happens to contain "Happy Photo Organizer".
+            cls = ctypes.create_unicode_buffer(64)
+            user32.GetClassNameW(hwnd, cls, 64)
+            if not cls.value.startswith("Tk"):
+                return True
+            n = user32.GetWindowTextLengthW(hwnd)
+            if n <= 0:
+                return True
+            t = ctypes.create_unicode_buffer(n + 1)
+            user32.GetWindowTextW(hwnd, t, n + 1)
+            if t.value.startswith(APP_TITLE_PREFIX):
+                user32.ShowWindow(hwnd, SW_RESTORE)
+                user32.SetForegroundWindow(hwnd)
+                found[0] = True
+                return False
+            return True
+
+        cb = Proc(_cb)
+        user32.EnumWindows(cb, 0)
+        if found[0]:
+            return False  # live instance raised → caller exits
+        # Stale mutex (zombie process held it) — proceed as the first instance
+        return True
     except Exception:
-        pass
+        # Be permissive on any ctypes failure rather than locking the user out
+        return True
 
 
 def main() -> int:
-    if not _acquire_single_instance():
-        _focus_existing_instance()
+    if not _ensure_single_instance():
         return 0
     app = MainWindow()
     app.mainloop()

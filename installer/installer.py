@@ -121,12 +121,33 @@ COLOR_DANGER = "#EF4444"
 
 APP_NAME = "Happy Photo Organizer"
 APP_EXE_NAME = "HappyPhotoOrganizer.exe"
-APP_VERSION = "1.028"
+
+
+def _read_version() -> str:
+    """Read VERSION from disk. Works in source mode and from a PyInstaller bundle."""
+    meipass = getattr(sys, "_MEIPASS", None)
+    candidates = []
+    if meipass:
+        candidates.append(Path(meipass) / "VERSION")
+    # Source mode: VERSION is at the project root (one level up from installer/)
+    candidates.append(Path(__file__).resolve().parent.parent / "VERSION")
+    for p in candidates:
+        try:
+            if p.exists():
+                v = p.read_text(encoding="utf-8").strip()
+                if v:
+                    return v
+        except Exception:
+            pass
+    return "0.0.0"
+
+
+APP_VERSION = _read_version()
 DEFAULT_INSTALL_DIR = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "HappyPhotoOrganizer"
 
 LICENSE_TEXT = f"""Happy Photo Organizer
 Personal Use License Agreement
-Version {APP_VERSION}  —  2026-05-22
+Version {APP_VERSION}
 ================================================================
 
 Thank you for choosing Happy Photo Organizer.

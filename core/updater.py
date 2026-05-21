@@ -8,6 +8,9 @@ Public API:
 
 Repo is configured via env var `HAPPY_UPDATE_REPO` (owner/name) or REPO constant.
 Designed to fail silently — never block app startup or crash on network error.
+
+Debug breadcrumbs land in %TEMP%/happy-photo-organizer-updater.log — windowed
+exes have no stderr, so on-disk logging is the only way to diagnose failures.
 """
 from __future__ import annotations
 
@@ -16,7 +19,9 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import threading
+import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -27,6 +32,21 @@ from typing import Callable
 REPO = os.environ.get("HAPPY_UPDATE_REPO", "nicksuksantr-pixel/happy-photo-organizer")
 INSTALLER_ASSET_NAME = "HappyPhotoOrganizerSetup.exe"
 GITHUB_API = "https://api.github.com"
+
+# ─── Debug log (breadcrumbs to %TEMP%) ───
+_LOG_PATH = Path(tempfile.gettempdir()) / "happy-photo-organizer-updater.log"
+_LOG_LOCK = threading.Lock()
+
+
+def _debug_log(msg: str) -> None:
+    """Append a timestamped breadcrumb. Best-effort; never raises."""
+    try:
+        ts = time.strftime("%Y-%m-%d %H:%M:%S")
+        with _LOG_LOCK:
+            with open(_LOG_PATH, "a", encoding="utf-8") as f:
+                f.write(f"[{ts}] {msg}\n")
+    except Exception:
+        pass
 
 
 # ─── Data ───
@@ -140,51 +160,114 @@ def download_installer(
     progress_cb: Callable[[int, int], None] | None = None,
     cancel_event: threading.Event | None = None,
     chunk_size: int = 64 * 1024,
+    max_attempts: int = 3,
+    attempt_timeout: float = 300.0,
 ) -> tuple[bool, str]:
-    """Download URL → dest. progress_cb(bytes_done, total_bytes).
-    Returns (success, message). Cancels cleanly if cancel_event is set.
+    """Download URL → dest with retry + HTTP Range resume.
+
+    On a transient failure, retry up to `max_attempts` times. Each retry asks
+    GitHub for `Range: bytes=<size>-` so the partial file is reused.
+    progress_cb(bytes_done, total_bytes) fires on every chunk. cancel_event
+    aborts cleanly between chunks.
+
+    Returns (success, message).
     """
+    _debug_log(f"download_installer start: url={url} dest={dest}")
     try:
         dest.parent.mkdir(parents=True, exist_ok=True)
-        # remove stale partial
-        if dest.exists():
-            try:
-                dest.unlink()
-            except Exception:
-                pass
-
-        req = urllib.request.Request(
-            url, headers={"User-Agent": "HappyPhotoOrganizer-Updater"},
-        )
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            total = int(resp.headers.get("Content-Length") or 0)
-            done = 0
-            with open(dest, "wb") as f:
-                while True:
-                    if cancel_event and cancel_event.is_set():
-                        try:
-                            f.close()
-                            dest.unlink(missing_ok=True)
-                        except Exception:
-                            pass
-                        return False, "Cancelled"
-                    chunk = resp.read(chunk_size)
-                    if not chunk:
-                        break
-                    f.write(chunk)
-                    done += len(chunk)
-                    if progress_cb:
-                        try:
-                            progress_cb(done, total)
-                        except Exception:
-                            pass
-        return True, f"Downloaded {done:,} bytes"
     except Exception as e:
+        _debug_log(f"  dest.mkdir failed: {e}")
+        return False, f"Cannot create cache dir: {str(e)[:120]}"
+
+    expected_total = 0  # captured on first successful response
+    last_err = "unknown"
+
+    for attempt in range(1, max_attempts + 1):
+        resume_from = dest.stat().st_size if dest.exists() else 0
+
+        # If we somehow already have the full file from a previous run, accept it
+        if expected_total > 0 and resume_from >= expected_total:
+            _debug_log(f"  attempt {attempt}: already complete ({resume_from} bytes)")
+            return True, f"Already downloaded {resume_from:,} bytes"
+
+        headers = {"User-Agent": "HappyPhotoOrganizer-Updater"}
+        if resume_from > 0:
+            headers["Range"] = f"bytes={resume_from}-"
+
+        _debug_log(f"  attempt {attempt}/{max_attempts}: resume_from={resume_from}")
+
         try:
-            dest.unlink(missing_ok=True)
-        except Exception:
-            pass
-        return False, f"Download failed: {str(e)[:200]}"
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=attempt_timeout) as resp:
+                status = resp.status
+                cl = int(resp.headers.get("Content-Length") or 0)
+                cr = resp.headers.get("Content-Range") or ""
+                # Determine the full expected size
+                if cr:
+                    # "bytes 1000-2000/3000" — total is after the slash
+                    m = re.search(r"/(\d+)$", cr)
+                    if m:
+                        expected_total = int(m.group(1))
+                elif cl and resume_from == 0:
+                    expected_total = cl
+                _debug_log(
+                    f"    HTTP {status} CL={cl} CR={cr!r} expected_total={expected_total}"
+                )
+
+                # status 206 → partial; 200 → server ignored Range, restart from 0
+                file_mode = "ab" if status == 206 and resume_from > 0 else "wb"
+                if file_mode == "wb":
+                    resume_from = 0
+
+                done = resume_from
+                with open(dest, file_mode) as f:
+                    while True:
+                        if cancel_event and cancel_event.is_set():
+                            _debug_log(f"    cancelled at {done} bytes")
+                            try:
+                                f.close()
+                                dest.unlink(missing_ok=True)
+                            except Exception:
+                                pass
+                            return False, "Cancelled"
+                        chunk = resp.read(chunk_size)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        done += len(chunk)
+                        if progress_cb:
+                            try:
+                                progress_cb(done, expected_total or done)
+                            except Exception:
+                                pass
+
+            # Verify final size if we know what to expect
+            actual_size = dest.stat().st_size if dest.exists() else 0
+            if expected_total > 0 and actual_size < expected_total:
+                last_err = (
+                    f"truncated: got {actual_size:,} of {expected_total:,} bytes"
+                )
+                _debug_log(f"    {last_err} — will retry")
+                continue  # next attempt resumes from where we are
+
+            _debug_log(f"  attempt {attempt}: SUCCESS — {actual_size:,} bytes")
+            return True, f"Downloaded {actual_size:,} bytes"
+
+        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError) as e:
+            last_err = f"{type(e).__name__}: {str(e)[:140]}"
+            _debug_log(f"    attempt {attempt} failed: {last_err}")
+            # Don't delete the partial — next retry resumes from here
+            # Brief backoff before retrying
+            if attempt < max_attempts:
+                time.sleep(min(2 ** (attempt - 1), 8))
+
+    # All attempts exhausted — drop the partial so a fresh start works next time
+    try:
+        dest.unlink(missing_ok=True)
+    except Exception:
+        pass
+    _debug_log(f"download_installer FAILED after {max_attempts} attempts: {last_err}")
+    return False, f"Download failed after {max_attempts} attempts: {last_err}"
 
 
 # ─── Launch installer + exit ───
