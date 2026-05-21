@@ -1278,8 +1278,10 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
 
         # Update checker / installer state (auto-update — no UI button)
         self._pending_installer: Path | None = None
+        self._pending_installer_version: str | None = None
+        self._pending_update_info = None  # UpdateInfo found mid-batch (download deferred)
         self._update_after_id: str | None = None
-        self._batch_running = False
+        self._batch_running = False  # True only between batch start and _reset_buttons()
         # System tray
         self._tray = None
         self._real_quit_requested = False
@@ -1720,8 +1722,33 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
             pass
 
     def _on_update_available(self, info):
-        """Update was found — start a silent background download."""
-        self._log(f"Update available: v{info.version} — downloading in background...", "ok")
+        """Update found. Refresh-only behaviour: if a batch is running, log the
+        discovery and DEFER both download and install until the batch ends.
+        Otherwise start a silent background download.
+        """
+        # Skip if we already know about this same version (avoid noisy re-logs)
+        existing = getattr(self, "_pending_update_info", None)
+        if existing is not None and existing.tag == info.tag:
+            return
+        if self._pending_installer and self._pending_installer_version == info.version:
+            return
+
+        self._log(f"Update available: v{info.version}", "ok")
+
+        if self._batch_running:
+            # Refresh-only while a batch is in progress — do NOT download or install
+            self._pending_update_info = info
+            self._log(
+                f"  -> deferred — will download + install after the current batch finishes",
+                "ok",
+            )
+            return
+
+        self._begin_update_download(info)
+
+    def _begin_update_download(self, info):
+        """Kick off a silent background download of the installer."""
+        self._log(f"Downloading v{info.version} in background...", "ok")
 
         def download_worker():
             from core import updater
@@ -1737,13 +1764,21 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
     def _on_installer_ready(self, installer_path: Path, version: str):
         """Installer downloaded — install + relaunch unless a batch is running."""
         self._pending_installer = installer_path
+        self._pending_installer_version = version
+        # Clear the lighter pending-info marker since we've graduated to a ready installer
+        self._pending_update_info = None
+
         if self._batch_running:
             self._log(f"Update v{version} downloaded — will install after current batch", "ok")
             return
         self._install_pending_now(version)
 
     def _install_pending_now(self, version: str | None = None):
-        """Launch installer (silent) and exit so files can be replaced."""
+        """Launch installer (silent) and exit so files can be replaced.
+        Guarded so it never fires mid-batch.
+        """
+        if self._batch_running:
+            return
         if not self._pending_installer or not self._pending_installer.exists():
             return
         try:
@@ -1756,6 +1791,24 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
             raise
         except Exception as e:
             self._log(f"Install failed: {str(e)[:120]}", "warn")
+
+    def _resume_deferred_update(self):
+        """Called once a batch finishes. Resume whichever stage was deferred.
+        Case A: installer already downloaded → install now.
+        Case B: only UpdateInfo was buffered → start the download now.
+        """
+        if self._batch_running:
+            return  # safety — should not happen
+        if self._pending_installer and self._pending_installer.exists():
+            version = self._pending_installer_version or "?"
+            self._log(f"Batch done — installing pending update v{version}", "ok")
+            self._install_pending_now(version)
+            return
+        info = self._pending_update_info
+        if info is not None:
+            self._pending_update_info = None
+            self._log(f"Batch done — resuming update v{info.version}", "ok")
+            self._begin_update_download(info)
 
     def _open_settings(self):
         SettingsDialog(self, on_save=self._on_settings_saved)
@@ -2022,6 +2075,8 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         self.phase4_btn.configure(state="disabled")
         self.cancel_btn.configure(state="normal")
         self.cancel_event.clear()
+        # Mark batch active — pauses any update download/install until _reset_buttons()
+        self._batch_running = True
         self._log("Starting Phase 1+2", "ok")
         self._phase_start = time.time()
 
@@ -2192,6 +2247,8 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         self.phase4_btn.configure(state="disabled")
         self.cancel_btn.configure(state="normal")
         self.cancel_event.clear()
+        # Mark batch active — pauses any update download/install until _reset_buttons()
+        self._batch_running = True
         self._log("Starting Phase 4: Rename folders", "ok")
         self._phase_start = time.time()
         self.step3.set_status("active")
@@ -2259,6 +2316,12 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         if self.plan:
             self.phase4_btn.configure(state="normal")
         self._refresh_step_states()
+        # Batch finished — release the update gate and resume anything that was deferred
+        self._batch_running = False
+        try:
+            self._resume_deferred_update()
+        except Exception:
+            pass
 
 
 def _acquire_single_instance() -> bool:
