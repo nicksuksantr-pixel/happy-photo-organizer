@@ -39,6 +39,9 @@ AI-powered photo organizer for ship maintenance & repair work:
 - ✅ Group by date + time gap (90 min)
 - ✅ Smart date allocation (v1.026): consolidate ทุก assignment ไปยัง dominant month ของ dest_root + เลขวัน unique ข้ามทุกเดือน + earliest-gap-first (ใช้ EXIF day ถ้าว่าง, ไม่งั้น scan from day 1) + range pattern `DD-DD.MM.YY` + cap วันสุดท้ายเมื่อเต็ม
 - ✅ Auto-updater (v1.025): silent startup check ผ่าน GitHub Releases API + in-app download progress + silent install + relaunch
+- ✅ Layout refactor (v1.027): Log panel ย้ายไปคอลัมน์ขวา (เต็มความสูง), Step 1+2 stacked ทางซ้าย
+- ✅ Drop-zone idle border subtle grey (v1.027): ไม่โชว์ highlight สีส้มตอนเปิดแอป — เปลี่ยนสีเฉพาะตอน drag enter
+- ✅ Window state persist (v1.027): จำขนาด/ตำแหน่ง/maximized state ระหว่าง session — เก็บใน `~/.happy-photo-organizer/auth.json` field `window_state`
 
 ### AI
 - ✅ Gemini Vision per-folder sampling (1-3 photos)

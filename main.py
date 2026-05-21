@@ -1310,9 +1310,11 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
             pass
 
         self.title(f"{APP_TITLE} v{APP_VERSION}")
-        self.geometry("1280x780")
         self.minsize(640, 420)
         self.configure(fg_color=COLOR_BG)
+
+        # Restore window geometry from last session (size + position + maximized)
+        self._restore_window_state()
 
         # Window icon (title bar + taskbar)
         icon_path = ROOT / "assets" / "happy_icon.ico"
@@ -1851,12 +1853,70 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
 
     def destroy(self):
         """Override to cancel pending after() callbacks → no Tkinter warning"""
+        # Save window geometry before tearing down — must happen while window is still valid
+        self._save_window_state()
         try:
             if getattr(self, "_poll_after_id", None):
                 self.after_cancel(self._poll_after_id)
         except Exception:
             pass
         super().destroy()
+
+    # ─── Window state persistence ────────────────
+    def _restore_window_state(self):
+        """Restore last geometry + maximized flag. Falls back to default 1280x780 centered."""
+        ws = auth.load_config().get("window_state") or {}
+        geom = (ws.get("geometry") or "").strip()
+        maximized = bool(ws.get("maximized", False))
+
+        # Validate geometry string roughly: "WxH+X+Y" or "WxH"
+        if geom and self._is_geometry_onscreen(geom):
+            self.geometry(geom)
+        else:
+            self.geometry("1280x780")
+
+        if maximized:
+            # On Windows the zoomed state must be set after the window is realized
+            self.after(60, lambda: self._safe_state("zoomed"))
+
+    def _save_window_state(self):
+        """Persist current geometry + maximized flag to ~/.happy-photo-organizer/auth.json."""
+        try:
+            state = self.wm_state()
+            is_maximized = state == "zoomed"
+            # When zoomed, Tk reports the normal-state geometry — exactly what we want to restore
+            geom = self.geometry()
+            auth.update_config({
+                "window_state": {
+                    "geometry": geom,
+                    "maximized": is_maximized,
+                }
+            })
+        except Exception:
+            pass
+
+    def _safe_state(self, state: str):
+        try:
+            self.state(state)
+        except Exception:
+            pass
+
+    def _is_geometry_onscreen(self, geom: str) -> bool:
+        """Clamp check: rough sanity that the X,Y origin lies on some visible monitor.
+        Tkinter only knows about the primary screen via winfo_screen*, so we use a wide tolerance.
+        """
+        import re
+        m = re.match(r"^(\d+)x(\d+)(?:\+(-?\d+)\+(-?\d+))?$", geom)
+        if not m:
+            return False
+        w, h = int(m.group(1)), int(m.group(2))
+        if w < 400 or h < 300 or w > 8000 or h > 8000:
+            return False
+        if m.group(3) is None:
+            return True  # size-only geometry is fine
+        x, y = int(m.group(3)), int(m.group(4))
+        # Allow positions up to a generous virtual-desktop bound (multi-monitor span)
+        return -6000 <= x <= 12000 and -3000 <= y <= 6000
 
     # ─── Drop / sources ──────────────────────────
 
