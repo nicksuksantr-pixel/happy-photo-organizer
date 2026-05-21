@@ -121,12 +121,12 @@ COLOR_DANGER = "#EF4444"
 
 APP_NAME = "Happy Photo Organizer"
 APP_EXE_NAME = "HappyPhotoOrganizer.exe"
-APP_VERSION = "1.027"
+APP_VERSION = "1.028"
 DEFAULT_INSTALL_DIR = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "HappyPhotoOrganizer"
 
 LICENSE_TEXT = f"""Happy Photo Organizer
 Personal Use License Agreement
-Version {APP_VERSION}  —  2026-05-21
+Version {APP_VERSION}  —  2026-05-22
 ================================================================
 
 Thank you for choosing Happy Photo Organizer.

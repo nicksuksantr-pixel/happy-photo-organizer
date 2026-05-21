@@ -32,6 +32,8 @@ a = Analysis(
         'google.genai',
         'tkinterdnd2',
         'core.updater',
+        'pystray',
+        'pystray._win32',
     ],
     hookspath=[],
     hooksconfig={},

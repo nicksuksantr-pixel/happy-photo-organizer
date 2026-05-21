@@ -18,6 +18,15 @@ import tkinter as tk
 from PIL import Image
 from tkinterdnd2 import DND_FILES, TkinterDnD
 
+# pystray is optional — if it fails to import the app still runs (X = real exit)
+try:
+    import pystray
+    from pystray import Menu as _TrayMenu, MenuItem as _TrayItem
+except Exception:
+    pystray = None
+    _TrayMenu = None
+    _TrayItem = None
+
 
 def enable_paste(widget):
     """Make Ctrl+V / right-click → Paste work even on Thai keyboard layout.
@@ -147,7 +156,7 @@ ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 APP_TITLE = "Happy Photo Organizer"
-APP_VERSION = "1.027"
+APP_VERSION = "1.028"
 
 
 # ─── Step Card ─────────────────────────────────────────────────
@@ -1115,182 +1124,64 @@ class JobRow(ctk.CTkFrame):
             restore()
 
 
-# ─── Update Dialog ─────────────────────────────────────────────
+# ─── System Tray ───────────────────────────────────────────────
 
 
-class UpdateDialog(ctk.CTkToplevel):
-    """Modal — show release notes, download installer, launch + exit on install."""
+class HappyTray:
+    """Wraps pystray.Icon. Runs detached so the Tk mainloop stays in the main thread."""
 
-    def __init__(self, master, info):
-        super().__init__(master)
-        self.info = info
-        self.title(f"Update available — v{info.version}")
-        self.geometry("620x520")
-        self.transient(master)
-        self.grab_set()
+    def __init__(self, app):
+        self.app = app
+        self.icon = None
+        self._image = self._load_icon_image()
 
-        self._cancel_event = threading.Event()
-        self._download_thread: threading.Thread | None = None
-        self._installer_path: Path | None = None
-
-        # Header
-        header = ctk.CTkFrame(self, fg_color=COLOR_BG_CARD, corner_radius=0, height=80)
-        header.pack(fill="x")
-        header.pack_propagate(False)
-        ctk.CTkLabel(
-            header, text=f"  Happy Photo Organizer  v{info.version}",
-            font=("Segoe UI", 18, "bold"), text_color=COLOR_OK, anchor="w",
-        ).pack(fill="x", padx=20, pady=(14, 0))
-        ctk.CTkLabel(
-            header, text=f"  You are on v{APP_VERSION}  •  New version available",
-            font=("Segoe UI", 11), text_color=COLOR_MUTED, anchor="w",
-        ).pack(fill="x", padx=20)
-
-        # Release notes
-        ctk.CTkLabel(
-            self, text="What's new", anchor="w",
-            font=("Segoe UI", 13, "bold"),
-        ).pack(fill="x", padx=20, pady=(14, 4))
-
-        notes_text = info.body or "(no release notes)"
-        notes_box = ctk.CTkTextbox(self, height=240, font=("Segoe UI", 11))
-        notes_box.pack(fill="both", expand=True, padx=20, pady=(0, 8))
-        notes_box.insert("1.0", notes_text)
-        notes_box.configure(state="disabled")
-
-        # Status + progress
-        self.status_label = ctk.CTkLabel(
-            self, text=f"Installer size: {info.size / (1024 * 1024):.1f} MB",
-            text_color=COLOR_MUTED, anchor="w", font=("Segoe UI", 11),
-        )
-        self.status_label.pack(fill="x", padx=20)
-
-        self.progress = ctk.CTkProgressBar(self, height=8, progress_color=COLOR_OK)
-        self.progress.pack(fill="x", padx=20, pady=(6, 0))
-        self.progress.set(0)
-        self.progress.pack_forget()  # hidden until download starts
-
-        # Buttons
-        row = ctk.CTkFrame(self, fg_color="transparent")
-        row.pack(fill="x", padx=20, pady=14, side="bottom")
-
-        self.skip_btn = ctk.CTkButton(
-            row, text="Later", width=100, height=36,
-            fg_color=COLOR_BG_INPUT, hover_color="#475569",
-            command=self._on_close,
-        )
-        self.skip_btn.pack(side="right", padx=(8, 0))
-
-        self.install_btn = ctk.CTkButton(
-            row, text="Download & Install", width=180, height=36,
-            font=("Segoe UI", 12, "bold"),
-            fg_color=COLOR_OK, hover_color="#15803D",
-            text_color="#FFFFFF",
-            command=self._start_download,
-        )
-        self.install_btn.pack(side="right")
-
-        # Page link
-        if info.html_url:
-            link = ctk.CTkLabel(
-                row, text="View on GitHub  ↗",
-                text_color="#7DD3FC",
-                font=("Segoe UI", 10, "underline"),
-                cursor="hand2",
-            )
-            link.pack(side="left")
-            link.bind("<Button-1>", lambda _e: webbrowser.open(info.html_url))
-
-        self.protocol("WM_DELETE_WINDOW", self._on_close)
-
-    def _start_download(self):
-        self.install_btn.configure(state="disabled", text="Downloading...")
-        self.skip_btn.configure(text="Cancel", command=self._cancel_download)
-        self.progress.pack(fill="x", padx=20, pady=(6, 0))
-        self.progress.set(0)
-        self.status_label.configure(text="Starting download...")
-
-        from core import updater
-        dest = updater.cache_dir() / f"HappyPhotoOrganizerSetup-v{self.info.version}.exe"
-        self._installer_path = dest
-
-        def worker():
-            from core import updater as _u
-            ok, msg = _u.download_installer(
-                self.info.download_url, dest,
-                progress_cb=self._on_progress,
-                cancel_event=self._cancel_event,
-            )
-            self.after(0, lambda: self._on_download_done(ok, msg))
-
-        self._download_thread = threading.Thread(target=worker, daemon=True)
-        self._download_thread.start()
-
-    def _on_progress(self, done: int, total: int):
+    def _load_icon_image(self):
+        icon_path = ROOT / "assets" / "happy_icon.ico"
         try:
-            pct = (done / total) if total else 0
-            self.after(0, lambda p=pct, d=done, t=total: self._update_progress(p, d, t))
+            return Image.open(icon_path)
+        except Exception:
+            return Image.new("RGBA", (32, 32), (251, 146, 60, 255))
+
+    def start(self):
+        if pystray is None:
+            return False
+        self.icon = pystray.Icon(
+            "HappyPhotoOrganizer",
+            icon=self._image,
+            title="Happy Photo Organizer",
+            menu=_TrayMenu(
+                _TrayItem("Show", self._on_show, default=True),
+                _TrayItem("Check for updates now", self._on_check_update),
+                _TrayMenu.SEPARATOR,
+                _TrayItem("Quit", self._on_quit),
+            ),
+        )
+        self.icon.run_detached()
+        return True
+
+    def stop(self):
+        if self.icon is not None:
+            try:
+                self.icon.stop()
+            except Exception:
+                pass
+            self.icon = None
+
+    def _on_show(self, icon, item):
+        try:
+            self.app.after(0, self.app._show_window_from_tray)
         except Exception:
             pass
 
-    def _update_progress(self, pct: float, done: int, total: int):
+    def _on_check_update(self, icon, item):
         try:
-            self.progress.set(pct)
-            mb_done = done / (1024 * 1024)
-            mb_total = total / (1024 * 1024) if total else 0
-            if mb_total:
-                self.status_label.configure(
-                    text=f"Downloading... {mb_done:.1f} / {mb_total:.1f} MB ({pct * 100:.0f}%)",
-                )
-            else:
-                self.status_label.configure(text=f"Downloading... {mb_done:.1f} MB")
+            self.app.after(0, self.app._update_check_tick)
         except Exception:
             pass
 
-    def _on_download_done(self, ok: bool, msg: str):
-        if not ok:
-            self.status_label.configure(text=msg, text_color=COLOR_DANGER)
-            self.install_btn.configure(state="normal", text="Retry")
-            self.skip_btn.configure(text="Close", command=self._on_close)
-            return
-
-        self.progress.set(1.0)
-        self.status_label.configure(
-            text="Download complete — launching installer...",
-            text_color=COLOR_OK,
-        )
-        self.install_btn.configure(text="Installing...", state="disabled")
-        self.skip_btn.configure(state="disabled")
-        # tiny delay so user sees the success message, then launch + exit
-        self.after(600, self._launch_installer)
-
-    def _launch_installer(self):
-        if self._installer_path is None or not self._installer_path.exists():
-            self.status_label.configure(
-                text="Installer file missing — cannot launch",
-                text_color=COLOR_DANGER,
-            )
-            return
+    def _on_quit(self, icon, item):
         try:
-            from core import updater
-            # Run installer in background and exit this app so files can be replaced
-            updater.launch_installer_and_exit(self._installer_path, silent=True)
-        except SystemExit:
-            raise
-        except Exception as e:
-            self.status_label.configure(
-                text=f"Launch failed: {str(e)[:120]}",
-                text_color=COLOR_DANGER,
-            )
-
-    def _cancel_download(self):
-        self._cancel_event.set()
-        self.status_label.configure(text="Cancelling...", text_color=COLOR_WARN)
-
-    def _on_close(self):
-        self._cancel_event.set()
-        try:
-            self.destroy()
+            self.app.after(0, self.app._real_quit)
         except Exception:
             pass
 
@@ -1385,14 +1276,22 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         self.target_kb_min = ctk.IntVar(value=10)
         self.target_kb_max = ctk.IntVar(value=25)
 
-        # Update checker state
-        self._update_info = None
-        self._update_dialog: ctk.CTkToplevel | None = None
+        # Update checker / installer state (auto-update — no UI button)
+        self._pending_installer: Path | None = None
+        self._update_after_id: str | None = None
+        self._batch_running = False
+        # System tray
+        self._tray = None
+        self._real_quit_requested = False
 
         self._build_ui()
         self._refresh_step_states()
         self._check_auth_on_start()
         self._maybe_check_updates()
+
+        # Hide-to-tray on X button; real quit only via tray menu
+        self.protocol("WM_DELETE_WINDOW", self._on_main_close)
+        self._start_tray()
 
     # ─── UI build ───────────────────────────────
 
@@ -1453,17 +1352,7 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
             command=self._open_settings,
         ).pack(side="top")
 
-        # Update button (hidden until a newer version is found)
-        self.update_btn = ctk.CTkButton(
-            btn_frame, text="", width=160, height=28,
-            font=("Segoe UI", 11, "bold"),
-            fg_color=COLOR_OK, hover_color="#15803D",
-            text_color="#FFFFFF",
-            command=self._open_update_dialog,
-        )
-        # not packed yet — appear only when update available
-
-        # Update badge initial + start 2s poll loop (track id for cleanup)
+        # Tier badge initial + start 2s poll loop (track id for cleanup)
         self._update_tier_badge()
         self._poll_after_id = self.after(1000, self._poll_quota_badge)
 
@@ -1746,43 +1635,127 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         if not auth.get_api_key():
             self.after(300, self._open_settings)
 
-    # ─── Update check ────────────────────────────
+    # ─── Auto-update (background, no UI button) ──
+
+    UPDATE_INTERVAL_MS = 5 * 60 * 1000  # 5 minutes
 
     def _maybe_check_updates(self):
-        """Silent startup check — never blocks UI, never crashes on network failure."""
+        """Schedule the first check after 3s; thereafter every 5 minutes.
+        Runs even when the window is hidden in the tray.
+        """
         cfg = auth.load_config()
         if not cfg.get("auto_check_updates", True):
             return
+        # First check after 3s so first paint stays snappy
+        self.after(3000, self._update_check_tick)
 
-        def worker():
+    # ─── System tray + window lifecycle ──────────
+
+    def _start_tray(self):
+        """Launch the tray icon in a detached thread. No-op if pystray missing."""
+        if pystray is None:
+            return
+        try:
+            self._tray = HappyTray(self)
+            self._tray.start()
+        except Exception:
+            self._tray = None
+
+    def _on_main_close(self):
+        """X button: hide to tray if available, otherwise real quit."""
+        if self._real_quit_requested:
+            self.destroy()
+            return
+        if self._tray is not None and getattr(self._tray, "icon", None) is not None:
+            # Save geometry now since we may stay alive a long time before real quit
             try:
-                from core import updater
-                info = updater.check_for_update(APP_VERSION, timeout=3.0)
-                if info is not None:
-                    self.after(0, lambda i=info: self._on_update_found(i))
+                self._save_window_state()
             except Exception:
                 pass
+            self.withdraw()
+            self._log(
+                "Minimized to tray — right-click the icon (bottom-right) to restore or quit",
+                "ok",
+            )
+        else:
+            self.destroy()
 
-        # delay 3s so we don't slow down first paint
-        self.after(3000, lambda: threading.Thread(target=worker, daemon=True).start())
-
-    def _on_update_found(self, info):
-        self._update_info = info
+    def _show_window_from_tray(self):
         try:
-            self.update_btn.configure(text=f"🟢 Update v{info.version}")
-            self.update_btn.pack(side="top", pady=(4, 0))
-            self._log(f"Update available: v{info.version}", "ok")
+            self.deiconify()
+            self.lift()
+            self.focus_force()
+            self.attributes("-topmost", True)
+            self.after(150, lambda: self.attributes("-topmost", False))
         except Exception:
             pass
 
-    def _open_update_dialog(self):
-        if self._update_info is None:
+    def _real_quit(self):
+        """Final exit path — call from tray Quit menu."""
+        self._real_quit_requested = True
+        if self._tray:
+            self._tray.stop()
+        # Schedule on main thread (tray callbacks come from another thread)
+        try:
+            self.after(0, self.destroy)
+        except Exception:
+            try:
+                self.destroy()
+            except Exception:
+                pass
+
+    def _update_check_tick(self):
+        """One tick of the periodic update worker."""
+        threading.Thread(target=self._update_check_worker, daemon=True).start()
+        # Reschedule whether or not this tick finds something
+        self._update_after_id = self.after(self.UPDATE_INTERVAL_MS, self._update_check_tick)
+
+    def _update_check_worker(self):
+        try:
+            from core import updater
+            info = updater.check_for_update(APP_VERSION, timeout=5.0)
+            if info is not None:
+                self.after(0, lambda i=info: self._on_update_available(i))
+        except Exception:
+            pass
+
+    def _on_update_available(self, info):
+        """Update was found — start a silent background download."""
+        self._log(f"Update available: v{info.version} — downloading in background...", "ok")
+
+        def download_worker():
+            from core import updater
+            dest = updater.cache_dir() / f"HappyPhotoOrganizerSetup-v{info.version}.exe"
+            ok, msg = updater.download_installer(info.download_url, dest)
+            if ok:
+                self.after(0, lambda d=dest, v=info.version: self._on_installer_ready(d, v))
+            else:
+                self.after(0, lambda m=msg: self._log(f"Update download failed: {m}", "warn"))
+
+        threading.Thread(target=download_worker, daemon=True).start()
+
+    def _on_installer_ready(self, installer_path: Path, version: str):
+        """Installer downloaded — install + relaunch unless a batch is running."""
+        self._pending_installer = installer_path
+        if self._batch_running:
+            self._log(f"Update v{version} downloaded — will install after current batch", "ok")
             return
-        if self._update_dialog is not None and self._update_dialog.winfo_exists():
-            self._update_dialog.lift()
-            self._update_dialog.focus_force()
+        self._install_pending_now(version)
+
+    def _install_pending_now(self, version: str | None = None):
+        """Launch installer (silent) and exit so files can be replaced."""
+        if not self._pending_installer or not self._pending_installer.exists():
             return
-        self._update_dialog = UpdateDialog(self, self._update_info)
+        try:
+            from core import updater
+            self._log(f"Installing update{f' v{version}' if version else ''}...", "ok")
+            # Tear down tray + after-loops cleanly before installer kills us
+            self._real_quit_requested = True
+            updater.launch_installer_and_exit(self._pending_installer, silent=True)
+        except SystemExit:
+            raise
+        except Exception as e:
+            self._log(f"Install failed: {str(e)[:120]}", "warn")
 
     def _open_settings(self):
         SettingsDialog(self, on_save=self._on_settings_saved)
@@ -1852,12 +1825,21 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
             pass
 
     def destroy(self):
-        """Override to cancel pending after() callbacks → no Tkinter warning"""
+        """Override to cancel pending after() callbacks + stop tray cleanly."""
         # Save window geometry before tearing down — must happen while window is still valid
         self._save_window_state()
+        # Stop tray icon (idempotent)
         try:
-            if getattr(self, "_poll_after_id", None):
-                self.after_cancel(self._poll_after_id)
+            if getattr(self, "_tray", None):
+                self._tray.stop()
+        except Exception:
+            pass
+        # Cancel pending after() callbacks to avoid "invalid command" warnings
+        try:
+            for attr in ("_poll_after_id", "_update_after_id"):
+                aid = getattr(self, attr, None)
+                if aid:
+                    self.after_cancel(aid)
         except Exception:
             pass
         super().destroy()
@@ -2279,7 +2261,61 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         self._refresh_step_states()
 
 
+def _acquire_single_instance() -> bool:
+    """Win32 named mutex — returns True if this is the only running instance.
+    On non-Windows or on failure, returns True (be permissive).
+    """
+    if sys.platform != "win32":
+        return True
+    try:
+        import ctypes
+        from ctypes import wintypes
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.CreateMutexW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR]
+        kernel32.CreateMutexW.restype = wintypes.HANDLE
+        # Per-session mutex (Local\\ prefix). UUID-like suffix avoids collisions.
+        name = "Local\\HappyPhotoOrganizer-SingleInstance-a1b2c3d4"
+        handle = kernel32.CreateMutexW(None, False, name)
+        ERROR_ALREADY_EXISTS = 183
+        if ctypes.get_last_error() == ERROR_ALREADY_EXISTS:
+            return False
+        # Keep handle alive for process lifetime
+        _acquire_single_instance._handle = handle  # type: ignore[attr-defined]
+        return True
+    except Exception:
+        return True
+
+
+def _focus_existing_instance() -> None:
+    """Find the running HPO main window and bring it to the foreground."""
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        from ctypes import wintypes
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        EnumWindowsProc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+
+        def callback(hwnd, _lparam):
+            length = user32.GetWindowTextLengthW(hwnd)
+            if length:
+                buf = ctypes.create_unicode_buffer(length + 1)
+                user32.GetWindowTextW(hwnd, buf, length + 1)
+                if buf.value.startswith("Happy Photo Organizer"):
+                    user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+                    user32.SetForegroundWindow(hwnd)
+                    return False
+            return True
+
+        user32.EnumWindows(EnumWindowsProc(callback), 0)
+    except Exception:
+        pass
+
+
 def main() -> int:
+    if not _acquire_single_instance():
+        _focus_existing_instance()
+        return 0
     app = MainWindow()
     app.mainloop()
     return 0

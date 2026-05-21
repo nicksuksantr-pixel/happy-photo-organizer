@@ -1,6 +1,6 @@
 # 🎨 Happy Photo Organizer — Project Summary
 
-**Status:** v1.027 (2026-05-21 — log moved to right column; auto-update smoke-test)
+**Status:** v1.028 (2026-05-22 — system tray + background auto-update + single-instance)
 **Author:** Nick (with Codey — Claude Code)
 **Family:** Happy AI Family (siblings: HAPPY AI Agent)
 
@@ -42,6 +42,10 @@ AI-powered photo organizer for ship maintenance & repair work:
 - ✅ Layout refactor (v1.027): Log panel ย้ายไปคอลัมน์ขวา (เต็มความสูง), Step 1+2 stacked ทางซ้าย
 - ✅ Drop-zone idle border subtle grey (v1.027): ไม่โชว์ highlight สีส้มตอนเปิดแอป — เปลี่ยนสีเฉพาะตอน drag enter
 - ✅ Window state persist (v1.027): จำขนาด/ตำแหน่ง/maximized state ระหว่าง session — เก็บใน `~/.happy-photo-organizer/auth.json` field `window_state`
+- ✅ System tray (v1.028): pystray icon ที่ system tray ขวาล่าง — เมนู Show / Check for updates now / Quit
+- ✅ Hide-to-tray on X (v1.028): กดปุ่ม X ปิด window → withdraw ไป tray (ไม่ exit); ออกจริงผ่าน tray menu "Quit" เท่านั้น
+- ✅ Background auto-update (v1.028): เช็คทุก 5 นาที (รวมเมื่อ window hidden) → ถ้าพบใหม่ → silent download → silent install + relaunch (ไม่มีปุ่มกด)
+- ✅ Single-instance lock (v1.028): Win32 named mutex ป้องกัน HPO ซ้ำ; ถ้ามีอยู่แล้ว → ดึง window เดิมกลับมาจาก tray
 
 ### AI
 - ✅ Gemini Vision per-folder sampling (1-3 photos)
