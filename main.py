@@ -36,12 +36,9 @@ from core.processor import (
     phase2_ai_analyze,
     phase4_rename_folders,
     Plan,
-    JobAssignment,
 )
 from core.rate_limiter import (
     DEFAULT_TIER,
-    TIER_PRESETS,
-    TierConfig,
     get_rate_limiter,
     update_tier_from_config,
 )
@@ -67,10 +64,6 @@ from ui.theme import (
     COLOR_PRIMARY,
     COLOR_TEXT,
     COLOR_WARN,
-    STEP_ACTIVE,
-    STEP_DONE,
-    STEP_PENDING,
-    STEP_READY,
 )
 
 ctk.set_appearance_mode("dark")

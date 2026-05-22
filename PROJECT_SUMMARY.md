@@ -1,6 +1,6 @@
 # 🎨 Happy Photo Organizer — Project Summary
 
-**Status:** v1.030 (2026-05-22 — refactor: main.py split into core/ + ui/ modules; -48% line count, behavior identical to v1.029)
+**Status:** v1.031 (2026-05-22 — dialog dark-bg fix + unused-import cleanup; v1.030 split main.py → core/+ui/)
 **Author:** Nick (with Codey — Claude Code)
 **Family:** Happy AI Family (siblings: HAPPY AI Agent)
 

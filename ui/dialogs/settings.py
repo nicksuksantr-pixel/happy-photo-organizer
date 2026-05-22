@@ -13,6 +13,7 @@ from core.version import APP_TITLE
 from ui.paste_helper import enable_paste
 from ui.theme import (
     COLOR_ACCENT,
+    COLOR_BG,
     COLOR_BG_INPUT,
     COLOR_DANGER,
     COLOR_MUTED,
@@ -24,7 +25,9 @@ from ui.theme import (
 
 class SettingsDialog(ctk.CTkToplevel):
     def __init__(self, master, on_save=None):
-        super().__init__(master)
+        # fg_color is REQUIRED — without it CTkToplevel uses the theme's
+        # light-mode background even when set_appearance_mode("dark") is active.
+        super().__init__(master, fg_color=COLOR_BG)
         self.title(f"Settings — {APP_TITLE}")
         self.geometry("560x460")
         self.transient(master)

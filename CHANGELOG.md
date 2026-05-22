@@ -3,6 +3,21 @@
 All notable changes to Happy Photo Organizer are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/). Latest on top.
 
+## [1.031] — 2026-05-22
+
+### Fixed
+- **Settings dialog rendered with a white background** even when the rest of
+  the app was in dark mode. `CTkToplevel` without an explicit `fg_color` falls
+  back to the theme's light-mode default, regardless of
+  `set_appearance_mode("dark")`. Both `SettingsDialog` and `AIHealthDialog`
+  now pass `fg_color=COLOR_BG` to `super().__init__()`.
+  This bug had been present since v1.027; the v1.030 refactor surfaced it
+  because Nick noticed the contrast against the otherwise-dark layout.
+
+### Changed
+- **Cleaned 7 unused imports from `main.py`** left over from the v1.030 refactor:
+  `JobAssignment`, `TIER_PRESETS`, `TierConfig`, and `STEP_ACTIVE/DONE/PENDING/READY`.
+
 ## [1.030] — 2026-05-22
 
 ### Changed
@@ -118,6 +133,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Latest on top.
 - English UI, dark theme, drag-drop sources + destination picker.
 - Three-phase workflow: resize+group, AI tagging, rename.
 
+[1.031]: https://github.com/nicksuksantr-pixel/happy-photo-organizer/releases/tag/v1.031
 [1.030]: https://github.com/nicksuksantr-pixel/happy-photo-organizer/releases/tag/v1.030
 [1.029]: https://github.com/nicksuksantr-pixel/happy-photo-organizer/releases/tag/v1.029
 [1.028]: https://github.com/nicksuksantr-pixel/happy-photo-organizer/releases/tag/v1.028

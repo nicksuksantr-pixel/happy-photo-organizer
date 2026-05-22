@@ -37,7 +37,9 @@ class AIHealthDialog(ctk.CTkToplevel):
     """Standalone window — Tier + Usage + History + Pre-flight + Recent calls"""
 
     def __init__(self, master, on_tier_change=None):
-        super().__init__(master)
+        # fg_color is REQUIRED — without it CTkToplevel uses the theme's
+        # light-mode background even when set_appearance_mode("dark") is active.
+        super().__init__(master, fg_color=COLOR_BG)
         self.title("AI Health & Quota")
         self.geometry("760x780")
         self.transient(master)
