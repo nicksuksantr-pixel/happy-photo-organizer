@@ -228,11 +228,17 @@ class SettingsDialog(ctk.CTkToplevel):
         if not key:
             self.status.configure(text="Enter a key first", text_color=COLOR_WARN)
             return
-        ok, msg = auth.save_config(key, self.model_var.get(), self.scale_var.get())
+        # Single atomic-write call — avoids the two-step save race where the
+        # api_key update succeeds but the auto_check_updates toggle fails after.
+        ok = auth.update_config({
+            "api_key": key,
+            "model": (self.model_var.get() or auth.DEFAULT_MODEL).strip(),
+            "ui_scale": float(self.scale_var.get()),
+            "auto_check_updates": bool(self.auto_update_var.get()),
+        })
         if ok:
-            auth.update_config({"auto_check_updates": bool(self.auto_update_var.get())})
             if self.on_save:
                 self.on_save()
             self.destroy()
         else:
-            self.status.configure(text=msg, text_color=COLOR_DANGER)
+            self.status.configure(text="Could not save settings", text_color=COLOR_DANGER)

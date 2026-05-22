@@ -112,16 +112,31 @@ class UpdateWorker:
             pass
 
     def _on_available(self, info) -> None:
-        """Update found. Dedup, then defer if batch is running, else download."""
-        # If a download is already running, ignore — prevents the double-download
-        # race when two manual_check calls (or one tick + one manual) discover
-        # the same release before pending_installer has been set.
-        if self.in_progress:
-            return
-        # Dedup same version — avoid noisy re-logs across ticks
+        """Update found. Dedup → if download in progress: defer-new-tag only →
+        else defer-if-batch / download.
+
+        v1.034 fix (BUG-1): the v1.033 in_progress short-circuit dropped a
+        *different* new tag discovered mid-download. Now we dedup the same tag
+        first, then if a different tag arrives during download we stash it as
+        pending_info so resume_deferred picks it up after the active download
+        completes (or after the batch ends).
+        """
+        # Dedup same version FIRST — avoid noisy re-logs across ticks regardless
+        # of in_progress / batch state.
         if self.pending_info is not None and self.pending_info.tag == info.tag:
             return
         if self.pending_installer and self.pending_installer_version == info.version:
+            return
+
+        # If a download is already running, this is necessarily a *different*
+        # tag (we deduped above). Stash it so the worker picks it up after the
+        # current download finishes — don't kick off a second download here.
+        if self.in_progress:
+            self.pending_info = info
+            self.host.log(
+                f"Update available: v{info.version} — queued (download already in progress)",
+                "ok",
+            )
             return
 
         self.host.log(f"Update available: v{info.version}", "ok")
@@ -143,7 +158,10 @@ class UpdateWorker:
         def worker():
             from core import updater
             dest = updater.cache_dir() / f"HappyPhotoOrganizerSetup-v{info.version}.exe"
-            ok, msg = updater.download_installer(info.download_url, dest)
+            ok, msg = updater.download_installer(
+                info.download_url, dest,
+                expected_size=info.size,
+            )
             self.in_progress = False
             if ok:
                 self.host.after(0, lambda d=dest, v=info.version: self._on_ready(d, v))
@@ -156,7 +174,33 @@ class UpdateWorker:
         threading.Thread(target=worker, daemon=True).start()
 
     def _on_ready(self, installer_path: Path, version: str) -> None:
-        """Download finished — install or defer."""
+        """Download finished — install, defer, or download a newer pending tag."""
+        # If a newer tag arrived during this download, drop the just-downloaded
+        # installer and start fetching the newer one. Cheaper than installing
+        # then immediately re-running the update.
+        if self.pending_info is not None and self.pending_info.tag.lstrip("vV") != version:
+            try:
+                from core import updater
+                if updater.is_newer(version, self.pending_info.version):
+                    newer = self.pending_info
+                    self.pending_info = None
+                    # Clean the now-outdated installer
+                    try:
+                        installer_path.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+                    self.host.log(
+                        f"v{version} downloaded but v{newer.version} arrived during download — fetching newer",
+                        "ok",
+                    )
+                    if self.host.is_batch_running:
+                        self.pending_info = newer
+                        return
+                    self._begin_download(newer)
+                    return
+            except Exception:
+                pass
+
         self.pending_installer = installer_path
         self.pending_installer_version = version
         # The lighter "info-only" pending marker is superseded by a ready file

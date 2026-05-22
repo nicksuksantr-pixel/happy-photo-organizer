@@ -343,8 +343,7 @@ class AIHealthDialog(ctk.CTkToplevel):
 
     def _apply_tier(self):
         tier_name = self.tier_var.get()
-        cfg = auth.load_config()
-        cfg["tier"] = tier_name
+        updates: dict = {"tier": tier_name}
         if tier_name == "custom":
             try:
                 rpm = int(self.custom_rpm.get().strip())
@@ -354,16 +353,16 @@ class AIHealthDialog(ctk.CTkToplevel):
             except Exception:
                 messagebox.showwarning("Invalid input", "RPM and RPD must be non-negative integers")
                 return
-            cfg["custom_rpm"] = rpm
-            cfg["custom_rpd"] = rpd
-        try:
-            import json as _json
-            auth.CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-            auth.CONFIG_FILE.write_text(_json.dumps(cfg, indent=2), encoding="utf-8")
-        except Exception as e:
-            messagebox.showwarning("Save failed", f"Could not save tier:\n{e}")
+            updates["custom_rpm"] = rpm
+            updates["custom_rpd"] = rpd
+        # Use update_config (atomic + serialized) so a concurrent window-state
+        # debounce save doesn't lose the tier change in a read-modify-write race.
+        if not auth.update_config(updates):
+            messagebox.showwarning("Save failed", "Could not save tier (atomic write failed)")
             return
-        update_tier_from_config(cfg)
+        # Reload the full config to pass to the rate limiter — update_config
+        # has the latest tier + any custom_* values it just wrote.
+        update_tier_from_config(auth.load_config())
         self.refresh()
         if self.on_tier_change:
             self.on_tier_change()

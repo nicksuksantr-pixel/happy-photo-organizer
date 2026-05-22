@@ -59,6 +59,13 @@ class QuotaExceededError(RuntimeError):
     pass
 
 
+class _CancelledError(RuntimeError):
+    """Internal — raised when cancel_event fires inside acquire().
+    Callers catch this and convert to a cancelled-result dict.
+    """
+    pass
+
+
 @dataclass
 class TierConfig:
     name: str = DEFAULT_TIER
@@ -136,15 +143,19 @@ class RateLimiter:
             return False, f"Daily quota exceeded: {used}/{self.tier.rpd}"
         return True, f"{used}/{self.tier.rpd}"
 
-    def acquire(self) -> None:
+    def acquire(self, cancel_event: threading.Event | None = None) -> None:
         """
         Block จน safe — sleep ถ้าจำเป็น
         Raise QuotaExceededError ถ้า daily limit เต็ม
+        Raise CancelledError ถ้า cancel_event ถูก set ระหว่าง sleep
         """
         # 1. daily quota check
         ok, msg = self.check_quota()
         if not ok:
             raise QuotaExceededError(msg)
+
+        if cancel_event is not None and cancel_event.is_set():
+            raise _CancelledError("cancelled before acquire")
 
         # 2. RPM throttle (ใส่ delay ระหว่าง call)
         if not self.tier.throttle or self.tier.rpm <= 0:
@@ -160,7 +171,16 @@ class RateLimiter:
             # update last_call_ts BEFORE sleep (claim slot)
             self._last_call_ts = now + sleep_sec
         if sleep_sec > 0:
-            time.sleep(sleep_sec)
+            # Cancel-aware sleep — wake every 200 ms to honor cancel_event.
+            # Without this, a 4 s throttle delay = 4 s of quota burn after Cancel.
+            end = time.time() + sleep_sec
+            while True:
+                remaining = end - time.time()
+                if remaining <= 0:
+                    break
+                if cancel_event is not None and cancel_event.is_set():
+                    raise _CancelledError("cancelled during throttle")
+                time.sleep(min(remaining, 0.2))
 
     def record(
         self,
@@ -179,15 +199,16 @@ class RateLimiter:
 
     # ─── context manager — for clean usage ──────
 
-    def call(self, call_type: str = "analyze"):
+    def call(self, call_type: str = "analyze", cancel_event: threading.Event | None = None):
         """
         Returns context manager:
             with limiter.call('analyze') as ctx:
                 result = gemini_call()
                 ctx.tokens = result.usage_metadata.total_token_count
                 ctx.ok = True
+        Pass `cancel_event` to make the throttle sleep interruptible.
         """
-        return _CallContext(self, call_type)
+        return _CallContext(self, call_type, cancel_event=cancel_event)
 
     # ─── pre-flight estimate ─────────────────────
 
@@ -224,19 +245,30 @@ class RateLimiter:
 
 class _CallContext:
     """Context manager — acquire on enter, record on exit"""
-    def __init__(self, limiter: RateLimiter, call_type: str):
+    def __init__(
+        self,
+        limiter: RateLimiter,
+        call_type: str,
+        cancel_event: threading.Event | None = None,
+    ):
         self.limiter = limiter
         self.call_type = call_type
+        self.cancel_event = cancel_event
         self.tokens = 0
         self.ok = True
         self._start: float = 0.0
+        self._acquired: bool = False
 
     def __enter__(self):
-        self.limiter.acquire()
+        self.limiter.acquire(cancel_event=self.cancel_event)
+        self._acquired = True
         self._start = time.time()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        if not self._acquired:
+            # acquire() raised — no slot was claimed, nothing to record
+            return False
         duration = time.time() - self._start
         self.limiter.record(
             call_type=self.call_type,

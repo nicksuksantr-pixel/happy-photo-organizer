@@ -6,13 +6,25 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 from pathlib import Path
 
 from google.genai import types
 
 from .auth import create_client, get_model
 from .image_io import get_mime_type
-from .rate_limiter import QuotaExceededError, get_rate_limiter
+from .rate_limiter import QuotaExceededError, _CancelledError, get_rate_limiter
+
+
+def _cancelled_result(n: int = 0) -> dict:
+    return {
+        "matched_name": None,
+        "suggested_name": None,
+        "confidence": 0.0,
+        "reasoning": "cancelled",
+        "sample_count": 0,
+        "total_in_group": n,
+    }
 
 ANALYZER_SYSTEM_PROMPT = """You are an AI assistant that categorizes maintenance and repair photos
 from commercial vessels (ship engineering work).
@@ -91,10 +103,13 @@ def analyze_image(
     *,
     client=None,
     model: str | None = None,
+    cancel_event: threading.Event | None = None,
 ) -> dict:
     """
     ส่งรูป 1 ใบให้ Gemini พิจารณา → คืน dict ตาม schema
     """
+    if cancel_event is not None and cancel_event.is_set():
+        return _cancelled_result()
     if client is None:
         client, err = create_client()
         if err:
@@ -104,7 +119,7 @@ def analyze_image(
 
     limiter = get_rate_limiter()
     try:
-        with limiter.call("analyze") as ctx:
+        with limiter.call("analyze", cancel_event=cancel_event) as ctx:
             image_bytes = Path(image_path).read_bytes()
             mime = get_mime_type(Path(image_path))
             response = client.models.generate_content(
@@ -134,6 +149,8 @@ def analyze_image(
         result.setdefault("reasoning", "")
         result["confidence"] = float(result.get("confidence") or 0.0)
         return result
+    except _CancelledError:
+        return _cancelled_result()
     except QuotaExceededError as qe:
         return {
             "matched_name": None,
@@ -157,11 +174,14 @@ def analyze_group(
     client=None,
     model: str | None = None,
     sample_size: int = 3,
+    cancel_event: threading.Event | None = None,
 ) -> dict:
     """
     วิเคราะห์กลุ่มรูป (เช่นรูปหลายใบของงานเดียวกัน) — ส่ง sample ไม่กี่ใบไป Gemini เพื่อประหยัด quota
     คืน result เดียวที่เป็นตัวแทนของกลุ่ม
     """
+    if cancel_event is not None and cancel_event.is_set():
+        return _cancelled_result(len(image_paths))
     if client is None:
         client, err = create_client()
         if err:
@@ -182,7 +202,9 @@ def analyze_group(
     model_name = model or get_model()
     limiter = get_rate_limiter()
     try:
-        with limiter.call("analyze_group") as ctx:
+        with limiter.call("analyze_group", cancel_event=cancel_event) as ctx:
+            if cancel_event is not None and cancel_event.is_set():
+                return _cancelled_result(n)
             parts = []
             for p in samples:
                 mime = get_mime_type(Path(p))
@@ -217,6 +239,8 @@ def analyze_group(
         result["sample_count"] = len(samples)
         result["total_in_group"] = n
         return result
+    except _CancelledError:
+        return _cancelled_result(n)
     except QuotaExceededError as qe:
         return {
             "matched_name": None,

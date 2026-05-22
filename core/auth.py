@@ -6,7 +6,11 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import stat
+import tempfile
+import threading
+import time
 from pathlib import Path
 
 from google import genai
@@ -16,52 +20,114 @@ CONFIG_FILE = CONFIG_DIR / "auth.json"
 
 DEFAULT_MODEL = "gemini-3.1-flash-lite"
 
+# Serialize concurrent writes from multiple threads (window-state debounce vs
+# settings save vs tier change). The OS handles tmp→replace atomicity, but two
+# concurrent reads-then-writes can still lose data.
+_IO_LOCK = threading.Lock()
+
+
+def atomic_write_json(path: Path, data: dict, lock_perms: bool = True) -> bool:
+    """Write `data` to `path` atomically. Returns success.
+
+    Pattern from ENA v2.6.7: write to `<path>.tmp`, fsync, then `os.replace`.
+    No half-written file can be observed after a crash. Best-effort on perms.
+    """
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        return False
+    tmp_fd = None
+    tmp_path: Path | None = None
+    try:
+        # NamedTemporaryFile keeps tmp in the same dir so os.replace is atomic
+        # (cross-volume replace would degrade to copy + delete).
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8",
+            dir=str(path.parent), prefix=path.name + ".", suffix=".tmp",
+            delete=False,
+        ) as f:
+            tmp_fd = f
+            tmp_path = Path(f.name)
+            json.dump(data, f, ensure_ascii=False, indent=2)
+            f.flush()
+            try:
+                os.fsync(f.fileno())
+            except OSError:
+                pass
+        os.replace(str(tmp_path), str(path))
+        tmp_path = None  # ownership transferred
+        if lock_perms:
+            try:
+                os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+            except Exception:
+                pass
+        return True
+    except Exception:
+        return False
+    finally:
+        if tmp_path is not None:
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+
 
 def save_config(api_key: str, model: str = DEFAULT_MODEL, ui_scale: float = 1.0) -> tuple[bool, str]:
     """Save API key + model + ui scale preference"""
-    try:
-        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        # โหลด config เดิมมา merge เพื่อไม่ลบ field อื่น
-        existing = load_config()
-        existing.update({
-            "api_key": api_key.strip(),
-            "model": model.strip() or DEFAULT_MODEL,
-            "ui_scale": float(ui_scale),
-        })
-        CONFIG_FILE.write_text(json.dumps(existing, indent=2), encoding="utf-8")
+    with _IO_LOCK:
         try:
-            os.chmod(CONFIG_FILE, stat.S_IRUSR | stat.S_IWUSR)
-        except Exception:
-            pass
-        return True, "บันทึก config แล้ว"
-    except Exception as e:
-        return False, f"บันทึกไม่ได้: {str(e)[:200]}"
+            existing = _load_config_unlocked()
+            existing.update({
+                "api_key": api_key.strip(),
+                "model": model.strip() or DEFAULT_MODEL,
+                "ui_scale": float(ui_scale),
+            })
+            ok = atomic_write_json(CONFIG_FILE, existing)
+            if not ok:
+                return False, "บันทึกไม่ได้ (atomic write failed)"
+            return True, "บันทึก config แล้ว"
+        except Exception as e:
+            return False, f"บันทึกไม่ได้: {str(e)[:200]}"
 
 
-def load_config() -> dict:
-    """Load config — คืน dict ว่างถ้าไม่มีไฟล์"""
+def _load_config_unlocked() -> dict:
+    """Internal — caller must hold _IO_LOCK. Quarantines corrupt files."""
     if not CONFIG_FILE.exists():
         return {}
     try:
         return json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        # Quarantine the corrupt file so the next save doesn't overwrite the
+        # only forensic evidence. The next call returns {} → user starts fresh.
+        try:
+            ts = time.strftime("%Y%m%d-%H%M%S")
+            corrupt = CONFIG_FILE.with_suffix(f".corrupt-{ts}.json")
+            shutil.copy2(str(CONFIG_FILE), str(corrupt))
+        except Exception:
+            pass
+        return {}
     except Exception:
         return {}
 
 
+def load_config() -> dict:
+    """Load config — คืน dict ว่างถ้าไม่มีไฟล์
+    On JSONDecodeError, the corrupt file is quarantined as auth.corrupt-<ts>.json
+    so the next save doesn't overwrite the evidence.
+    """
+    with _IO_LOCK:
+        return _load_config_unlocked()
+
+
 def update_config(updates: dict) -> bool:
     """Merge `updates` into current config and persist. Returns success."""
-    try:
-        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        existing = load_config()
-        existing.update(updates)
-        CONFIG_FILE.write_text(json.dumps(existing, indent=2), encoding="utf-8")
+    with _IO_LOCK:
         try:
-            os.chmod(CONFIG_FILE, stat.S_IRUSR | stat.S_IWUSR)
+            existing = _load_config_unlocked()
+            existing.update(updates)
+            return atomic_write_json(CONFIG_FILE, existing)
         except Exception:
-            pass
-        return True
-    except Exception:
-        return False
+            return False
 
 
 def get_api_key() -> str | None:

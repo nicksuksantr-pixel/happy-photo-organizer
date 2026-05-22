@@ -78,12 +78,20 @@ class UsageLog:
             pass
 
     def _save(self) -> None:
+        # Atomic write: crash mid-write would otherwise leave a truncated JSON
+        # that _load() silently swallows → quota counters reset to 0.
         try:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
-            with self.path.open("w", encoding="utf-8") as f:
-                json.dump(self._data, f, ensure_ascii=False, indent=2)
+            from .auth import atomic_write_json
+            atomic_write_json(self.path, self._data, lock_perms=False)
         except Exception:
-            pass
+            # Last-resort fallback: direct write so a missing helper doesn't
+            # break the app. Not atomic, but better than dropping the data.
+            try:
+                self.path.parent.mkdir(parents=True, exist_ok=True)
+                with self.path.open("w", encoding="utf-8") as f:
+                    json.dump(self._data, f, ensure_ascii=False, indent=2)
+            except Exception:
+                pass
 
     # ─── day rollover ───────────────────────
 

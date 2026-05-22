@@ -12,7 +12,6 @@ import os
 import sys
 import threading
 import time
-import webbrowser
 from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox
@@ -166,6 +165,7 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         # System tray
         self._tray = None
         self._real_quit_requested = False
+        self._destroyed = False  # flips True in destroy(); late callbacks bail
 
         self._build_ui()
         self._refresh_step_states()
@@ -589,6 +589,8 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         """
         if event.widget is not self:
             return
+        if self._destroyed or self._real_quit_requested:
+            return  # destroy() is in flight — don't schedule any more callbacks
         if self._tray is None or getattr(self._tray, "icon", None) is None:
             return  # no tray available → leave the default minimize behavior
         try:
@@ -597,21 +599,38 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
             return
         if state == "iconic":
             # Defer the withdraw so Tk finishes the iconify transition first
-            self.after(50, self.withdraw)
+            self.after(50, self._safe_withdraw)
+
+    def _safe_withdraw(self):
+        """Withdraw guarded against destruction — avoids 'invalid command'."""
+        if self._destroyed or self._real_quit_requested:
+            return
+        try:
+            self.withdraw()
+        except Exception:
+            pass
 
     def _real_quit(self):
-        """Final exit path — call from tray Quit menu."""
+        """Final exit path — call from tray Quit menu.
+
+        Tray callbacks arrive on pystray's thread. We MUST NOT touch Tk widgets
+        or call tray.stop() here directly — both can race with the Tk thread.
+        Set the flag, signal in-flight workers to bail, and let destroy() (run
+        on the Tk thread via after(0, ...)) own the actual teardown including
+        tray.stop().
+        """
         self._real_quit_requested = True
-        if self._tray:
-            self._tray.stop()
-        # Schedule on main thread (tray callbacks come from another thread)
+        try:
+            self.cancel_event.set()
+        except Exception:
+            pass
         try:
             self.after(0, self.destroy)
         except Exception:
-            try:
-                self.destroy()
-            except Exception:
-                pass
+            # If after() fails (Tk already gone), fall through — process will
+            # exit when daemon threads die. Don't call destroy() directly from
+            # this off-Tk thread.
+            pass
 
     def _open_settings(self):
         SettingsDialog(self, on_save=self._on_settings_saved)
@@ -682,8 +701,25 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
 
     def destroy(self):
         """Override to cancel pending after() callbacks + stop tray cleanly."""
-        # Final geometry save — beat any pending debounce
-        self._save_window_state()
+        # Mark destroyed so any late <Unmap> / debounced after() callbacks bail
+        self._destroyed = True
+        # Cancel any in-flight Phase worker so it stops burning quota / IO
+        try:
+            self.cancel_event.set()
+        except Exception:
+            pass
+        # Final geometry save — but ONLY if window is in a real state.
+        # Skipping iconic/withdrawn avoids persisting phantom geometry that
+        # Tk reports after withdraw() (would open at -32000,-32000 next launch).
+        try:
+            st = self.wm_state()
+        except Exception:
+            st = "normal"
+        if st not in ("iconic", "withdrawn"):
+            try:
+                self._save_window_state()
+            except Exception:
+                pass
         # Stop the auto-update worker (cancels its periodic after-callback)
         try:
             if getattr(self, "update_worker", None):
@@ -941,6 +977,11 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
                 f"Phase 1 done: {len(plan.assignments)} folders, resized {plan.total_resized}/{plan.total_images}",
                 "ok",
             ))
+            if plan.oversized_count:
+                self.after(0, lambda n=plan.oversized_count: self._log(
+                    f"  ⚠ {n} image(s) exceeded target_kb_max even at lowest quality — kept anyway, spot-check size",
+                    "warn",
+                ))
             # Report existing dates in destination + any shifts
             if plan.pre_existing_dates:
                 self.after(0, lambda: self._log(

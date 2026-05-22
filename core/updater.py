@@ -36,13 +36,36 @@ GITHUB_API = "https://api.github.com"
 # ─── Debug log (breadcrumbs to %TEMP%) ───
 _LOG_PATH = Path(tempfile.gettempdir()) / "happy-photo-organizer-updater.log"
 _LOG_LOCK = threading.Lock()
+_LOG_MAX_BYTES = 1_000_000  # 1 MB cap before rollover
 
 
 def _debug_log(msg: str) -> None:
-    """Append a timestamped breadcrumb. Best-effort; never raises."""
+    """Append a timestamped breadcrumb. Best-effort; never raises.
+
+    Rolls over once the log exceeds _LOG_MAX_BYTES — keeps the previous
+    generation at `.1` so an idle install doesn't accumulate megabytes of
+    periodic-check timeouts. Single-generation rotation is enough for the
+    diagnostic role; we don't need a multi-file ring.
+    """
     try:
         ts = time.strftime("%Y-%m-%d %H:%M:%S")
         with _LOG_LOCK:
+            # Roll over if oversized — best-effort, never raise on rename.
+            try:
+                if _LOG_PATH.exists() and _LOG_PATH.stat().st_size > _LOG_MAX_BYTES:
+                    rolled = _LOG_PATH.with_suffix(_LOG_PATH.suffix + ".1")
+                    try:
+                        rolled.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+                    try:
+                        _LOG_PATH.rename(rolled)
+                    except Exception:
+                        # Couldn't rename (e.g. file locked) — fall through
+                        # and continue appending; cap is a soft target.
+                        pass
+            except Exception:
+                pass
             with open(_LOG_PATH, "a", encoding="utf-8") as f:
                 f.write(f"[{ts}] {msg}\n")
     except Exception:
@@ -162,8 +185,17 @@ def download_installer(
     chunk_size: int = 64 * 1024,
     max_attempts: int = 3,
     attempt_timeout: float = 300.0,
+    expected_size: int = 0,
 ) -> tuple[bool, str]:
     """Download URL → dest with retry + HTTP Range resume.
+
+    Integrity guards (v1.034 — was ENA v2.6.5 incident pattern):
+    - Captures ETag + Last-Modified on first attempt; passes them as
+      `If-Range` on resume. If GitHub re-uploaded the asset between attempts,
+      the server returns 200 (full payload) instead of 206, and we restart
+      from 0 — no chance of stitching old + new bytes into a corrupt installer.
+    - If `expected_size` (from the release API) is non-zero and the final file
+      size differs, treats it as a failure even if `Content-Length` matched.
 
     On a transient failure, retry up to `max_attempts` times. Each retry asks
     GitHub for `Range: bytes=<size>-` so the partial file is reused.
@@ -172,15 +204,17 @@ def download_installer(
 
     Returns (success, message).
     """
-    _debug_log(f"download_installer start: url={url} dest={dest}")
+    _debug_log(f"download_installer start: url={url} dest={dest} expected_size={expected_size}")
     try:
         dest.parent.mkdir(parents=True, exist_ok=True)
     except Exception as e:
         _debug_log(f"  dest.mkdir failed: {e}")
         return False, f"Cannot create cache dir: {str(e)[:120]}"
 
-    expected_total = 0  # captured on first successful response
+    expected_total = expected_size  # may be overridden by Content-Length on first attempt
     last_err = "unknown"
+    server_etag: str | None = None
+    server_last_modified: str | None = None
 
     for attempt in range(1, max_attempts + 1):
         resume_from = dest.stat().st_size if dest.exists() else 0
@@ -193,6 +227,12 @@ def download_installer(
         headers = {"User-Agent": "HappyPhotoOrganizer-Updater"}
         if resume_from > 0:
             headers["Range"] = f"bytes={resume_from}-"
+            # If the server re-uploaded the asset, fail the Range and force
+            # a full re-download instead of stitching mismatched bytes.
+            if server_etag:
+                headers["If-Range"] = server_etag
+            elif server_last_modified:
+                headers["If-Range"] = server_last_modified
 
         _debug_log(f"  attempt {attempt}/{max_attempts}: resume_from={resume_from}")
 
@@ -202,6 +242,12 @@ def download_installer(
                 status = resp.status
                 cl = int(resp.headers.get("Content-Length") or 0)
                 cr = resp.headers.get("Content-Range") or ""
+                # Capture validators on first response so subsequent retries
+                # can pin to this exact asset version
+                if server_etag is None:
+                    server_etag = resp.headers.get("ETag")
+                if server_last_modified is None:
+                    server_last_modified = resp.headers.get("Last-Modified")
                 # Determine the full expected size
                 if cr:
                     # "bytes 1000-2000/3000" — total is after the slash
@@ -214,9 +260,16 @@ def download_installer(
                     f"    HTTP {status} CL={cl} CR={cr!r} expected_total={expected_total}"
                 )
 
-                # status 206 → partial; 200 → server ignored Range, restart from 0
-                file_mode = "ab" if status == 206 and resume_from > 0 else "wb"
-                if file_mode == "wb":
+                # status 206 → partial; 200 → server ignored Range OR If-Range
+                # didn't match (asset changed) → restart from 0
+                if status == 206 and resume_from > 0:
+                    file_mode = "ab"
+                else:
+                    file_mode = "wb"
+                    if resume_from > 0 and status == 200:
+                        _debug_log(
+                            "    server returned 200 instead of 206 — asset changed or Range ignored; restarting from 0"
+                        )
                     resume_from = 0
 
                 done = resume_from
@@ -249,6 +302,23 @@ def download_installer(
                 )
                 _debug_log(f"    {last_err} — will retry")
                 continue  # next attempt resumes from where we are
+
+            # Cross-check against release-API size if provided — catches the
+            # case where Content-Length matched a stale Range response but
+            # the real asset on GitHub is a different size.
+            if expected_size > 0 and actual_size != expected_size:
+                last_err = (
+                    f"size mismatch: file {actual_size:,} bytes, release reports {expected_size:,}"
+                )
+                _debug_log(f"    {last_err} — dropping partial + retrying fresh")
+                try:
+                    dest.unlink(missing_ok=True)
+                except Exception:
+                    pass
+                # Drop the validators so the next attempt grabs a fresh pair
+                server_etag = None
+                server_last_modified = None
+                continue
 
             _debug_log(f"  attempt {attempt}: SUCCESS — {actual_size:,} bytes")
             return True, f"Downloaded {actual_size:,} bytes"

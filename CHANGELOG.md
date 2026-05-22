@@ -3,6 +3,89 @@
 All notable changes to Happy Photo Organizer are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/). Latest on top.
 
+## [1.034] — 2026-05-23
+
+### Fixed (deep audit pass — 13 hidden bugs + 8 future risks catalogued, all addressed)
+
+**HIGH**
+- **BUG-2 / RISK-4: Non-atomic `auth.json` + `usage_log.json` writes.** Crash
+  or power-loss mid-write would corrupt the JSON and silently empty the user's
+  api_key / tier / window_state / quota history (`_load()` swallowed
+  `JSONDecodeError`). Added `core.auth.atomic_write_json` helper using
+  temp-file + fsync + `os.replace` (ENA v2.6.7 pattern). All three callers
+  (`save_config`, `update_config`, `usage_log._save`) now route through it.
+  Corrupt reads are quarantined as `auth.corrupt-<ts>.json` so the next save
+  doesn't overwrite the only forensic evidence. A module-level `_IO_LOCK`
+  serializes concurrent writes from the window-state debounce, Settings save,
+  and tier-change paths.
+- **BUG-1: `_on_available` dropped a newer-tag update mid-download.** The
+  v1.033 `in_progress` short-circuit overreached: if GitHub published a newer
+  release while a download was running, the new tag was silently ignored. The
+  dedup now runs first; a *different* tag arriving during download is stashed
+  as `pending_info`. After the current download completes, `_on_ready` checks
+  the stash, drops the stale installer, and starts fetching the newer one.
+
+**MED**
+- **BUG-3 / BUG-4: `_save_window_state` ran while window was withdrawn**, so
+  the tray-Quit path overwrote the correct geometry with Tk's phantom
+  withdrawn-state coordinates. Next launch could open at -32000,-32000.
+  `destroy()` now skips the save when `wm_state()` is `iconic` or `withdrawn`.
+- **BUG-7 / BUG-8: `cancel_event` was not honored by in-flight Phase 2
+  workers.** Once `ThreadPoolExecutor.submit` queued a `_worker`, the cancel
+  loop only marked pending futures cancelled — already-running calls
+  continued through `analyze_group`, including the throttle sleep (up to
+  4 s/call on free tier) and the actual Gemini API call. Now: `cancel_event`
+  is piped through `analyze_group` → `analyze_image` →
+  `RateLimiter.acquire(cancel_event=...)`, and the throttle sleep wakes every
+  200 ms to check the flag. `_real_quit()` and `destroy()` both set
+  `cancel_event` so quota stops burning the instant the user clicks Quit.
+- **BUG-9: `_apply_tier` wrote `auth.json` directly**, bypassing
+  `auth.update_config()` and racing with the window-state debounce save. Now
+  uses `auth.update_config({...})` which acquires the IO lock and atomic-writes.
+- **BUG-12: `_real_quit` called `tray.stop()` from pystray's thread**, racing
+  with `_on_main_close` on the Tk thread. Now it only sets the quit flag and
+  marshals teardown onto the Tk thread via `after(0, self.destroy)`; `destroy()`
+  owns the actual tray cleanup.
+
+**LOW**
+- **BUG-5: Dead `webbrowser` import** in `main.py` removed (left over from
+  v1.030 refactor).
+- **BUG-6: Unused `get_model` import** in `core/processor.py` removed.
+- **BUG-10: `<Unmap>` deferred `self.after(50, self.withdraw)` could fire
+  after destroy** → "invalid command" warnings. New `_destroyed` flag is set
+  at the top of `destroy()` and gates the late callback via `_safe_withdraw`.
+- **BUG-11: Stale `core/processor.py.bak-v1.024`** deleted — 11 versions old,
+  cluttered grep results and risked being bundled by PyInstaller.
+- **BUG-13: Resizer fallback warning was never surfaced.** Images that exceeded
+  `target_kb_max` even at lowest quality returned `ok=True` with a `warning`
+  field that no caller read. `Plan.oversized_count` now tracks them and the
+  UI log reports the count after Phase 1.
+
+### Fixed (future risks — preempted before they could surface)
+- **RISK-1 / RISK-2: Download integrity.** `download_installer` now captures
+  `ETag` + `Last-Modified` from the first response and sends them as
+  `If-Range` on each retry. If GitHub re-uploaded the asset between attempts,
+  the server returns 200 instead of 206 → we restart from byte 0, eliminating
+  the cross-version stitching corruption that hit ENA v2.6.5. Also accepts
+  an `expected_size` from the release API and treats a final-size mismatch
+  as a failure (with retry) even when `Content-Length` happened to match.
+- **RISK-5: Debug log unbounded growth.** `_debug_log` now rolls over once
+  the log exceeds 1 MB (single-generation rotation to `.1`). Months of idle
+  periodic-check timeouts no longer accumulate.
+
+### Housekeeping
+- Bumped `requirements.txt` to include upper-bound version pins on every dep
+  (`Pillow<12.0`, `google-genai<2.0`, `customtkinter<6.0`, …) so a downstream
+  breaking change can't silently break a `pip install -r requirements.txt`.
+- Removed 7 per-version files `release-notes-v1.027.md` … `v1.033.md` —
+  duplicated `CHANGELOG.md` content.
+- Bumped `VERSION` to 1.034.
+
+### Audit credit
+Audit performed by Coddy (general-purpose subagent) on 2026-05-23. Smoke test
++ live launch (process pid 28168) verified v1.033 ran clean before the fix
+pass; post-fix verification follows in the next testing round.
+
 ## [1.033] — 2026-05-22
 
 ### Fixed
@@ -178,6 +261,7 @@ during the regression hunt Nick requested. Both fixes are tiny (1 conditional
 - English UI, dark theme, drag-drop sources + destination picker.
 - Three-phase workflow: resize+group, AI tagging, rename.
 
+[1.034]: https://github.com/nicksuksantr-pixel/happy-photo-organizer/releases/tag/v1.034
 [1.033]: https://github.com/nicksuksantr-pixel/happy-photo-organizer/releases/tag/v1.033
 [1.032]: https://github.com/nicksuksantr-pixel/happy-photo-organizer/releases/tag/v1.032
 [1.031]: https://github.com/nicksuksantr-pixel/happy-photo-organizer/releases/tag/v1.031

@@ -24,7 +24,7 @@ from typing import Callable
 
 from . import grouper as _grouper
 from .analyzer import analyze_group
-from .auth import create_client, get_model
+from .auth import create_client
 from .catalog import JobCatalog
 from .exif_reader import format_folder_date
 from .image_io import collect_images
@@ -86,6 +86,9 @@ class Plan:
     shifted_count: int = 0
     capped_count: int = 0
     pre_existing_dates: list[str] = field(default_factory=list)
+    # Count of images that hit resizer fallback path (target_kb_max exceeded
+    # even at lowest quality). Reported in the UI so Nick knows to spot-check.
+    oversized_count: int = 0
 
 
 @dataclass
@@ -346,6 +349,12 @@ def phase1_resize_and_group(
             if ok:
                 assignment.resized_paths.append(dst)
                 plan.total_resized += 1
+                # Resizer returns ok=True with a 'warning' field when it fell
+                # back to lowest-quality save and the file still exceeded
+                # target_kb_max. Surface the count via the Plan so the UI can
+                # report it after Phase 1 (previously: silent — warning swallowed).
+                if info.get("warning"):
+                    plan.oversized_count += 1
 
         plan.assignments.append(assignment)
 
@@ -436,8 +445,12 @@ def phase2_ai_analyze(
         idx, _a, pool = item
         if cancel_event and cancel_event.is_set():
             return idx, {}
+        # Pass cancel_event so analyze_group can short-circuit during throttle
+        # sleep (free tier = 4 s/call → up to 4 s of quota burn per worker
+        # without this).
         result = analyze_group(
             pool, names, client=client, sample_size=sample_size,
+            cancel_event=cancel_event,
         )
         return idx, result
 
