@@ -38,6 +38,7 @@ a = Analysis(
         # core/ helpers — usually picked up by static analysis but kept here
         # in case any of them grow into dynamic-import users later.
         'core.updater',
+        'core.update_worker',
         'core.version',
         'core.single_instance',
         'core.tray',

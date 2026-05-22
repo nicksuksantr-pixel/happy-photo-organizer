@@ -44,6 +44,7 @@ from core.rate_limiter import (
 )
 from core.single_instance import ensure_single_instance
 from core.tray import HappyTray, pystray
+from core.update_worker import UpdateWorker
 from core.usage_log import get_usage_log
 from core.version import APP_TITLE, APP_VERSION
 
@@ -157,13 +158,9 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         self.target_kb_min = ctk.IntVar(value=10)
         self.target_kb_max = ctk.IntVar(value=25)
 
-        # Update checker / installer state (auto-update — no UI button)
-        self._pending_installer: Path | None = None
-        self._pending_installer_version: str | None = None
-        self._pending_update_info = None  # UpdateInfo found mid-batch (download deferred)
-        self._update_after_id: str | None = None
-        self._update_in_progress = False  # True while a download is actively running
+        # Auto-update — state owned by the worker; we hold a handle for shutdown
         self._batch_running = False  # True only between batch start and _reset_buttons()
+        self.update_worker = UpdateWorker(self, APP_VERSION)
         # Window-state debounce
         self._geo_save_after_id: str | None = None
         # System tray
@@ -173,7 +170,7 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         self._build_ui()
         self._refresh_step_states()
         self._check_auth_on_start()
-        self._maybe_check_updates()
+        self.update_worker.start()
 
         # Hide-to-tray on X button; real quit only via tray menu
         self.protocol("WM_DELETE_WINDOW", self._on_main_close)
@@ -525,19 +522,25 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         if not auth.get_api_key():
             self.after(300, self._open_settings)
 
-    # ─── Auto-update (background, no UI button) ──
+    # ─── UpdateWorker host contract ──────────────
 
-    UPDATE_INTERVAL_MS = 5 * 60 * 1000  # 5 minutes
+    @property
+    def is_batch_running(self) -> bool:
+        """Host contract for UpdateWorker — gates downloads and installs."""
+        return self._batch_running
 
-    def _maybe_check_updates(self):
-        """Schedule the first check after 3s; thereafter every 5 minutes.
-        Runs even when the window is hidden in the tray.
-        """
-        cfg = auth.load_config()
-        if not cfg.get("auto_check_updates", True):
-            return
-        # First check after 3s so first paint stays snappy
-        self.after(3000, self._update_check_tick)
+    def log(self, msg: str, level: str = "ok") -> None:
+        """Host contract for UpdateWorker — forwards to the in-window log."""
+        self._log(msg, level)
+
+    def on_before_install(self) -> None:
+        """Host contract for UpdateWorker — flag teardown before installer runs."""
+        self._real_quit_requested = True
+
+    # Shim retained so HappyTray's "Check for updates now" callback keeps working
+    # without having to know about the worker.
+    def _update_check_tick(self) -> None:
+        self.update_worker.manual_check()
 
     # ─── System tray + window lifecycle ──────────
 
@@ -610,112 +613,6 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
             except Exception:
                 pass
 
-    def _update_check_tick(self):
-        """One tick of the periodic update worker."""
-        threading.Thread(target=self._update_check_worker, daemon=True).start()
-        # Reschedule whether or not this tick finds something
-        self._update_after_id = self.after(self.UPDATE_INTERVAL_MS, self._update_check_tick)
-
-    def _update_check_worker(self):
-        try:
-            from core import updater
-            info = updater.check_for_update(APP_VERSION, timeout=5.0)
-            if info is not None:
-                self.after(0, lambda i=info: self._on_update_available(i))
-        except Exception:
-            pass
-
-    def _on_update_available(self, info):
-        """Update found. Refresh-only behaviour: if a batch is running, log the
-        discovery and DEFER both download and install until the batch ends.
-        Otherwise start a silent background download.
-        """
-        # Skip if we already know about this same version (avoid noisy re-logs)
-        existing = getattr(self, "_pending_update_info", None)
-        if existing is not None and existing.tag == info.tag:
-            return
-        if self._pending_installer and self._pending_installer_version == info.version:
-            return
-
-        self._log(f"Update available: v{info.version}", "ok")
-
-        if self._batch_running:
-            # Refresh-only while a batch is in progress — do NOT download or install
-            self._pending_update_info = info
-            self._log(
-                f"  -> deferred — will download + install after the current batch finishes",
-                "ok",
-            )
-            return
-
-        self._begin_update_download(info)
-
-    def _begin_update_download(self, info):
-        """Kick off a silent background download of the installer."""
-        self._log(f"Downloading v{info.version} in background...", "ok")
-        self._update_in_progress = True
-
-        def download_worker():
-            from core import updater
-            dest = updater.cache_dir() / f"HappyPhotoOrganizerSetup-v{info.version}.exe"
-            ok, msg = updater.download_installer(info.download_url, dest)
-            self._update_in_progress = False
-            if ok:
-                self.after(0, lambda d=dest, v=info.version: self._on_installer_ready(d, v))
-            else:
-                self.after(0, lambda m=msg: self._log(f"Update download failed: {m}", "warn"))
-
-        threading.Thread(target=download_worker, daemon=True).start()
-
-    def _on_installer_ready(self, installer_path: Path, version: str):
-        """Installer downloaded — install + relaunch unless a batch is running."""
-        self._pending_installer = installer_path
-        self._pending_installer_version = version
-        # Clear the lighter pending-info marker since we've graduated to a ready installer
-        self._pending_update_info = None
-
-        if self._batch_running:
-            self._log(f"Update v{version} downloaded — will install after current batch", "ok")
-            return
-        self._install_pending_now(version)
-
-    def _install_pending_now(self, version: str | None = None):
-        """Launch installer (silent) and exit so files can be replaced.
-        Guarded so it never fires mid-batch.
-        """
-        if self._batch_running:
-            return
-        if not self._pending_installer or not self._pending_installer.exists():
-            return
-        try:
-            from core import updater
-            self._log(f"Installing update{f' v{version}' if version else ''}...", "ok")
-            # Tear down tray + after-loops cleanly before installer kills us
-            self._real_quit_requested = True
-            updater.launch_installer_and_exit(self._pending_installer, silent=True)
-        except SystemExit:
-            raise
-        except Exception as e:
-            self._log(f"Install failed: {str(e)[:120]}", "warn")
-
-    def _resume_deferred_update(self):
-        """Called once a batch finishes. Resume whichever stage was deferred.
-        Case A: installer already downloaded → install now.
-        Case B: only UpdateInfo was buffered → start the download now.
-        """
-        if self._batch_running:
-            return  # safety — should not happen
-        if self._pending_installer and self._pending_installer.exists():
-            version = self._pending_installer_version or "?"
-            self._log(f"Batch done — installing pending update v{version}", "ok")
-            self._install_pending_now(version)
-            return
-        info = self._pending_update_info
-        if info is not None:
-            self._pending_update_info = None
-            self._log(f"Batch done — resuming update v{info.version}", "ok")
-            self._begin_update_download(info)
-
     def _open_settings(self):
         SettingsDialog(self, on_save=self._on_settings_saved)
 
@@ -787,6 +684,12 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         """Override to cancel pending after() callbacks + stop tray cleanly."""
         # Final geometry save — beat any pending debounce
         self._save_window_state()
+        # Stop the auto-update worker (cancels its periodic after-callback)
+        try:
+            if getattr(self, "update_worker", None):
+                self.update_worker.cancel()
+        except Exception:
+            pass
         # Stop tray icon (idempotent)
         try:
             if getattr(self, "_tray", None):
@@ -795,7 +698,7 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
             pass
         # Cancel pending after() callbacks to avoid "invalid command" warnings
         try:
-            for attr in ("_poll_after_id", "_update_after_id", "_geo_save_after_id"):
+            for attr in ("_poll_after_id", "_geo_save_after_id"):
                 aid = getattr(self, attr, None)
                 if aid:
                     self.after_cancel(aid)
@@ -1249,7 +1152,7 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         # Batch finished — release the update gate and resume anything that was deferred
         self._batch_running = False
         try:
-            self._resume_deferred_update()
+            self.update_worker.resume_deferred()
         except Exception:
             pass
 

@@ -3,6 +3,34 @@
 All notable changes to Happy Photo Organizer are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/). Latest on top.
 
+## [1.032] — 2026-05-22
+
+### Changed
+- **Extracted auto-update lifecycle to `core/update_worker.py`** (delegation
+  pattern). The 8 update methods and 5 pieces of update state that used to
+  live on `MainWindow` are now owned by an `UpdateWorker` instance. MainWindow
+  exposes a small host contract — `after`, `after_cancel`, `log`,
+  `is_batch_running`, `on_before_install` — and the worker handles everything
+  else (periodic check, defer-during-batch, dedup, download, install hand-off).
+- **Functionally identical** to v1.031 — same 5-min poll, same defer behavior,
+  same tray "Check for updates now" path (kept via a one-line shim).
+
+### Removed from `main.py` (1187 → 1057 lines)
+- `_update_check_tick` body (kept as a 1-line shim → `update_worker.manual_check()`)
+- `_update_check_worker`, `_on_update_available`, `_begin_update_download`,
+  `_on_installer_ready`, `_install_pending_now`, `_resume_deferred_update`
+- 5 update-state attributes from `__init__`: `_pending_installer`,
+  `_pending_installer_version`, `_pending_update_info`, `_update_after_id`,
+  `_update_in_progress`
+- `UPDATE_INTERVAL_MS` class constant (now on `UpdateWorker`)
+
+### Added
+- `core/update_worker.py` — 174-line standalone worker, unit-testable with
+  a mock host (covered: start scheduling, manual-check non-interference,
+  cancel idempotency, batch defer, resume).
+- `MainWindow.log()`, `MainWindow.is_batch_running` (property),
+  `MainWindow.on_before_install()` — host contract surface.
+
 ## [1.031] — 2026-05-22
 
 ### Fixed
@@ -133,6 +161,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Latest on top.
 - English UI, dark theme, drag-drop sources + destination picker.
 - Three-phase workflow: resize+group, AI tagging, rename.
 
+[1.032]: https://github.com/nicksuksantr-pixel/happy-photo-organizer/releases/tag/v1.032
 [1.031]: https://github.com/nicksuksantr-pixel/happy-photo-organizer/releases/tag/v1.031
 [1.030]: https://github.com/nicksuksantr-pixel/happy-photo-organizer/releases/tag/v1.030
 [1.029]: https://github.com/nicksuksantr-pixel/happy-photo-organizer/releases/tag/v1.029
