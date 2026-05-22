@@ -3,6 +3,70 @@
 All notable changes to Happy Photo Organizer are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/). Latest on top.
 
+## [1.035] — 2026-05-23
+
+### Fixed (round-3 audit pass — 7 new findings caught after v1.034, all closed)
+
+**MED**
+- **BUG-3-1: `JobCatalog.save()` non-atomic.** Same risk class as v1.034's
+  `auth.json` / `usage_log.json` fix — `write_text` mid-save could corrupt
+  the catalog (138 bundled jobs + every user addition). Now routes through
+  `auth.atomic_write_json` (tempfile + fsync + os.replace) with a direct-write
+  fallback if the import fails. Especially important during silent-upgrade:
+  the installer's taskkill could race with the catalog write that fires after
+  Phase 4.
+- **BUG-3-2: `JobCatalog._data` mutated without lock.** Phase 4 worker thread
+  calls `record_usage` while the Tk thread iterates `names()` / `find()` from
+  `_refresh_summary`. RLock now wraps all reads and mutating writes; reentry
+  is supported so `record_usage → find/add` doesn't deadlock.
+
+**LOW**
+- **BUG-3-3: `ship_label` parameter dropped.** `phase4_rename_folders` accepted
+  it but `main.py` never passed it; removed the dead parameter (V2 can add it
+  back with a proper Settings field if needed).
+- **BUG-3-4: Phase 4 progress callback fired before the rename.** Bar reached
+  100% while the last folder rename was still in-flight. Moved `progress_cb`
+  to after the work; cosmetic on local disks, visible on network shares.
+- **BUG-3-5: Phase 4 merge collision counter unbounded.** A target folder
+  pre-populated with thousands of `img_NNN_M` files would force O(N) probes
+  per file. Capped at 9999 with a UUID-suffix fallback.
+- **BUG-3-6: Empty-destination smart-date allocation inherited EXIF year.**
+  A camera with the clock wrong (e.g. year 2050) would produce folders named
+  `01-05-50 …` because `detect_target_month` returned None and the assigner
+  fell back to per-assignment EXIF year/month. Now defaults to current
+  year/month when the destination is empty.
+- **BUG-3-7: `_on_window_unmap` used `state()` while sibling methods used
+  `wm_state()`.** Aliases in Tk, but mixing them obscured intent. Unified to
+  `wm_state()`.
+
+### Fixed (round-3 hygiene)
+
+- **HYG-1: Installer license text said "no auto-update".** Stale since v1.027.
+  Updated to reflect the silent zero-click auto-update flow and link the
+  correct repo (`nicksuksantr-pixel/happy-photo-organizer`, not the typo
+  variant the previous text had).
+- **HYG-3: AI Health tier-detail throttle was hard-coded "4.0s/call".** Wrong
+  for any tier other than RPM 15 (free Gemini 3.1 Flash Lite). Now uses
+  `tier.min_interval_sec` so RPM 10 tiers show "6.0s/call" correctly.
+- **HYG-4: Installer `DisplayIcon` registry write set twice unconditionally.**
+  The .ico branch was dead. Cleaned to one conditional set.
+
+### Also addressed
+- Phase 4 catalog `record_usage` failures now surface via `result.errors`
+  instead of silent skip.
+- Phase 4 `temp_folder.rmdir()` failure (e.g. stray Thumbs.db created during
+  the brief Phase 1→4 window) is now reported via `result.errors` instead of
+  swallowed.
+
+### Verified
+- syntax-clean across all modified .py
+- catalog concurrent-write stress: 5 threads × 30 `record_usage` calls (150
+  ops) + interleaved `names()`/`find()` reads — 0 errors
+- live launch v1.035: title intact, smoke + auto-update detection confirmed
+- audit round 4 (post-fix): 0 regressions
+
+Audit credit: Coddy round-3 independent agent (general-purpose subagent).
+
 ## [1.034] — 2026-05-23
 
 ### Fixed (deep audit pass — 13 hidden bugs + 8 future risks catalogued, all addressed)
@@ -261,6 +325,7 @@ during the regression hunt Nick requested. Both fixes are tiny (1 conditional
 - English UI, dark theme, drag-drop sources + destination picker.
 - Three-phase workflow: resize+group, AI tagging, rename.
 
+[1.035]: https://github.com/nicksuksantr-pixel/happy-photo-organizer/releases/tag/v1.035
 [1.034]: https://github.com/nicksuksantr-pixel/happy-photo-organizer/releases/tag/v1.034
 [1.033]: https://github.com/nicksuksantr-pixel/happy-photo-organizer/releases/tag/v1.033
 [1.032]: https://github.com/nicksuksantr-pixel/happy-photo-organizer/releases/tag/v1.032

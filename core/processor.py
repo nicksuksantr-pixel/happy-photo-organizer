@@ -361,6 +361,13 @@ def phase1_resize_and_group(
     # Auto-assign unique dates — หลีกเลี่ยงเลขวันซ้ำ + consolidate to dominant month
     used_days = scan_used_days(dest_root)
     target_ym = detect_target_month(dest_root)
+    # Empty-dest defensive default: if there are no existing folders to anchor
+    # against, use the current month/year as the target instead of inheriting
+    # EXIF dates blindly. Prevents misconfigured-camera-clock photos (e.g. EXIF
+    # year 2050) from landing as `01-05-50` folders (round-3 BUG-3-6).
+    if target_ym is None:
+        now = datetime.now()
+        target_ym = (now.year, now.month)
     plan.pre_existing_dates = sorted(f"{d:02d}" for d in used_days)
     plan.shifted_count, plan.capped_count = assign_unique_dates(
         plan, used_days, target_year_month=target_ym,
@@ -494,22 +501,25 @@ def phase4_rename_folders(
     progress_cb: Callable[[int, int, str], None] | None = None,
     cancel_event: threading.Event | None = None,
     catalog: JobCatalog | None = None,
-    ship_label: str | None = None,
 ) -> CommitResult:
     """
     Rename temp folders ('YYYY-MM-DD__pending_NN') → final ('DD-MM-YY [ชื่องาน]')
     """
     result = CommitResult()
     total = len(plan.assignments)
+    # Cap on collision-suffix counter to avoid O(N²) when a target folder
+    # already holds many img_NNN_M files (round-3 BUG-3-5)
+    _COLLISION_CAP = 9999
 
     for i, a in enumerate(plan.assignments, 1):
         if cancel_event and cancel_event.is_set():
             break
-        if progress_cb:
-            progress_cb(i, total, f"Renaming {i}/{total}")
 
         if not a.job_name.strip() or not a.temp_folder:
             result.skipped += 1
+            # Still report progress so the bar reaches 100% on skip-only runs
+            if progress_cb:
+                progress_cb(i, total, f"Skipped {i}/{total} (no job name)")
             continue
 
         target = plan.dest_root / a.folder_name
@@ -521,14 +531,25 @@ def phase4_rename_folders(
                 for f in a.temp_folder.iterdir():
                     dst_file = target / f.name
                     cnt = 2
-                    while dst_file.exists():
+                    while dst_file.exists() and cnt <= _COLLISION_CAP:
                         dst_file = target / f"{f.stem}_{cnt}{f.suffix}"
                         cnt += 1
+                    if dst_file.exists():
+                        # Cap hit — fall back to a unique suffix
+                        import uuid as _uuid
+                        dst_file = target / f"{f.stem}_{_uuid.uuid4().hex[:8]}{f.suffix}"
                     shutil.move(str(f), str(dst_file))
                 try:
                     a.temp_folder.rmdir()
                 except OSError:
-                    pass
+                    # Folder not empty (e.g. Thumbs.db created mid-operation).
+                    # Not fatal — surfaced via .errors instead of silent skip.
+                    leftovers = [p.name for p in a.temp_folder.iterdir()]
+                    if leftovers:
+                        result.errors.append(
+                            f"temp folder not empty after merge: "
+                            f"{a.temp_folder.name} (leftover: {leftovers[:3]})"
+                        )
             else:
                 a.temp_folder.rename(target)
 
@@ -536,15 +557,23 @@ def phase4_rename_folders(
                 result.output_folders.append(target)
             result.renamed += 1
 
-            # update catalog
+            # update catalog — wrap in try so a catalog failure doesn't fail the rename
             if catalog is not None:
-                catalog.record_usage(
-                    a.job_name,
-                    ship=ship_label,
-                    date_str=format_folder_date(a.folder_date),
-                )
+                try:
+                    catalog.record_usage(
+                        a.job_name,
+                        ship=None,
+                        date_str=format_folder_date(a.folder_date),
+                    )
+                except Exception as e:
+                    result.errors.append(f"catalog record failed for {a.job_name}: {str(e)[:120]}")
         except Exception as e:
             result.errors.append(f"{a.temp_folder.name} → {a.folder_name}: {str(e)[:200]}")
+
+        # Report progress AFTER the actual work so % doesn't run ahead
+        # (round-3 BUG-3-4)
+        if progress_cb:
+            progress_cb(i, total, f"Renamed {i}/{total}")
 
     if catalog is not None:
         try:

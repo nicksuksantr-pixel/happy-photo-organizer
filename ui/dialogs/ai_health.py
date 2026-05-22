@@ -238,11 +238,17 @@ class AIHealthDialog(ctk.CTkToplevel):
         mm = (reset_sec % 3600) // 60
         cap_rpd = "unlimited" if (not tier.throttle or tier.rpd <= 0) else f"{tier.rpd}/day"
         cap_rpm = "no cap" if (not tier.throttle or tier.rpm <= 0) else f"{tier.rpm}/min"
+        # Throttle string was previously hard-coded "4.0s/call" — wrong for any
+        # tier other than RPM 15. Use the actual computed min_interval_sec.
+        throttle_str = (
+            f"{tier.min_interval_sec:.1f}s/call"
+            if tier.min_interval_sec > 0 else "disabled (paid)"
+        )
         self.tier_detail.configure(
             text=(
                 f"Model alias: {tier.name}\n"
                 f"Limits: RPM {cap_rpm}  •  RPD {cap_rpd}  •  TPM {tier.tpm:,}\n"
-                f"Throttle: {'4.0s/call' if tier.min_interval_sec else 'disabled (paid)'}\n"
+                f"Throttle: {throttle_str}\n"
                 f"Resets in: {hh}h {mm}m  (Pacific Time 00:00)"
             )
         )

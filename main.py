@@ -594,7 +594,7 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         if self._tray is None or getattr(self._tray, "icon", None) is None:
             return  # no tray available → leave the default minimize behavior
         try:
-            state = self.state()
+            state = self.wm_state()
         except Exception:
             return
         if state == "iconic":

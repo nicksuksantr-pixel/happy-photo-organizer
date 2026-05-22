@@ -169,9 +169,12 @@ Thank you for choosing Happy Photo Organizer.
    • Please test in non-critical environments first.
 
 4. Updates
-   • No auto-update. Download new versions from:
-     https://github.com/nicksuksantr/happy-photo-organizer
-   • Updates are optional, not enforced.
+   • Silent zero-click auto-update via GitHub Releases.
+     The app checks every 5 minutes (also while hidden in tray)
+     and installs new versions in the background automatically.
+   • Source + releases:
+     https://github.com/nicksuksantr-pixel/happy-photo-organizer
+   • You can disable auto-update in Settings (toggle survives reinstall).
 
 5. Termination
    • Uninstall any time from Settings > Apps & features
@@ -480,12 +483,15 @@ exit
                 winreg.SetValueEx(k, "InstallLocation", 0, winreg.REG_SZ, str(self.install_dir))
                 winreg.SetValueEx(k, "UninstallString", 0, winreg.REG_SZ, f'cmd /c "{uninstaller}"')
                 if exe_path:
+                    # Prefer bundled .ico if it exists — Windows uses it for the
+                    # Add/Remove Programs list; falls back to the exe (which has
+                    # the icon embedded). Previously this set both unconditionally
+                    # so the .ico branch was dead.
                     icon = exe_path.parent / "_internal" / "assets" / "happy_icon.ico"
                     if not icon.exists():
                         icon = exe_path.parent / "assets" / "happy_icon.ico"
-                    if icon.exists():
-                        winreg.SetValueEx(k, "DisplayIcon", 0, winreg.REG_SZ, str(icon))
-                    winreg.SetValueEx(k, "DisplayIcon", 0, winreg.REG_SZ, str(exe_path))
+                    display_icon = str(icon) if icon.exists() else str(exe_path)
+                    winreg.SetValueEx(k, "DisplayIcon", 0, winreg.REG_SZ, display_icon)
                 winreg.SetValueEx(k, "NoModify", 0, winreg.REG_DWORD, 1)
                 winreg.SetValueEx(k, "NoRepair", 0, winreg.REG_DWORD, 1)
         except Exception:
