@@ -3,6 +3,23 @@
 All notable changes to Happy Photo Organizer are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/). Latest on top.
 
+## [1.033] — 2026-05-22
+
+### Fixed
+- **Double-download race in `UpdateWorker._on_available`.** Two rapid
+  manual_check calls (or one tick + one tray "Check now" in flight) could
+  both pass the dedup checks because `pending_installer` hadn't been set
+  yet. Result: two background threads racing to write the same installer
+  file. Added an `in_progress` short-circuit at the top of `_on_available`.
+- **Installer cache cleanup never ran.** Failed downloads and aborted
+  installs left `.exe` files at `~/.happy-photo-organizer/updates/` that
+  no code path ever swept. `main()` now calls
+  `updater.cleanup_old_installers()` once on launch.
+
+### Found via post-release code review of v1.032 — both reported by Codey
+during the regression hunt Nick requested. Both fixes are tiny (1 conditional
++ 1 function call). No behavior change for the happy path.
+
 ## [1.032] — 2026-05-22
 
 ### Changed
@@ -161,6 +178,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Latest on top.
 - English UI, dark theme, drag-drop sources + destination picker.
 - Three-phase workflow: resize+group, AI tagging, rename.
 
+[1.033]: https://github.com/nicksuksantr-pixel/happy-photo-organizer/releases/tag/v1.033
 [1.032]: https://github.com/nicksuksantr-pixel/happy-photo-organizer/releases/tag/v1.032
 [1.031]: https://github.com/nicksuksantr-pixel/happy-photo-organizer/releases/tag/v1.031
 [1.030]: https://github.com/nicksuksantr-pixel/happy-photo-organizer/releases/tag/v1.030

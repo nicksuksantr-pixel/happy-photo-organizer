@@ -1161,6 +1161,14 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
 def main() -> int:
     if not ensure_single_instance():
         return 0
+    # Sweep cached installer .exe files from previous runs.
+    # Failed-install leftovers used to accumulate at ~/.happy-photo-organizer/updates/
+    # because launch_installer_and_exit only fires on the happy path.
+    try:
+        from core import updater
+        updater.cleanup_old_installers()
+    except Exception:
+        pass
     app = MainWindow()
     app.mainloop()
     return 0

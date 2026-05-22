@@ -113,6 +113,11 @@ class UpdateWorker:
 
     def _on_available(self, info) -> None:
         """Update found. Dedup, then defer if batch is running, else download."""
+        # If a download is already running, ignore — prevents the double-download
+        # race when two manual_check calls (or one tick + one manual) discover
+        # the same release before pending_installer has been set.
+        if self.in_progress:
+            return
         # Dedup same version — avoid noisy re-logs across ticks
         if self.pending_info is not None and self.pending_info.tag == info.tag:
             return

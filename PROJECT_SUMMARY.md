@@ -1,6 +1,6 @@
 # 🎨 Happy Photo Organizer — Project Summary
 
-**Status:** v1.032 (2026-05-22 — extracted UpdateWorker to core/; main.py 1187 → 1057 lines)
+**Status:** v1.033 (2026-05-22 — fix double-download race + add startup cache cleanup)
 **Author:** Nick (with Codey — Claude Code)
 **Family:** Happy AI Family (siblings: HAPPY AI Agent)
 
