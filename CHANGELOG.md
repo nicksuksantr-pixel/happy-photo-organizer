@@ -3,6 +3,41 @@
 All notable changes to Happy Photo Organizer are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/). Latest on top.
 
+## [Unreleased] — deferred items (fix when bundling the next feature update)
+
+After 4 audit rounds (round-1 found 13+8, round-2 0+2, round-3 7, round-4 0
+regressions) these LOW / nice-to-have items remain. None block usage; all
+are bundled into the next feature release rather than shipping a v1.036
+patch for paper-cuts.
+
+- **`auth.corrupt-<ts>.json` accumulates** — quarantine files from
+  `_load_config_unlocked` are never cleaned. Add a sweep on app start that
+  deletes quarantines older than 30 days. (`core/auth.py`)
+- **`_load_config_unlocked` only quarantines `JSONDecodeError`** —
+  `OSError` / `PermissionError` returns `{}` silently with no forensic copy.
+  Inconsistent with design intent. (`core/auth.py`)
+- **`manual_check` gives no immediate UI feedback** — tray "Check for updates
+  now" relies on the log panel to show results, which the user may not see.
+  Briefly disable the menu item or toast a status. (`core/update_worker.py`
+  + `core/tray.py`)
+- **`HappyTray._load_icon_image` fallback uses `print()`** — windowed exe
+  has no stdout, so the "icon failed to load, using fallback" message goes
+  nowhere. Route to `core.updater._debug_log` instead. (`core/tray.py`)
+- **`_debug_log` rotate-fail edge case** — if the `.log.1` rename fails
+  (file locked by another process), the log keeps appending past 1 MB.
+  Acceptable as soft cap; flag if it ever shows up. (`core/updater.py`)
+- **`_safe_withdraw` / `_safe_state` after-ids not tracked** — `destroy()`
+  can't `after_cancel` them; Tk auto-cancels widget-bound callbacks so this
+  is cosmetic. (`main.py`)
+- **Phase worker `_reset_buttons` / `_on_rename_done` callbacks have no
+  `_destroyed` guard** — predates v1.034, Tk auto-cancels so usually safe,
+  but a deferred guard would be defense-in-depth. (`main.py`,
+  `core/processor.py`)
+
+All seven items collectively: cosmetic + edge-case + diminishing-returns. The
+audit cascade (13 → 2 → 7 → 0) hit clear diminishing returns at round 4 — a
+round-5 sweep would surface only HYG-tier polish.
+
 ## [1.035] — 2026-05-23
 
 ### Fixed (round-3 audit pass — 7 new findings caught after v1.034, all closed)
