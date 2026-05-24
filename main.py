@@ -91,13 +91,18 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         # Restore window geometry from last session (size + position + maximized)
         self._restore_window_state()
 
-        # Window icon (title bar + taskbar)
+        # Window icon (title bar + taskbar) + dark title bar.
+        # v1.037: use ui.win_chrome.apply_chrome which (a) registers the
+        # icon at Tk class level so every Toplevel inherits it, (b) forces
+        # the OS title bar into dark mode via DWMWA_USE_IMMERSIVE_DARK_MODE.
+        # Fixes white title bars on Settings / AI Health dialogs that Nick
+        # reported in v1.036 screenshots.
+        from ui.win_chrome import apply_chrome, register_default_icon
         icon_path = ROOT / "assets" / "happy_icon.ico"
         if icon_path.exists():
-            try:
-                self.iconbitmap(str(icon_path))
-            except Exception:
-                pass
+            register_default_icon(icon_path)
+            apply_chrome(self, icon_path)
+        self._icon_path = icon_path  # stash for dialogs to read
 
         # ─── 2 ตัวแยกชัดเจน ───
         # A. App identity icon (camera) — สำหรับ header ของแอป

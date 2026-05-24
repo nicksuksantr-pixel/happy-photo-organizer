@@ -44,6 +44,15 @@ class AIHealthDialog(ctk.CTkToplevel):
         self.geometry("760x780")
         self.transient(master)
         self.on_tier_change = on_tier_change
+        # v1.037: dark title bar + app icon (Nick screenshot — white bar +
+        # missing icon on v1.036 dialogs).
+        try:
+            from ui.win_chrome import apply_chrome
+            icon_path = getattr(master, "_icon_path", None)
+            if icon_path:
+                apply_chrome(self, icon_path)
+        except Exception:
+            pass
 
         self.usage_log = get_usage_log()
         self.rate_limiter = get_rate_limiter()

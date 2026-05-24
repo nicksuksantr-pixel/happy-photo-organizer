@@ -33,6 +33,16 @@ class SettingsDialog(ctk.CTkToplevel):
         self.transient(master)
         self.grab_set()
         self.on_save = on_save
+        # v1.037: dark title bar + app icon (Nick screenshot — white bar +
+        # missing icon on v1.036 dialogs). win_chrome no-ops on non-Windows
+        # and silently degrades if DWM / iconbitmap fails.
+        try:
+            from ui.win_chrome import apply_chrome
+            icon_path = getattr(master, "_icon_path", None)
+            if icon_path:
+                apply_chrome(self, icon_path)
+        except Exception:
+            pass
 
         cfg = auth.load_config()
 

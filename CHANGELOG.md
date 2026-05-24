@@ -8,6 +8,44 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Latest on top.
 Cosmetic / design / V2-scope items that survived round 6. All catalogued
 in detail at the bottom of this file under "Round 6 deferred".
 
+## [1.037] — 2026-05-24 — Dark title bar + dialog icon
+
+Hotfix on top of v1.036 — Nick screenshot caught two visual bugs the
+moment v1.036 popped Settings and AI Health dialogs:
+1. Title bar of every Toplevel rendered **white** even though the app is
+   `set_appearance_mode("dark")`. CTk only paints the body; the OS chrome
+   stays Windows-default unless `DWMWA_USE_IMMERSIVE_DARK_MODE` is set.
+2. Toplevel dialogs missing the **app icon** in their title bar (just a
+   generic Tk square). `iconbitmap(path)` on `CTkToplevel.__init__` is
+   too early — the window is realized before the call lands.
+
+### Added
+- **`ui/win_chrome.py`**: new helper module — `apply_chrome(window, icon)`,
+  `register_default_icon(icon)`, `apply_dark_title_bar(window)`,
+  `apply_icon_to_window(window, icon)`. Pattern lifted from PLC Visual
+  Logic Editor v0.1.17 (same root cause, same fix).
+- **`apply_dark_title_bar`**: ctypes call to
+  `dwmapi.DwmSetWindowAttribute(hwnd, 20, 1, 4)` (Win 10 1809+ / Win 11);
+  falls back to attr 19 on Win 10 1809 preview. Silent no-op on
+  non-Windows.
+- **`register_default_icon`**: calls `iconbitmap(default=path)` at Tk
+  class level so every Toplevel created afterward inherits the icon
+  without per-dialog wiring.
+- **`apply_icon_to_window`**: three-channel icon set — class default +
+  per-window iconbitmap + Pillow PhotoImage fallback — plus a deferred
+  `after(200, retry)` to beat the realize race.
+
+### Fixed
+- **Settings dialog** title bar is now dark + shows the app icon.
+- **AI Health & Quota** dialog title bar is now dark + shows the app icon.
+- **Main window** title bar is now actively dark (it was white before
+  because v1.036 only set the icon, never the DWM attribute).
+
+### Internal
+- `MainWindow.__init__` stashes `self._icon_path` so dialogs can read it
+  off `master` without re-resolving the bundle path.
+- `auth.cleanup_stale_quarantines` and round-6 patches all preserved.
+
 ## [1.036] — 2026-05-24 — Cos external review pack (Round 6, 20 patches)
 
 A non-paper-cut quality release. Trigger: Nick handed Codey
