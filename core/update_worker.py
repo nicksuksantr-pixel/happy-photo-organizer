@@ -52,6 +52,10 @@ class UpdateWorker:
         # Bookkeeping
         self._after_id = None
         self.in_progress = False  # True while a download is actively running
+        # Track last poll outcome so we only log GitHub reachability state
+        # transitions (ok→fail / fail→ok), not every 5-min poll while down.
+        # Round-6 BUG-M6 (Cos review 2026-05-24).
+        self._last_poll_ok: bool | None = None
 
     # ─── Public lifecycle ────────────────────────────────────
 
@@ -101,15 +105,27 @@ class UpdateWorker:
 
     def _poll_github(self) -> None:
         """Background thread. Hits GitHub /releases/latest and dispatches back
-        to the Tk loop. Silent on any error.
+        to the Tk loop. Only logs on reachability state transitions.
         """
+        ok = False
         try:
             from core import updater
             info = updater.check_for_update(self.current_version, timeout=5.0)
+            ok = True
             if info is not None:
                 self.host.after(0, lambda i=info: self._on_available(i))
         except Exception:
-            pass
+            ok = False
+        # State-transition logging only (round-6 BUG-M6) — avoids
+        # 'update check failed' every 5 min while GitHub / DNS is down.
+        prev = self._last_poll_ok
+        self._last_poll_ok = ok
+        if prev is None:
+            return  # first poll — don't log either outcome
+        if prev and not ok:
+            self.host.after(0, lambda: self.host.log("Update check: GitHub unreachable", "warn"))
+        elif ok and not prev:
+            self.host.after(0, lambda: self.host.log("Update check: GitHub reachable again", "ok"))
 
     def _on_available(self, info) -> None:
         """Update found. Dedup → if download in progress: defer-new-tag only →
@@ -178,7 +194,13 @@ class UpdateWorker:
         # If a newer tag arrived during this download, drop the just-downloaded
         # installer and start fetching the newer one. Cheaper than installing
         # then immediately re-running the update.
-        if self.pending_info is not None and self.pending_info.tag.lstrip("vV") != version:
+        #
+        # Compare against pending_info.version (already stripped of leading
+        # 'v' / 'V' by updater.parse) instead of tag.lstrip("vV") — pre-release
+        # tags like '1.035-rc1' would otherwise mismatch the parsed version
+        # '1.035' and trigger a redundant re-download loop.
+        # Round-6 BUG-H2 (Cos review 2026-05-24).
+        if self.pending_info is not None and self.pending_info.version != version:
             try:
                 from core import updater
                 if updater.is_newer(version, self.pending_info.version):

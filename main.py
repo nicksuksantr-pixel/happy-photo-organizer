@@ -82,7 +82,10 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
             pass
 
         self.title(f"{APP_TITLE} v{APP_VERSION}")
-        self.minsize(640, 420)
+        # Round-6 UI-13 (Cos review 2026-05-24): bump from 640×420 — too
+        # narrow for Step 3's 4-column table once Phase 2 produces rows.
+        # 960×600 = comfortable two-pane review with the log panel still visible.
+        self.minsize(960, 600)
         self.configure(fg_color=COLOR_BG)
 
         # Restore window geometry from last session (size + position + maximized)
@@ -166,6 +169,11 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         self._tray = None
         self._real_quit_requested = False
         self._destroyed = False  # flips True in destroy(); late callbacks bail
+        # Round-6 BUG-M8 (Cos review 2026-05-24): track <Unmap>'s deferred
+        # withdraw so destroy() can cancel cleanly. Already guarded by
+        # _destroyed checks in _safe_withdraw, but explicit cancel is
+        # defense-in-depth + matches the _geo_save_after_id pattern.
+        self._unmap_after_id: str | None = None
 
         self._build_ui()
         self._refresh_step_states()
@@ -178,6 +186,16 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         self.bind("<Unmap>", self._on_window_unmap)
         # Persist geometry on every resize/move (debounced 600 ms)
         self.bind("<Configure>", self._on_window_configure)
+        # Round-6 UI-03 (Cos review 2026-05-24): power-user keyboard shortcuts.
+        # Ctrl+O   → open file/folder picker (same as drop-zone click)
+        # Ctrl+Enter → start Phase 1+2 if both source + dest are set
+        # Esc      → cancel running Phase worker (if any)
+        # F5       → manually trigger update check (matches tray menu)
+        self.bind("<Control-o>", self._kbd_open)
+        self.bind("<Control-O>", self._kbd_open)
+        self.bind("<Control-Return>", self._kbd_run)
+        self.bind("<Escape>", self._kbd_cancel)
+        self.bind("<F5>", self._kbd_check_update)
         self._start_tray()
 
     # ─── UI build ───────────────────────────────
@@ -598,8 +616,14 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         except Exception:
             return
         if state == "iconic":
-            # Defer the withdraw so Tk finishes the iconify transition first
-            self.after(50, self._safe_withdraw)
+            # Defer the withdraw so Tk finishes the iconify transition first.
+            # Track the id so destroy() can cancel (round-6 BUG-M8).
+            if self._unmap_after_id is not None:
+                try:
+                    self.after_cancel(self._unmap_after_id)
+                except Exception:
+                    pass
+            self._unmap_after_id = self.after(50, self._safe_withdraw)
 
     def _safe_withdraw(self):
         """Withdraw guarded against destruction — avoids 'invalid command'."""
@@ -703,9 +727,40 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         """Override to cancel pending after() callbacks + stop tray cleanly."""
         # Mark destroyed so any late <Unmap> / debounced after() callbacks bail
         self._destroyed = True
+        # Round-6 BUG-M8 (Cos review 2026-05-24): explicitly cancel the
+        # deferred-withdraw after-id. Already guarded by _destroyed check
+        # in _safe_withdraw, but cancelling avoids a wasted Tk dispatch.
+        for _attr in ("_unmap_after_id", "_geo_save_after_id", "_poll_after_id"):
+            _aid = getattr(self, _attr, None)
+            if _aid is not None:
+                try:
+                    self.after_cancel(_aid)
+                except Exception:
+                    pass
+                setattr(self, _attr, None)
         # Cancel any in-flight Phase worker so it stops burning quota / IO
         try:
             self.cancel_event.set()
+        except Exception:
+            pass
+        # Flush in-memory catalog mutations before shutdown (round-5 BUG-2).
+        # _refresh_summary calls catalog.add() during review without saving;
+        # Phase 4 saves at the end. If the user closes the app between Phase 2
+        # and Phase 4 (X button, tray Quit, auto-update installer kill), the
+        # learned names never reach disk. Best-effort save here closes the gap.
+        #
+        # Round-6 BUG-H1 (Cos review 2026-05-24): wrap in a worker thread
+        # with a 2s join timeout. If the disk is hanging (network drive,
+        # antivirus lock, USB unplugged), the user's X-click should not be
+        # held hostage waiting for save() to return. Data persists at next
+        # Phase 4 if save here is dropped.
+        try:
+            if getattr(self, "catalog", None):
+                _save_t = threading.Thread(
+                    target=self.catalog.save, daemon=True, name="catalog-save-on-exit",
+                )
+                _save_t.start()
+                _save_t.join(timeout=2.0)
         except Exception:
             pass
         # Final geometry save — but ONLY if window is in a real state.
@@ -848,6 +903,46 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
             self._log(f"Added {added} item(s) via drag-drop", "ok")
             self._refresh_sources()
             self._refresh_step_states()
+
+    # ─── Round-6 UI-03 (Cos review 2026-05-24): keyboard shortcuts ───
+    # Each handler is a no-op when the action is invalid (no source, batch
+    # running, focus inside text entry, etc.) — Tk binds at root level fire
+    # for every keypress and we don't want to surprise the user.
+
+    def _kbd_open(self, event):
+        # Don't hijack Ctrl+O inside text-entry widgets (Settings dialog etc.)
+        if event and event.widget is not self:
+            w = str(event.widget.winfo_class()) if hasattr(event.widget, "winfo_class") else ""
+            if w in ("Entry", "CTkEntry", "Text", "CTkTextbox"):
+                return
+        self._on_drop_click(None)
+
+    def _kbd_run(self, event):
+        if event and event.widget is not self:
+            w = str(event.widget.winfo_class()) if hasattr(event.widget, "winfo_class") else ""
+            if w in ("Entry", "CTkEntry", "Text", "CTkTextbox"):
+                return
+        if not self.source_paths or not self.dest_root:
+            return  # silent — Step 1+2 status already shows what's missing
+        if getattr(self, "worker", None) and self.worker.is_alive():
+            return  # batch in progress
+        self._start_phase12()
+
+    def _kbd_cancel(self, _event):
+        # Esc anywhere — cancel a running phase. If no phase running, no-op.
+        if getattr(self, "worker", None) and self.worker.is_alive():
+            try:
+                self._cancel()
+            except Exception:
+                pass
+
+    def _kbd_check_update(self, _event):
+        try:
+            if getattr(self, "update_worker", None):
+                self.update_worker.manual_check()
+                self._log("Update check (F5) requested", "ok")
+        except Exception:
+            pass
 
     def _on_drop_click(self, _event):
         filter_str = " ".join(f"*{e}" for e in sorted(SUPPORTED_EXTS))
@@ -1208,6 +1303,13 @@ def main() -> int:
     try:
         from core import updater
         updater.cleanup_old_installers()
+    except Exception:
+        pass
+    # Round-6 BUG-L10 (Cos review 2026-05-24): sweep stale auth.corrupt-*.json
+    # quarantines + any .tmp orphans left by atomic_write_json crashes
+    # (closes round-5 R5-RISK-2 deferred item).
+    try:
+        auth.cleanup_stale_quarantines(max_age_days=30)
     except Exception:
         pass
     app = MainWindow()

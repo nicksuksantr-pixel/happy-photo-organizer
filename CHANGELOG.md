@@ -3,12 +3,243 @@
 All notable changes to Happy Photo Organizer are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/). Latest on top.
 
-## [Unreleased] — deferred items (fix when bundling the next feature update)
+## [Unreleased] — deferred items (will roll into V2 docx form filler)
 
-After 4 audit rounds (round-1 found 13+8, round-2 0+2, round-3 7, round-4 0
-regressions) these LOW / nice-to-have items remain. None block usage; all
-are bundled into the next feature release rather than shipping a v1.036
-patch for paper-cuts.
+Cosmetic / design / V2-scope items that survived round 6. All catalogued
+in detail at the bottom of this file under "Round 6 deferred".
+
+## [1.036] — 2026-05-24 — Cos external review pack (Round 6, 20 patches)
+
+A non-paper-cut quality release. Trigger: Nick handed Codey
+`Happy-Photo-Organizer-CodeReview.docx` from Cos (Claude in Cowork, sibling
+instance, no in-flight context). Cos returned 7,000 words / 7.9 ÷ 10 / B+ /
+3 HIGH + 8 MEDIUM + 10 LOW bug findings + 15 UI/UX + 7 architecture + 6 AI
+integration notes, every one with file:line and a proposed fix.
+
+Codey triaged across two passes (initial 9 patches + Nick "จัดให้หมด"
+extension 11 more), patched 20 items source-only, rejected 2 reviewer
+claims (Cos misread `raise SystemExit` vs `sys.exit` and a guarded
+after-id), deferred ~25 design / V2 / test-infra items.
+
+Pattern proved: when self-audit cascade plateaus (round 1-5 went
+13→0→7→0→2 finds), switch *modality* (self → external review) instead
+of doing another self-round. Round 6 reset the curve: 20 real patches.
+
+### Round 6 extension (2026-05-24 #2 — Nick said "จัดให้หมด", surgical sweep)
+
+After the first Round-6 pass shipped 9 surgical patches, Nick directed
+Codey to clear every remaining Cos finding that wasn't a design decision
+or V2-scope refactor. 11 more patches applied source-only.
+
+**UI (low-risk power-user improvements)**
+- **R6-UI-03: keyboard shortcuts.** `Ctrl+O` opens the file picker;
+  `Ctrl+Enter` starts Phase 1+2 when source + dest are both set;
+  `Esc` cancels a running phase; `F5` triggers a manual update check.
+  Each handler ignores keypresses inside text entries (Settings dialog
+  etc.) to avoid hijacking typing. (`main.py:_kbd_*`)
+- **R6-UI-13: minsize 960×600.** Old 640×420 collapsed Step 3's
+  4-column review table the moment Phase 2 produced rows. New floor
+  fits the two-pane layout + log panel comfortably. (`main.py:85`)
+
+**Low-risk bug patches**
+- **R6-BUG-L1: catalog `_extract_keywords` stop list expanded** from
+  11 to 30 common English prepositions/articles/copulas. Fuzzy match
+  on job names like "Cleaned the cooler from main AC" was previously
+  treating "the"/"from" as semantically meaningful tokens.
+  (`core/catalog.py:_extract_keywords`)
+- **R6-BUG-L3: `JobRow._open_folder` surfaces failures** via
+  `messagebox.showwarning` / `showinfo` instead of silently swallowing.
+  User now learns when the source folder has been moved/deleted
+  since Phase 1, or when `os.startfile` refuses. (`ui/job_row.py:_open_folder`)
+- **R6-BUG-L2: `atomic_write_json` retries 3× with 0.15s/0.30s backoff.**
+  AV scanners holding a write lock for a tenth of a second were the
+  common cause of silent setting-save losses. Split into
+  `_atomic_write_json_once` + retry wrapper. (`core/auth.py:atomic_write_json`)
+- **R6-BUG-L7: JPEG integrity verify after save.** New `_verify_jpeg_readable`
+  re-opens the bytes Pillow just produced; if decode fails, fall through
+  to the next attempt with smaller dim. Catches rare codec edge cases
+  that produced silently-corrupt 0-byte outputs. (`core/resizer.py`)
+- **R6-BUG-L8: `.gitattributes` added.** Normalize line endings: LF in
+  the repo, native on checkout, never CRLF in `.py`/`.json`/`.md`.
+  Binary lock on assets prevents PIL/installer artifacts from being
+  text-munged. Prepares the repo for a non-Windows contributor.
+- **R6-BUG-L9: Phase 4 rename retry.** `a.temp_folder.rename(target)`
+  now retries up to 3× with 0.3s/0.9s backoff before raising. Covers
+  the AV-scanner / network-share transient-PermissionError window.
+  (`core/processor.py:phase4_rename_folders`)
+- **R6-BUG-L10: stale quarantine + tmp-orphan sweep on startup.**
+  New `auth.cleanup_stale_quarantines(max_age_days=30)` called from
+  `main()` alongside `cleanup_old_installers()`. Removes
+  `auth.corrupt-<ts>.json` older than 30 days AND any `<name>.<rand>.tmp`
+  orphan from a crashed atomic write (closes round-5 R5-RISK-2 too).
+
+**Medium upgrade**
+- **R6-BUG-M7: async thumbnail loading in `JobRow`.** `Image.open` +
+  `thumbnail` was running on the Tk thread during `_render_plan` — with
+  50+ HEIC rows it visibly froze the UI for 1-2 s. Now spawned to a
+  daemon thread, shows `...` placeholder, swaps in the real CTkImage
+  via `after(0)`. Guards against row teardown via a `<Destroy>` marker.
+  (`ui/job_row.py`)
+
+**Defense-in-depth**
+- **R6-BUG-M8: track `_on_window_unmap` after-id + cancel in `destroy()`.**
+  Already guarded by `_destroyed` check in `_safe_withdraw`, but
+  explicit cancel matches the existing `_geo_save_after_id` /
+  `_poll_after_id` pattern and avoids a wasted Tk dispatch. The
+  destroy() loop now cancels all three tracked after-ids in one block.
+  (`main.py`)
+
+### Round 6 (2026-05-24 — Cos external review, applied to source)
+
+External world-class review by Cos (Claude in Cowork — sibling instance).
+Cos read all 26 .py files (5,481 LOC) + ran static analysis + tested pure
+logic. Codey triaged each finding against the round 1-5 audit and applied
+8 low-risk surgical patches. UI/Theme/Typography/Architecture refactors and
+test infrastructure deferred to V2 / Phase B work per Nick's standing rule.
+
+**HIGH — patched in source**
+- **R6-BUG-H1: `MainWindow.destroy()` could block on hung disk during
+  catalog save.** Round-5 added `catalog.save()` to `destroy()` to close the
+  in-memory-loss window, but a hung disk (network drive, AV lock, USB
+  unplugged) would freeze the X-button click waiting for atomic-write to
+  return. **Fix**: wrap `catalog.save()` in a daemon thread with
+  `join(timeout=2.0)`. If the disk is unresponsive, drop the save and let
+  the next Phase 4 persist. Idempotent + crash-safe. (`main.py:716-730`)
+- **R6-BUG-H2: `update_worker._on_ready` version-compare on stripped tag,
+  not parsed version.** Compared `pending_info.tag.lstrip("vV")` to the
+  parsed `version` arg. Pre-release tags like `1.035-rc1` would strip to
+  `1.035-rc1`, mismatch the parsed `1.035`, and re-enter the download
+  branch — risk of redundant re-download loop. **Fix**: compare
+  `pending_info.version` (parsed, already stripped) on both sides. Clean
+  one-liner. (`core/update_worker.py:181-184`)
+- **R6-BUG-H3: `paste_helper.enable_paste` hard-coded `widget._entry`
+  internal.** A CTk upgrade that renames the inner Entry would silently
+  break Ctrl+V/C/X/A on Thai keyboards (the whole point of this helper).
+  **Fix**: probe candidate names (`_entry`, `entry`, `_input`) and verify
+  the inner widget has `bind` + `insert` before binding. Falls back to the
+  widget itself if no inner candidate matches. (`ui/paste_helper.py:22-37`)
+
+**MEDIUM — patched in source**
+- **R6-BUG-M2: No disk-space pre-check before Phase 1 resize.** Phase 1
+  writes ~30KB per JPEG straight to dest_root — a full disk would error
+  mid-batch and leave a half-built temp folder. **Fix**: `shutil.disk_usage`
+  pre-check at the top of `phase1_resize_and_group` requiring 2× headroom
+  (≈60KB per image). Raises before any work starts. Degrades gracefully on
+  UNC paths that don't support `disk_usage`. (`core/processor.py:311-326`)
+- **R6-BUG-M3: `detect_target_month` could inherit implausible year.** If
+  the dest happened to have a stray folder dated 2050 (mistyped batch),
+  the detector returned `(2050, 5)` and every new folder for the batch
+  inherited year 2050. **Fix**: clamp detected year to ±5 of today; fall
+  back to current year + detected month if out of range. (`core/processor.py`
+  post-`detect_target_month` block)
+- **R6-BUG-M4: Phase 2 worker error swallowed stack trace.** Caught with
+  `reasoning: f"worker error: {str(e)[:200]}"` — UI got the message but the
+  log lost file:line, so reproducing was painful. **Fix**: capture
+  `traceback.format_exc()` and emit via `progress_cb` as a debug line.
+  UI-facing message unchanged. (`core/processor.py:472-487`)
+- **R6-BUG-M5: `resizer` docstring contradicted code.** Doc said quality
+  95→50, array was 90→20, target 20-50 KB, actual was 10-25 KB. Confused
+  any maintainer. **Fix**: rewrite docstring to match constants exactly.
+  (`core/resizer.py:1-7`)
+- **R6-BUG-M6: `update_worker._poll_github` silent on every error.** Every
+  poll while GitHub was unreachable failed silently — no telemetry, but
+  also no signal to the user that "we tried, it's not us, it's GitHub".
+  **Fix**: track `_last_poll_ok` and log only on state transitions
+  (ok→fail = "GitHub unreachable", fail→ok = "GitHub reachable again").
+  First poll outcome stays silent — avoids "warning" on cold start.
+  (`core/update_worker.py:102-128`)
+
+**LOW — patched in source**
+- **R6-BUG-L6: `import uuid as _uuid` inside a Phase 4 function body.**
+  Tiny code smell — runs on every collision cap. **Fix**: hoist to module
+  top, kept the `_uuid` alias for call-site stability. (`core/processor.py`)
+
+**AI — patched in source**
+- **R6-AI-04: No exponential backoff on transient 5xx / network errors.**
+  A 503 from Gemini surfaced immediately as `result.reasoning = "error: ..."`
+  with no retry, even though the next request 1-2 s later usually
+  succeeded. **Fix**: new `_generate_with_retry` wrapper in `analyzer.py`
+  with 1s / 2s / 4s backoff. Retries on 500/502/503/504/timeout/connection-
+  reset; does NOT retry quota / cancellation / 4xx (those are user/policy,
+  not transient). Cancel-aware sleep so user cancel doesn't wait the full
+  backoff. Wired into both `analyze_image` and `analyze_group`.
+  (`core/analyzer.py` — new helper + 2 call sites)
+
+### Round 6 deferred (Cos findings catalogued, not patched yet)
+
+Reason for each defer: needs design decision (Nick), bigger-than-surgical
+refactor (V2 scope), or test infrastructure work (Phase B per Cos's
+roadmap).
+
+- **UI-01 .. UI-15 (Cos)**: typography hierarchy, color-palette refine,
+  keyboard shortcuts, undo-Phase-4, lucide icons, sort/filter in Step 3,
+  drop-zone pulse, dark/light/system toggle, sparkline RPM badge, etc.
+  These are visual design decisions and a multi-day rebuild of `ui/theme.py`
+  + new `ui/typography.py` + `ui/spacing.py` + `ui/icons.py`. Defer to V2
+  feature ship so the whole look-and-feel changes in one user-facing event.
+- **BUG-M1**: `smoke_test.py` hard-coded `D:\+++++Nick folder+++++\…`
+  paths. Replace by Phase B `tests/fixtures/` work — pytest + GitHub
+  Actions CI is a separate effort and out of scope for round 6.
+- **BUG-M7**: `JobRow._make_thumbnail` sync block on UI. Real but
+  rewriting thumbnail loading to async with placeholder swap touches the
+  CTkImage lifecycle — defer to V2 polish pass.
+- **BUG-M8**: `_on_window_unmap` after-id not tracked + cancelled.
+  Already guarded by `_destroyed` / `_real_quit_requested` checks in
+  `_safe_withdraw`, so this is defense-in-depth, not a real bug.
+- **BUG-L1 .. L10**: stop-word coverage, atomic-write retry, open-folder
+  silent except, mutex namespace, raise SystemExit vs sys.exit (no
+  observable difference — both trigger atexit), JPEG integrity verify,
+  `.gitattributes`, Phase 4 rename retry, auth.corrupt sweep. All
+  paper-cuts.
+- **ARCH-01 .. 07**: split `main.py` controllers, DI container, logging
+  framework, dry-run Phase 4, event bus, i18n, pydantic config schema.
+  Each is a 1-2 day refactor that touches every module — wrong moment
+  while V2 docx form filler design is still open. Catalogue and revisit
+  during V2 scoping.
+- **AI-01**: TPM enforcement (Gemini token-per-minute rate). Real risk
+  but needs a new sliding-window data structure in `RateLimiter` + UI
+  surface in AI Health. Defer to V2 — at current usage (single-user,
+  free tier) RPM hits the cap first anyway.
+- **AI-02**: Catalog filtering (send top-N relevant names per call).
+  Optimization; deferred until catalog passes 500 entries (currently 146).
+- **AI-03**: Response cache for re-runs. Useful for power users — design
+  needed (cache invalidation rules, key hash, eviction).
+- **AI-05**: Streaming response. Cos agrees defer — JSON payload is small.
+- **AI-06**: Prompt versioning. Architecture decision; defer.
+
+### Round 5 (2026-05-23 #2 — applied to source, awaiting next feature ship)
+
+- **R5-BUG-1 (MED-LOW): `_translate_to_english` was synchronous + untracked.**
+  The EN button on a JobRow called `client.models.generate_content()` directly
+  on the Tk thread — froze the UI for 1-3 s per click, bypassed the rate
+  limiter (no RPM throttle / no quota check), and bypassed `usage_log.record_call`
+  so AI Health showed wrong call counts. **Fixed in source**: dispatched to a
+  daemon thread, gated through `rate_limiter.call("translate")` so the call is
+  throttled + logged like Phase 2 calls, and marshalled back to Tk via
+  `after(0, …)`. Token usage is captured into the context so usage_log totals
+  stay accurate. (`ui/job_row.py:274-322`)
+- **R5-BUG-2 (LOW): catalog-learning persistence gap.** `_refresh_summary`
+  calls `catalog.add()` in-memory only; `catalog.save()` only runs at the end
+  of Phase 4. If the user edited names in review and then closed the app
+  *without* running Phase 4 — X button → tray, tray Quit, auto-update
+  installer killing the process between Phase 2 and Phase 4 — all the learned
+  names were lost. **Fixed in source**: `MainWindow.destroy()` now best-effort
+  calls `self.catalog.save()` before tearing down. Idempotent (Phase 4 still
+  saves) and cheap (the catalog is small). (`main.py:_destroy_override`)
+
+### Round 5 deferred (cosmetic / very low impact — not patched)
+
+- **R5-RISK-1: `auto_check_updates` toggle is not live.** Toggling the Settings
+  checkbox only takes effect on next launch; the running `UpdateWorker` keeps
+  its scheduled `after` chain regardless. Cosmetic. (`ui/dialogs/settings.py`
+  + `main.py:_on_settings_saved`)
+- **R5-RISK-2: `.tmp` orphans in `~/.happy-photo-organizer/`.** If the process
+  is killed mid-`atomic_write_json`, the `<file>.<rand>.tmp` is left behind.
+  `cleanup_old_installers()` only sweeps `updates/`, not the parent config
+  dir. < 1 KB per orphan, very rare. (`core/auth.atomic_write_json` +
+  `core/updater.cleanup_old_installers`)
+
+### Original deferred items (round 1-4 — still standing)
 
 - **`auth.corrupt-<ts>.json` accumulates** — quarantine files from
   `_load_config_unlocked` are never cleaned. Add a sweep on app start that

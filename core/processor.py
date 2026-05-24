@@ -15,6 +15,8 @@ from __future__ import annotations
 import re
 import shutil
 import threading
+import traceback
+import uuid as _uuid
 from calendar import monthrange
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
@@ -306,6 +308,26 @@ def phase1_resize_and_group(
     if not items:
         return plan
 
+    # Round-6 BUG-M2 (Cos review 2026-05-24): pre-check disk space.
+    # Each output JPEG averages ~30KB (target_kb_max=25 + overhead). We
+    # require 2× headroom so a mid-batch out-of-space leaves the user
+    # with breathing room — not a half-resized temp folder + crash.
+    try:
+        free = shutil.disk_usage(dest_root).free
+        est_bytes = len(items) * 30_000  # ~30KB per resized JPEG
+        if free < est_bytes * 2:
+            raise RuntimeError(
+                f"Low disk space at {dest_root}: "
+                f"{free/1e9:.2f} GB free, need ~{est_bytes*2/1e9:.2f} GB "
+                f"for {len(items)} images. Free up space or pick a different destination."
+            )
+    except RuntimeError:
+        raise
+    except Exception:
+        # disk_usage can fail on UNC paths / odd filesystems — degrade
+        # to old behavior (proceed and surface mid-batch error)
+        pass
+
     # group all images by date+time across all sources
     all_imgs = [img for img, _ in items]
     label_map = {img: lbl for img, lbl in items}
@@ -365,9 +387,17 @@ def phase1_resize_and_group(
     # against, use the current month/year as the target instead of inheriting
     # EXIF dates blindly. Prevents misconfigured-camera-clock photos (e.g. EXIF
     # year 2050) from landing as `01-05-50` folders (round-3 BUG-3-6).
+    now = datetime.now()
     if target_ym is None:
-        now = datetime.now()
         target_ym = (now.year, now.month)
+    else:
+        # Round-6 BUG-M3 (Cos review 2026-05-24): clamp detected year to
+        # ±5 of today. If a stray dest folder like '01-05-50' (year 2050)
+        # exists and happens to be the mode, every new folder would inherit
+        # year 2050. Reject implausible years and fall back to current.
+        ty, tm = target_ym
+        if abs(ty - now.year) > 5:
+            target_ym = (now.year, tm)
     plan.pre_existing_dates = sorted(f"{d:02d}" for d in used_days)
     plan.shifted_count, plan.capped_count = assign_unique_dates(
         plan, used_days, target_year_month=target_ym,
@@ -473,6 +503,15 @@ def phase2_ai_analyze(
                 idx, result = fut.result()
             except Exception as e:
                 idx, _a, _ = futures[fut]
+                # Round-6 BUG-M4: log the full stack via traceback so the
+                # debug log captures filename:line — only the short message
+                # rides on the assignment for the UI to show.
+                tb = traceback.format_exc()
+                if progress_cb:
+                    try:
+                        progress_cb(0, 0, f"[debug] phase2 worker error:\n{tb}")
+                    except Exception:
+                        pass
                 result = {
                     "matched_name": None, "suggested_name": None,
                     "confidence": 0.0, "reasoning": f"worker error: {str(e)[:200]}",
@@ -535,8 +574,8 @@ def phase4_rename_folders(
                         dst_file = target / f"{f.stem}_{cnt}{f.suffix}"
                         cnt += 1
                     if dst_file.exists():
-                        # Cap hit — fall back to a unique suffix
-                        import uuid as _uuid
+                        # Cap hit — fall back to a unique suffix.
+                        # uuid imported at module top (round-6 BUG-L6).
                         dst_file = target / f"{f.stem}_{_uuid.uuid4().hex[:8]}{f.suffix}"
                     shutil.move(str(f), str(dst_file))
                 try:
@@ -551,7 +590,24 @@ def phase4_rename_folders(
                             f"{a.temp_folder.name} (leftover: {leftovers[:3]})"
                         )
             else:
-                a.temp_folder.rename(target)
+                # Round-6 BUG-L9 (Cos review 2026-05-24): network shares
+                # and AV scanners can hold a handle on the folder for a
+                # split second after Phase 1 ends. Retry rename briefly
+                # before giving up so a transient PermissionError doesn't
+                # cost the user the whole row.
+                _last_err: Exception | None = None
+                for _attempt in range(3):
+                    try:
+                        a.temp_folder.rename(target)
+                        _last_err = None
+                        break
+                    except OSError as oe:
+                        _last_err = oe
+                        # Brief, escalating backoff: 0.3s, 0.9s
+                        import time as _time
+                        _time.sleep(0.3 * (_attempt + 1) ** 2)
+                if _last_err is not None:
+                    raise _last_err
 
             if target not in result.output_folders:
                 result.output_folders.append(target)

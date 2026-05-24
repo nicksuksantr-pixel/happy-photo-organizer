@@ -1,8 +1,8 @@
 """
-resizer.py — ย่อรูป target 20-50 KB
+resizer.py — ย่อรูป target 10-25 KB
 Strategy:
-  1. ลด resolution ก่อน (ถ้าใหญ่กว่า max_dim)
-  2. Iterative reduce JPEG quality 95 → 50 จนได้ขนาดที่ต้องการ
+  1. ลด resolution ก่อน (ถ้าใหญ่กว่า max_dim, default 1280px longest edge)
+  2. Iterative reduce JPEG quality 90 → 20 (QUALITY_STEPS) จนได้ขนาดที่ต้องการ
   3. ถ้ายังเกิน — ลด resolution อีก แล้ว retry
 """
 from __future__ import annotations
@@ -28,6 +28,21 @@ def _save_jpeg_bytes(img: Image.Image, quality: int) -> bytes:
         img = img.convert("RGB")
     img.save(buf, format="JPEG", quality=quality, optimize=True, progressive=True)
     return buf.getvalue()
+
+
+def _verify_jpeg_readable(data: bytes) -> bool:
+    """Round-6 BUG-L7 (Cos review 2026-05-24): JPEG bytes that Pillow
+    'saved' without raising aren't always decodable — partial buffer
+    truncation, disk corruption mid-write, codec quirk. Re-open from the
+    bytes we're about to commit; only return True if the decode succeeds
+    AND the dimensions match what we asked for.
+    """
+    try:
+        with Image.open(io.BytesIO(data)) as test:
+            test.verify()
+        return True
+    except Exception:
+        return False
 
 
 def _scale_image(img: Image.Image, max_dim: int) -> Image.Image:
@@ -76,6 +91,12 @@ def resize_to_target(
                             break
 
                 if best_data is not None:
+                    # Round-6 BUG-L7: verify the bytes decode before commit.
+                    if not _verify_jpeg_readable(best_data):
+                        # Codec produced un-readable JPEG (very rare) —
+                        # fall through to the next attempt with smaller dim
+                        current_max_dim = max(current_max_dim // 2, 320)
+                        continue
                     dst_path.parent.mkdir(parents=True, exist_ok=True)
                     dst_path.write_bytes(best_data)
                     return True, {

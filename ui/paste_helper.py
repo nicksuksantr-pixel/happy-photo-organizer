@@ -20,8 +20,21 @@ _KEYCODE_A = 65
 
 
 def enable_paste(widget) -> None:
-    """Wire Ctrl+V/C/X/A + right-click context menu on widget."""
-    target = getattr(widget, "_entry", widget)
+    """Wire Ctrl+V/C/X/A + right-click context menu on widget.
+
+    CTk wraps the underlying tk.Entry as a private attribute that has
+    differed across versions (_entry on 5.x, _input on some forks). We
+    probe a small list of candidate names before falling back to the
+    widget itself, so a CTk upgrade doesn't silently break paste.
+    Round-6 BUG-H3 (Cos review 2026-05-24).
+    """
+    target = widget
+    for candidate in ("_entry", "entry", "_input"):
+        inner = getattr(widget, candidate, None)
+        # Must look like a tk widget — bind/insert/delete are the methods we use
+        if inner is not None and hasattr(inner, "bind") and hasattr(inner, "insert"):
+            target = inner
+            break
 
     def do_paste(_e=None):
         try:

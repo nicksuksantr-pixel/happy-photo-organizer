@@ -7,6 +7,7 @@ AI confidence indicator. Calls `on_change` whenever the user accepts a new name.
 from __future__ import annotations
 
 import os
+import threading
 
 import customtkinter as ctk
 from PIL import Image
@@ -68,12 +69,15 @@ class JobRow(ctk.CTkFrame):
         ).pack(anchor="w")
 
         # ─── Col 1: Thumbnail (clickable → open folder) ───
-        thumb = self._make_thumbnail()
-        thumb_text = "" if thumb else "(no\nimage)"
+        # Round-6 BUG-M7 (Cos review 2026-05-24): defer thumbnail decode
+        # to a daemon thread. With 50+ rows of HEIC the original sync path
+        # froze the UI for 1-2 s while _render_plan iterated. Show a
+        # placeholder immediately + swap in the real image via after(0)
+        # when the worker completes.
         self.thumb_btn = ctk.CTkButton(
             self,
-            image=thumb,
-            text=thumb_text,
+            image=None,
+            text="...",
             width=self.THUMB_SIZE + 8, height=self.THUMB_SIZE + 8,
             fg_color=COLOR_BG, hover_color=COLOR_BG_INPUT,
             text_color=COLOR_MUTED,
@@ -81,8 +85,9 @@ class JobRow(ctk.CTkFrame):
             command=self._open_folder,
         )
         self.thumb_btn.grid(row=0, column=1, rowspan=2, padx=4, pady=6)
-        if thumb:
-            self._thumb_ref = thumb
+        self._destroyed = False
+        self.bind("<Destroy>", self._on_destroy_marker, add="+")
+        threading.Thread(target=self._load_thumbnail_async, daemon=True).start()
 
         # ─── Col 2: Combobox + size info ───
         center = ctk.CTkFrame(self, fg_color="transparent")
@@ -171,19 +176,45 @@ class JobRow(ctk.CTkFrame):
 
     # ─── Helpers ───
 
-    def _make_thumbnail(self):
+    def _on_destroy_marker(self, _event=None):
+        # Round-6 BUG-M7: mark row destroyed so the async thumbnail
+        # callback doesn't poke a tk widget that's no longer there
+        # (re-render of plan during Phase 3 deletes + recreates rows).
+        self._destroyed = True
+
+    def _load_thumbnail_async(self):
+        """Worker thread — decode the first image, marshal back to Tk."""
         pool = self.assignment.resized_paths or self.assignment.images
         if not pool:
-            return None
+            return
         try:
-            with Image.open(pool[0]) as img:
-                img.thumbnail((self.THUMB_SIZE * 2, self.THUMB_SIZE * 2))
-                return ctk.CTkImage(
-                    light_image=img.copy(), dark_image=img.copy(),
-                    size=(self.THUMB_SIZE, self.THUMB_SIZE),
-                )
+            # Open + thumbnail on the worker thread (heavy IO + CPU).
+            # CTkImage construction must happen on the Tk thread, so we
+            # pass the resized PIL image back and build the CTkImage there.
+            with Image.open(pool[0]) as raw:
+                raw.load()
+                pil = raw.copy()
+            pil.thumbnail((self.THUMB_SIZE * 2, self.THUMB_SIZE * 2))
         except Exception:
-            return None
+            return
+        try:
+            self.after(0, lambda: self._apply_thumbnail(pil))
+        except Exception:
+            # Tk gone — silently drop
+            pass
+
+    def _apply_thumbnail(self, pil_image):
+        if self._destroyed or not self.winfo_exists():
+            return
+        try:
+            img = ctk.CTkImage(
+                light_image=pil_image, dark_image=pil_image,
+                size=(self.THUMB_SIZE, self.THUMB_SIZE),
+            )
+            self.thumb_btn.configure(image=img, text="")
+            self._thumb_ref = img
+        except Exception:
+            pass
 
     def _calc_size_info(self) -> str:
         paths = self.assignment.resized_paths or self.assignment.images
@@ -207,19 +238,38 @@ class JobRow(ctk.CTkFrame):
         )
 
     def _open_folder(self):
+        # Round-6 BUG-L3 (Cos review 2026-05-24): surface open failures
+        # instead of silently swallowing — user has no other signal that
+        # the click did anything when the folder is gone.
+        target = None
         folder = self.assignment.temp_folder
         if folder and folder.exists():
-            try:
-                os.startfile(folder)
-            except Exception:
-                pass
+            target = folder
         else:
             pool = self.assignment.resized_paths or self.assignment.images
-            if pool:
-                try:
-                    os.startfile(pool[0].parent)
-                except Exception:
-                    pass
+            if pool and pool[0].parent.exists():
+                target = pool[0].parent
+        if target is None:
+            try:
+                from tkinter import messagebox
+                messagebox.showinfo(
+                    "Folder not available",
+                    "The source folder has moved or been deleted since Phase 1.",
+                )
+            except Exception:
+                pass
+            return
+        try:
+            os.startfile(str(target))
+        except Exception as e:
+            try:
+                from tkinter import messagebox
+                messagebox.showwarning(
+                    "Could not open folder",
+                    f"{type(e).__name__}: {e}\n\nPath:\n{target}",
+                )
+            except Exception:
+                pass
 
     def _on_job_change(self, value):
         self.assignment.job_name = value
@@ -272,7 +322,22 @@ class JobRow(ctk.CTkFrame):
             pass
 
     def _translate_to_english(self):
+        """Translate Thai → English via Gemini.
+
+        Round-5 fix (R5-BUG-1): the call used to run synchronously on the Tk
+        thread, freezing the UI for 1-3 s per click, bypassing the rate limiter,
+        and bypassing usage_log. The free-tier RPM counter and AI Health page
+        were both blind to translate calls. Now: dispatched to a daemon thread,
+        gated through `rate_limiter.call('translate')` so the throttle + usage
+        log capture the call, and marshalled back to Tk via `after(0, ...)`.
+        """
+        import threading
         from core.auth import create_client, get_model
+        from core.rate_limiter import (
+            QuotaExceededError,
+            _CancelledError,
+            get_rate_limiter,
+        )
         from google.genai import types
 
         text = self.job_var.get().strip()
@@ -281,7 +346,6 @@ class JobRow(ctk.CTkFrame):
 
         original_text = self.translate_btn.cget("text")
         self.translate_btn.configure(text="...", state="disabled")
-        self.update()
 
         def restore():
             try:
@@ -289,25 +353,8 @@ class JobRow(ctk.CTkFrame):
             except Exception:
                 pass
 
-        try:
-            client, err = create_client()
-            if err:
-                restore()
-                return
-
-            prompt = (
-                "แปลข้อความนี้เป็นภาษาอังกฤษสำหรับใช้เป็นชื่องานซ่อมบำรุงเรือ "
-                "(ใช้คำศัพท์ทางเทคนิคที่เหมาะสม เช่น Cleaned/Repaired/Replaced/Inspected). "
-                "ตอบกลับเฉพาะคำแปลภาษาอังกฤษ ไม่ต้องมีคำอธิบาย ไม่ต้องมี quotes:\n\n"
-                f"{text}"
-            )
-            response = client.models.generate_content(
-                model=get_model(),
-                contents=[prompt],
-                config=types.GenerateContentConfig(temperature=0.1),
-            )
-            translated = (response.text or "").strip().strip('"').strip("'")
-            if translated:
+        def apply_translation(translated: str):
+            try:
                 self.job_var.set(translated)
                 self.assignment.job_name = translated
                 self.assignment.is_new_suggestion = (
@@ -316,7 +363,52 @@ class JobRow(ctk.CTkFrame):
                 self._update_border()
                 if self.on_change:
                     self.on_change()
-        except Exception:
-            pass
-        finally:
-            restore()
+            except Exception:
+                pass
+            finally:
+                restore()
+
+        def worker():
+            try:
+                client, err = create_client()
+                if err:
+                    self.after(0, restore)
+                    return
+
+                prompt = (
+                    "แปลข้อความนี้เป็นภาษาอังกฤษสำหรับใช้เป็นชื่องานซ่อมบำรุงเรือ "
+                    "(ใช้คำศัพท์ทางเทคนิคที่เหมาะสม เช่น Cleaned/Repaired/Replaced/Inspected). "
+                    "ตอบกลับเฉพาะคำแปลภาษาอังกฤษ ไม่ต้องมีคำอธิบาย ไม่ต้องมี quotes:\n\n"
+                    f"{text}"
+                )
+                limiter = get_rate_limiter()
+                try:
+                    with limiter.call("translate") as ctx:
+                        response = client.models.generate_content(
+                            model=get_model(),
+                            contents=[prompt],
+                            config=types.GenerateContentConfig(temperature=0.1),
+                        )
+                        # Capture token usage so usage_log shows accurate totals
+                        try:
+                            meta = getattr(response, "usage_metadata", None)
+                            ctx.tokens = int(getattr(meta, "total_token_count", 0) or 0)
+                        except Exception:
+                            pass
+                except QuotaExceededError:
+                    # Daily quota burned — silently give up; restore button
+                    self.after(0, restore)
+                    return
+                except _CancelledError:
+                    self.after(0, restore)
+                    return
+
+                translated = (response.text or "").strip().strip('"').strip("'")
+                if translated:
+                    self.after(0, lambda t=translated: apply_translation(t))
+                else:
+                    self.after(0, restore)
+            except Exception:
+                self.after(0, restore)
+
+        threading.Thread(target=worker, daemon=True).start()

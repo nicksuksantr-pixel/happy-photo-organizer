@@ -24,7 +24,14 @@ def _normalize(name: str) -> str:
 
 def _extract_keywords(name: str) -> list[str]:
     tokens = re.findall(r"[a-zA-Z]+", name.lower())
-    stop = {"the", "a", "an", "and", "or", "of", "to", "for", "in", "on", "at"}
+    # Round-6 BUG-L1 (Cos review 2026-05-24): expanded stop list. Original
+    # 11 words missed common English prepositions/articles that bleed into
+    # fuzzy match scoring on job names like "Cleaned the cooler from main AC".
+    stop = {
+        "the", "a", "an", "and", "or", "of", "to", "for", "in", "on", "at",
+        "with", "by", "from", "into", "onto", "as", "is", "are", "was", "were",
+        "be", "been", "being", "this", "that", "these", "those", "it", "its",
+    }
     return [t for t in tokens if t not in stop and len(t) > 1]
 
 

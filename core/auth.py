@@ -31,12 +31,25 @@ def atomic_write_json(path: Path, data: dict, lock_perms: bool = True) -> bool:
 
     Pattern from ENA v2.6.7: write to `<path>.tmp`, fsync, then `os.replace`.
     No half-written file can be observed after a crash. Best-effort on perms.
+
+    Round-6 BUG-L2 (Cos review 2026-05-24): wrap in a 3-attempt retry with
+    short backoff. AV scanners holding write locks for a tenth of a second
+    are the usual cause of silent atomic_write_json failures; one retry
+    almost always recovers and turns a "lost setting" into a no-op.
     """
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
     except Exception:
         return False
-    tmp_fd = None
+    for attempt in range(3):
+        if _atomic_write_json_once(path, data, lock_perms):
+            return True
+        if attempt < 2:
+            time.sleep(0.15 * (attempt + 1))
+    return False
+
+
+def _atomic_write_json_once(path: Path, data: dict, lock_perms: bool) -> bool:
     tmp_path: Path | None = None
     try:
         # NamedTemporaryFile keeps tmp in the same dir so os.replace is atomic
@@ -46,7 +59,6 @@ def atomic_write_json(path: Path, data: dict, lock_perms: bool = True) -> bool:
             dir=str(path.parent), prefix=path.name + ".", suffix=".tmp",
             delete=False,
         ) as f:
-            tmp_fd = f
             tmp_path = Path(f.name)
             json.dump(data, f, ensure_ascii=False, indent=2)
             f.flush()
@@ -70,6 +82,41 @@ def atomic_write_json(path: Path, data: dict, lock_perms: bool = True) -> bool:
                 tmp_path.unlink(missing_ok=True)
             except Exception:
                 pass
+
+
+def cleanup_stale_quarantines(max_age_days: int = 30) -> int:
+    """Round-6 BUG-L10 (Cos review 2026-05-24): sweep auth.corrupt-<ts>.json
+    files older than `max_age_days`. Quarantines accumulate forever
+    otherwise — most are useful for ~1 debugging session and then forgotten.
+
+    Also sweeps any orphan `<file>.<rand>.tmp` in the config dir left by a
+    crash mid-atomic-write (round-5 R5-RISK-2).
+
+    Returns count of files removed. Silent on individual failures.
+    """
+    removed = 0
+    try:
+        if not CONFIG_DIR.exists():
+            return 0
+        cutoff = time.time() - (max_age_days * 86400)
+        for entry in CONFIG_DIR.iterdir():
+            try:
+                name = entry.name
+                is_quarantine = ".corrupt-" in name and name.endswith(".json")
+                # tmp orphan: NamedTemporaryFile uses .<rand>.tmp suffix
+                is_tmp_orphan = entry.suffix == ".tmp" and entry.is_file()
+                if not (is_quarantine or is_tmp_orphan):
+                    continue
+                # tmp orphans go right away regardless of age — they're
+                # never useful past their write attempt.
+                if is_tmp_orphan or entry.stat().st_mtime < cutoff:
+                    entry.unlink(missing_ok=True)
+                    removed += 1
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return removed
 
 
 def save_config(api_key: str, model: str = DEFAULT_MODEL, ui_scale: float = 1.0) -> tuple[bool, str]:

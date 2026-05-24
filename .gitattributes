@@ -1,0 +1,40 @@
+# Round-6 BUG-L8 (Cos review 2026-05-24)
+# Normalize line endings — prevent CRLF/LF churn if a contributor on
+# Linux/macOS ever touches the repo. Auto-detect text, force native EOL
+# on checkout; keep canonical LF in the repo itself.
+
+* text=auto eol=lf
+
+# Python source — never CRLF in git
+*.py    text eol=lf
+*.pyw   text eol=lf
+
+# Config / docs
+*.json  text eol=lf
+*.toml  text eol=lf
+*.cfg   text eol=lf
+*.md    text eol=lf
+*.txt   text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+.gitignore        text eol=lf
+.gitattributes    text eol=lf
+
+# Windows-only artifacts — CRLF makes them double-click-friendly
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+*.ps1   text eol=crlf
+
+# Binary — never touch
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.exe   binary
+*.dll   binary
+*.zip   binary
+*.7z    binary
+*.docx  binary
+*.xlsx  binary
+*.pdf   binary

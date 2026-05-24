@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import re
 import threading
+import time
 from pathlib import Path
 
 from google.genai import types
@@ -14,6 +15,53 @@ from google.genai import types
 from .auth import create_client, get_model
 from .image_io import get_mime_type
 from .rate_limiter import QuotaExceededError, _CancelledError, get_rate_limiter
+
+
+# Round-6 AI-04 (Cos review 2026-05-24): retry transient Gemini errors
+# (503 backend overload, connection reset). Quota / 4xx / cancellation
+# are NOT retried — they're either user action or hard caps.
+_RETRY_DELAYS_S = (1.0, 2.0, 4.0)
+
+
+def _is_transient_error(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return any(
+        token in msg
+        for token in (
+            "503", "504", "500", "502",
+            "unavailable", "deadline", "timeout",
+            "connection reset", "connection aborted",
+            "remote disconnected",
+        )
+    )
+
+
+def _generate_with_retry(client, *, cancel_event=None, **kwargs):
+    """generate_content with backoff on transient 5xx / network errors."""
+    last_exc: Exception | None = None
+    for attempt, delay in enumerate((0.0,) + _RETRY_DELAYS_S):
+        if cancel_event is not None and cancel_event.is_set():
+            raise _CancelledError()
+        if delay > 0:
+            # Cancel-aware sleep so user cancel doesn't wait the full backoff
+            slept = 0.0
+            while slept < delay:
+                if cancel_event is not None and cancel_event.is_set():
+                    raise _CancelledError()
+                time.sleep(min(0.2, delay - slept))
+                slept += 0.2
+        try:
+            return client.models.generate_content(**kwargs)
+        except (QuotaExceededError, _CancelledError):
+            raise
+        except Exception as e:
+            last_exc = e
+            if not _is_transient_error(e) or attempt == len(_RETRY_DELAYS_S):
+                raise
+    # unreachable in practice
+    if last_exc:
+        raise last_exc
+    raise RuntimeError("generate_content exhausted retries with no exception")
 
 
 def _cancelled_result(n: int = 0) -> dict:
@@ -122,7 +170,9 @@ def analyze_image(
         with limiter.call("analyze", cancel_event=cancel_event) as ctx:
             image_bytes = Path(image_path).read_bytes()
             mime = get_mime_type(Path(image_path))
-            response = client.models.generate_content(
+            response = _generate_with_retry(
+                client,
+                cancel_event=cancel_event,
                 model=model_name,
                 contents=[
                     types.Part.from_bytes(data=image_bytes, mime_type=mime),
@@ -214,7 +264,9 @@ def analyze_group(
                 + f"\n\n(The {len(samples)} image(s) above are samples from {n} photos of the same job — review together.)"
             )
 
-            response = client.models.generate_content(
+            response = _generate_with_retry(
+                client,
+                cancel_event=cancel_event,
                 model=model_name,
                 contents=parts,
                 config=types.GenerateContentConfig(
