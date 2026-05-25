@@ -8,6 +8,82 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Latest on top.
 Cosmetic / design / V2-scope items that survived round 6. All catalogued
 in detail at the bottom of this file under "Round 6 deferred".
 
+## [1.038] — 2026-05-25 — Settings dialog Save button clipping (CRITICAL hotfix)
+
+**Symptom** Nick reported: "โปรแกรมไม่มีที่เซฟ key" ("the program has no
+place to save the key, very serious error"). On a fresh install (after
+uninstall + 'Y remove config'), the Settings dialog auto-opened, the
+API-key entry was visible at the top, but the **Save button at the
+bottom was off-screen / clipped**. Result: the user could paste a key
+but had no way to persist it; `~/.happy-photo-organizer/auth.json`
+stayed at the 89-byte window-state-only state forever.
+
+**Root cause** `SettingsDialog.__init__` set `geometry("560x460")`
+but the packed content totalled ~518 px at UI scale 1.0:
+
+| Widget | Height (incl. padding) |
+|---|---|
+| "Gemini API Key" header + link + entry + show-key | ~136 px |
+| "Model" header + dropdown + Refresh button | ~132 px |
+| "UI Scale" label row + slider | ~66 px |
+| "Updates" label + auto-update checkbox | ~66 px |
+| status label | ~42 px |
+| **Test / Cancel / Save row (packed `side="bottom"` LAST)** | **76 px** |
+| **Total** | **~518 px** |
+
+Tk's `pack` processes calls in order. `side="bottom"` claims from the
+bottom of whatever cavity REMAINS at pack-time. By the time the button
+row was packed, all "top" widgets above had already consumed the cavity
+down to ~18 px — way less than the 76 px the row needed. The row got
+clipped to the visible window edge, hiding the Save button entirely.
+
+At UI scale > 1.0 (Nick supports 0.7×–1.3×) the math gets worse and
+even the auto-update checkbox can disappear.
+
+**Fix** Three coordinated changes to `ui/dialogs/settings.py`:
+
+1. **Geometry enlarged** from `"560x460"` to `"600x680"` (fits content
+   up to UI scale ~1.3×). `minsize(540, 560)` so user can't drag too
+   small. `resizable(True, True)` so they can grow it for accessibility.
+2. **Pack the button row FIRST with `side="bottom"`**, then the status
+   label with `side="bottom"`. They now claim the bottom strips of the
+   *full* window cavity before any top-side widget consumes it. The
+   Save button is guaranteed visible regardless of content above.
+3. **Wrapped middle content in `CTkScrollableFrame`** so any future
+   additions (locale picker, new toggle, etc.) can't re-introduce the
+   same clipping. If the body overflows, the user scrolls — the buttons
+   stay pinned at the bottom.
+
+**Why this wasn't caught earlier** Nick has been using HPO since v1.024
+and set up his API key during the original installer flow. The Settings
+dialog was only opened to change the model or the UI scale — actions
+where the top widgets are enough. Round 6 (Cos external review) caught
+many UI bugs but the reviewer didn't try a fresh-install / Settings
+auto-open flow on a wiped config. Nick's uninstall-with-config-wipe +
+reinstall on 2026-05-25 was the first time the auto-open path was
+re-exercised on his machine, and the clipping became immediately
+visible.
+
+**Lesson** Tk `pack` cavity math is order-dependent. When a fixed-size
+window must show a bottom action row, ALWAYS pack the bottom row first.
+For dialogs with variable-length middle content, prefer wrapping the
+middle in `CTkScrollableFrame` so layout degradation becomes "scroll
+needed" instead of "button gone." (See
+`Documents\Claude Memory\memory-coddy\feedback_tk_pack_cavity_clipping.md`.)
+
+### Fixed
+- **Settings dialog Save button** now always visible. Pack order
+  reordered so bottom buttons claim cavity first.
+- **Settings dialog overflow** handled by scrollable middle — UI scale
+  1.3× no longer hides the Updates section.
+- **Settings dialog resizable** so users with high-DPI / large fonts
+  can drag bigger.
+
+### Internal
+- No behavior changes outside the Settings dialog. AI Health already
+  uses `CTkScrollableFrame` (immune). Main window and installer were
+  audited — neither has the same overflow risk.
+
 ## [1.037] — 2026-05-24 — Dark title bar + dialog icon
 
 Hotfix on top of v1.036 — Nick screenshot caught two visual bugs the

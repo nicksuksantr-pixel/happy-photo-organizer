@@ -29,7 +29,19 @@ class SettingsDialog(ctk.CTkToplevel):
         # light-mode background even when set_appearance_mode("dark") is active.
         super().__init__(master, fg_color=COLOR_BG)
         self.title(f"Settings — {APP_TITLE}")
-        self.geometry("560x460")
+        # v1.038: dialog was "560x460" but content (header + key + model +
+        # refresh + scale + updates + status + button row) totals ~518 px at
+        # UI scale 1.0 — pack `side="bottom"` ran out of cavity and CLIPPED
+        # the Test/Cancel/Save row. Nick reported "no place to save key" on
+        # a fresh install: dialog auto-opened, key entry was visible at top
+        # but the Save button was off-screen, so the key never persisted.
+        # Fix: enlarge to 600x680 (fits up to UI scale ~1.3x), make resizable,
+        # and pack the button row FIRST with side="bottom" so it always
+        # claims the bottom strip of the full cavity regardless of how much
+        # content above grows.
+        self.geometry("600x680")
+        self.minsize(540, 560)
+        self.resizable(True, True)
         self.transient(master)
         self.grab_set()
         self.on_save = on_save
@@ -46,9 +58,35 @@ class SettingsDialog(ctk.CTkToplevel):
 
         cfg = auth.load_config()
 
-        ctk.CTkLabel(self, text="Gemini API Key", anchor="w",
-                     font=("Segoe UI", 13, "bold")).pack(fill="x", padx=20, pady=(20, 4))
-        link_row = ctk.CTkFrame(self, fg_color="transparent")
+        # ─── v1.038: bottom button row packed FIRST + status above it ───
+        # Tk pack processes calls in order. side="bottom" claims from the
+        # bottom of whatever cavity remains at pack-time. By packing the
+        # button row + status first, they get a guaranteed slice; the
+        # scrollable middle takes whatever's left. Previously these were
+        # packed last and got squeezed/clipped when content above exceeded
+        # the dialog height.
+        row = ctk.CTkFrame(self, fg_color="transparent")
+        row.pack(fill="x", padx=20, pady=(8, 16), side="bottom")
+        ctk.CTkButton(row, text="Test", width=100, height=36,
+                      fg_color=COLOR_BG_INPUT, hover_color="#475569",
+                      command=self._test).pack(side="left")
+        ctk.CTkButton(row, text="Cancel", width=100, height=36,
+                      fg_color=COLOR_BG_INPUT, hover_color="#475569",
+                      command=self.destroy).pack(side="right", padx=(8, 0))
+        ctk.CTkButton(row, text="Save", width=120, height=36,
+                      fg_color=COLOR_PRIMARY, hover_color=COLOR_ACCENT,
+                      command=self._save).pack(side="right")
+
+        self.status = ctk.CTkLabel(self, text="", text_color=COLOR_MUTED, anchor="w")
+        self.status.pack(fill="x", padx=20, pady=(0, 4), side="bottom")
+
+        # ─── Scrollable middle so any future addition can't break layout ───
+        body = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        body.pack(fill="both", expand=True, padx=0, pady=(8, 0))
+
+        ctk.CTkLabel(body, text="Gemini API Key", anchor="w",
+                     font=("Segoe UI", 13, "bold")).pack(fill="x", padx=20, pady=(12, 4))
+        link_row = ctk.CTkFrame(body, fg_color="transparent")
         link_row.pack(fill="x", padx=20)
         ctk.CTkLabel(
             link_row, text="Get one at  ", anchor="w",
@@ -65,15 +103,15 @@ class SettingsDialog(ctk.CTkToplevel):
             "<Button-1>",
             lambda _e: webbrowser.open("https://aistudio.google.com/apikey"),
         )
-        self.key_entry = ctk.CTkEntry(self, show="*", placeholder_text="AIzaSy...")
+        self.key_entry = ctk.CTkEntry(body, show="*", placeholder_text="AIzaSy...")
         self.key_entry.pack(fill="x", padx=20, pady=8)
         self.key_entry.insert(0, cfg.get("api_key", ""))
         enable_paste(self.key_entry)
 
-        self.show_key = ctk.CTkCheckBox(self, text="Show key", command=self._toggle_show)
+        self.show_key = ctk.CTkCheckBox(body, text="Show key", command=self._toggle_show)
         self.show_key.pack(anchor="w", padx=20)
 
-        ctk.CTkLabel(self, text="Model", anchor="w",
+        ctk.CTkLabel(body, text="Model", anchor="w",
                      font=("Segoe UI", 13, "bold")).pack(fill="x", padx=20, pady=(20, 4))
 
         default_values = [
@@ -88,19 +126,19 @@ class SettingsDialog(ctk.CTkToplevel):
 
         self.model_var = ctk.StringVar(value=current)
         self.model_menu = ctk.CTkOptionMenu(
-            self, values=default_values, variable=self.model_var,
+            body, values=default_values, variable=self.model_var,
             fg_color=COLOR_PRIMARY, button_color=COLOR_ACCENT,
         )
         self.model_menu.pack(fill="x", padx=20, pady=8)
 
         ctk.CTkButton(
-            self, text="Refresh models from API", height=32,
+            body, text="Refresh models from API", height=32,
             fg_color=COLOR_BG_INPUT, hover_color="#475569",
             command=self._refresh_models,
         ).pack(fill="x", padx=20, pady=(0, 8))
 
         # UI Scale slider
-        scale_label_row = ctk.CTkFrame(self, fg_color="transparent")
+        scale_label_row = ctk.CTkFrame(body, fg_color="transparent")
         scale_label_row.pack(fill="x", padx=20, pady=(16, 4))
         ctk.CTkLabel(scale_label_row, text="UI Scale",
                      font=("Segoe UI", 13, "bold")).pack(side="left")
@@ -111,7 +149,7 @@ class SettingsDialog(ctk.CTkToplevel):
 
         self.scale_var = ctk.DoubleVar(value=float(cfg.get("ui_scale", 1.0)))
         self.scale_slider = ctk.CTkSlider(
-            self, from_=0.7, to=1.3, number_of_steps=12,
+            body, from_=0.7, to=1.3, number_of_steps=12,
             variable=self.scale_var, command=self._on_scale_change,
             progress_color=COLOR_PRIMARY, button_color=COLOR_ACCENT,
         )
@@ -122,29 +160,14 @@ class SettingsDialog(ctk.CTkToplevel):
             self.after(200, self._refresh_models_silent)
 
         # Updates section
-        ctk.CTkLabel(self, text="Updates", anchor="w",
+        ctk.CTkLabel(body, text="Updates", anchor="w",
                      font=("Segoe UI", 13, "bold")).pack(fill="x", padx=20, pady=(16, 4))
         self.auto_update_var = ctk.BooleanVar(value=bool(cfg.get("auto_check_updates", True)))
         self.auto_update_cb = ctk.CTkCheckBox(
-            self, text="Check for updates on startup",
+            body, text="Check for updates on startup",
             variable=self.auto_update_var,
         )
-        self.auto_update_cb.pack(anchor="w", padx=20)
-
-        self.status = ctk.CTkLabel(self, text="", text_color=COLOR_MUTED, anchor="w")
-        self.status.pack(fill="x", padx=20, pady=10)
-
-        row = ctk.CTkFrame(self, fg_color="transparent")
-        row.pack(fill="x", padx=20, pady=20, side="bottom")
-        ctk.CTkButton(row, text="Test", width=100, height=36,
-                      fg_color=COLOR_BG_INPUT, hover_color="#475569",
-                      command=self._test).pack(side="left")
-        ctk.CTkButton(row, text="Cancel", width=100, height=36,
-                      fg_color=COLOR_BG_INPUT, hover_color="#475569",
-                      command=self.destroy).pack(side="right", padx=(8, 0))
-        ctk.CTkButton(row, text="Save", width=120, height=36,
-                      fg_color=COLOR_PRIMARY, hover_color=COLOR_ACCENT,
-                      command=self._save).pack(side="right")
+        self.auto_update_cb.pack(anchor="w", padx=20, pady=(0, 12))
 
     def _toggle_show(self):
         self.key_entry.configure(show="" if self.show_key.get() else "*")
