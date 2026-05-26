@@ -5,9 +5,50 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Latest on top.
 
 ## [Unreleased] — deferred items (will roll into V2 docx form filler)
 
-Cosmetic / design / V2-scope items that survived round 6 + 7. All
+Cosmetic / design / V2-scope items that survived round 6 + 7 + 8. All
 catalogued in detail at the bottom of this file under "Round 6
 deferred".
+
+## [1.040] — 2026-05-25 — Settings dialog UX polish (Round 8)
+
+After v1.039 closed all 11 Round-7 N-bugs, Cos returned a second
+follow-up report (`Happy-Photo-Organizer-v1.038-Review.md`) verifying
+the v1.038 hotfix correctness (65/65 PASS, 0 regressions, score
+8.6 A- → 8.8 A-) and flagging **4 new UX paper-cuts** plus **1
+deferred risk** that surfaced once the Settings dialog stopped
+clipping the Save button. All five are 1-3 line surgical fixes in
+`ui/dialogs/settings.py`.
+
+### Fixed (Round 8 UX paper-cuts)
+- **NEW-1**: `key_entry.focus_set()` deferred via `after(0, ...)` so
+  the cursor lands in the API-key entry the moment the dialog opens.
+  Paste-without-click works on first launch. Together with NEW-4
+  this also fixes the Tab cycle to start at the entry rather than
+  the Save button (which had become Tab-stop #1 after v1.038
+  packed the button row first).
+- **NEW-2**: `<Escape>` bound at dialog root → `destroy()`. Standard
+  modal dismiss behaviour was missing.
+- **NEW-3**: `<Return>` bound on `key_entry` (not the whole dialog)
+  → `_save()`. Enter from the key field commits without reaching
+  for the mouse. Bound on the entry specifically so Enter in the
+  model dropdown or future inputs doesn't hijack.
+- **NEW-4**: Tab order — implicit fix via NEW-1's `focus_set()`.
+  Focus now starts at `key_entry`, so Tab cycle is
+  entry → show-key → model → ... → Save.
+
+### Fixed (deferred risk from Cos v1.038 review)
+- **Risk-B**: `_refresh_models_silent` was scheduled via
+  `self.after(200, ...)` without tracking the id — if the dialog
+  was dismissed within 200 ms the deferred call hit a dead widget
+  and printed "invalid command". Now stashed as
+  `self._refresh_models_after_id` and cancelled in `destroy()`
+  alongside the win_chrome after-callbacks (same class as
+  Round-7 BUG-N6 / N11).
+
+### Internal
+- No behaviour changes outside the Settings dialog.
+- AI Health and Main window untouched.
+- Brings Cos's score estimate from 8.8 A- to ~9.0 A.
 
 ## [1.039] — 2026-05-25 — Round-7 11-patch sprint (Cos retest findings)
 

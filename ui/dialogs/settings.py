@@ -45,6 +45,15 @@ class SettingsDialog(ctk.CTkToplevel):
         self.transient(master)
         self.grab_set()
         self.on_save = on_save
+        # Round-8 NEW-2 (Cos v1.038 retest 2026-05-25): Escape closes
+        # dialog — standard modal behaviour. Bound on root so it fires
+        # regardless of which child widget has focus.
+        self.bind("<Escape>", lambda _e: self.destroy())
+        # Round-8 Risk-B: `_refresh_models_silent` is scheduled via
+        # self.after(200, ...) below. Track the id so destroy() can
+        # cancel it — otherwise the deferred call runs against a torn-
+        # down widget and prints "invalid command". Same class as N6/N11.
+        self._refresh_models_after_id: str | None = None
         # v1.037: dark title bar + app icon (Nick screenshot — white bar +
         # missing icon on v1.036 dialogs). win_chrome no-ops on non-Windows
         # and silently degrades if DWM / iconbitmap fails.
@@ -107,6 +116,11 @@ class SettingsDialog(ctk.CTkToplevel):
         self.key_entry.pack(fill="x", padx=20, pady=8)
         self.key_entry.insert(0, cfg.get("api_key", ""))
         enable_paste(self.key_entry)
+        # Round-8 NEW-3 (Cos v1.038 retest 2026-05-25): pressing Enter
+        # in the key entry triggers Save — standard modal behaviour.
+        # Bound here (not on the dialog) so Enter in other inputs
+        # (model dropdown filter, etc.) doesn't hijack.
+        self.key_entry.bind("<Return>", lambda _e: self._save())
 
         self.show_key = ctk.CTkCheckBox(body, text="Show key", command=self._toggle_show)
         self.show_key.pack(anchor="w", padx=20)
@@ -157,7 +171,11 @@ class SettingsDialog(ctk.CTkToplevel):
         self.scale_value_label.configure(text=f"{self.scale_var.get():.2f}x")
 
         if cfg.get("api_key"):
-            self.after(200, self._refresh_models_silent)
+            # Round-8 Risk-B: track the after-id so destroy() can cancel
+            # before the +200 ms fires against a dead widget.
+            self._refresh_models_after_id = self.after(
+                200, self._refresh_models_silent,
+            )
 
         # Updates section
         ctk.CTkLabel(body, text="Updates", anchor="w",
@@ -169,17 +187,44 @@ class SettingsDialog(ctk.CTkToplevel):
         )
         self.auto_update_cb.pack(anchor="w", padx=20, pady=(0, 12))
 
+        # Round-8 NEW-1 + NEW-4 (Cos v1.038 retest 2026-05-25):
+        # because the button row is packed first (side="bottom"), Tab
+        # focus naturally starts there — user sees the Save button as
+        # the first focused widget instead of the API-key entry. Pull
+        # focus to key_entry after the build is complete so:
+        #   • Paste works without an explicit click (NEW-1)
+        #   • Tab cycle starts at key_entry → show-key → model → ...
+        #     → Save (NEW-4 implicit fix)
+        # Deferred one tick so CTkEntry's inner Tk widget is fully
+        # realised first.
+        try:
+            self.after(0, lambda: self.key_entry.focus_set())
+        except Exception:
+            pass
+
     def destroy(self):
         """Round-7 BUG-N6/N11 (Cos retest 2026-05-24): cancel the
         win_chrome after-callbacks before Tk tears the window down,
         otherwise the deferred +50/+200 ms tasks fire against a dead
         widget and log "invalid command" warnings.
+
+        Round-8 Risk-B (Cos v1.038 retest 2026-05-25): also cancel the
+        deferred `_refresh_models_silent` call. Same race class as
+        N6/N11 — fires +200 ms after open, fails silently if dialog
+        was dismissed in between (Escape, Cancel, X).
         """
         try:
             from ui.win_chrome import cancel_chrome_callbacks
             cancel_chrome_callbacks(self)
         except Exception:
             pass
+        aid = getattr(self, "_refresh_models_after_id", None)
+        if aid is not None:
+            try:
+                self.after_cancel(aid)
+            except Exception:
+                pass
+            self._refresh_models_after_id = None
         super().destroy()
 
     def _toggle_show(self):

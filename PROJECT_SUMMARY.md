@@ -1,9 +1,9 @@
 # 🎨 Happy Photo Organizer — Project Summary
 
-**Status:** v1.038 (2026-05-25 — Settings dialog Save-button clipping hotfix)
+**Status:** v1.039 (2026-05-25 — Round-7 11-patch sprint: all Cos retest findings closed)
 **Author:** Nick (with Codey — Claude Code)
 **Family:** Happy AI Family (siblings: HAPPY AI Agent)
-**Last full review:** Cos external audit 2026-05-24 → v1.036 Round-6 (20 patches) → v1.037 hotfix → Cos re-test (67/67 PASS) → 11 new low-risk findings → v1.038 critical hotfix (Settings cavity clipping found via Nick's fresh-install repro 2026-05-25)
+**Last full review:** Cos external audit 2026-05-24 → v1.036 Round-6 (20 patches) → v1.037 hotfix → Cos re-test (67/67 PASS + 11 new findings) → v1.038 Settings cavity-clipping hotfix → **v1.039 Round-7 sprint** (11/11 closed: N1 dead code, N2 transient-error regex, N3 fallback JPEG verify, N4 async window-state save, N5 encapsulated year clamp, N6+N11 win_chrome after-id tracking, N7 _is_text_focus helper, N8 async Settings save, N9 thread-safe in_progress, N10 mtime-guarded tmp sweep)
 
 ---
 
