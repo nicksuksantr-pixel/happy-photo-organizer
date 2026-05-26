@@ -22,18 +22,24 @@ from .rate_limiter import QuotaExceededError, _CancelledError, get_rate_limiter
 # are NOT retried — they're either user action or hard caps.
 _RETRY_DELAYS_S = (1.0, 2.0, 4.0)
 
+# Round-7 BUG-N2 (Cos retest 2026-05-24): the previous substring match
+# `"500" in msg` false-positives on any error string that happens to
+# contain the digits — e.g. "count: 500 items" → retry 3 times for no
+# reason and burn 1-7 s on a non-recoverable error. Use a word-boundary
+# regex so only standalone HTTP codes match.
+_TRANSIENT_HTTP_RE = re.compile(r"\b(500|502|503|504)\b")
+_TRANSIENT_TOKENS = (
+    "unavailable", "deadline", "timeout",
+    "connection reset", "connection aborted",
+    "remote disconnected",
+)
+
 
 def _is_transient_error(exc: Exception) -> bool:
     msg = str(exc).lower()
-    return any(
-        token in msg
-        for token in (
-            "503", "504", "500", "502",
-            "unavailable", "deadline", "timeout",
-            "connection reset", "connection aborted",
-            "remote disconnected",
-        )
-    )
+    if _TRANSIENT_HTTP_RE.search(msg):
+        return True
+    return any(t in msg for t in _TRANSIENT_TOKENS)
 
 
 def _generate_with_retry(client, *, cancel_event=None, **kwargs):

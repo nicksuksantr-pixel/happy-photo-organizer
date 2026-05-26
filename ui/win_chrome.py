@@ -118,8 +118,13 @@ def apply_icon_to_window(window, icon_path: Path) -> None:
             pass
 
     _attempt()
+    # Round-7 BUG-N11 (Cos retest 2026-05-24): stash the after-id so a
+    # window that's destroyed before +200 ms can cancel cleanly. The
+    # bare `after(200, ...)` from v1.037 left an "invalid command"
+    # warning on quick-close. Caller can `after_cancel(_icon_after_id)`
+    # in its own destroy() — see cancel_chrome_callbacks below.
     try:
-        window.after(200, _attempt)
+        window._icon_after_id = window.after(200, _attempt)  # type: ignore[attr-defined]
     except Exception:
         pass
 
@@ -129,9 +134,32 @@ def apply_chrome(window, icon_path: Path) -> None:
     `__init__` AFTER `super().__init__` + `self.title(...)` are done.
     """
     apply_icon_to_window(window, icon_path)
-    # Title-bar attr needs a real HWND. Defer slightly so geometry +
-    # iconbitmap have settled.
+    # Round-7 BUG-N6 (Cos retest 2026-05-24): same pattern as N11 —
+    # stash the after-id for the dark-title-bar deferred call so a
+    # short-lived window can cancel it on destroy.
     try:
-        window.after(50, lambda: apply_dark_title_bar(window))
+        window._chrome_after_id = window.after(  # type: ignore[attr-defined]
+            50, lambda: apply_dark_title_bar(window),
+        )
     except Exception:
         apply_dark_title_bar(window)
+
+
+def cancel_chrome_callbacks(window) -> None:
+    """Cancel any pending `apply_chrome` / `apply_icon_to_window`
+    after-callbacks on `window`. Safe to call multiple times. Idempotent
+    and silent on missing attrs. Call from your window's `destroy()`
+    *before* `super().destroy()` to avoid "invalid command" Tk warnings.
+    """
+    for attr in ("_chrome_after_id", "_icon_after_id"):
+        aid = getattr(window, attr, None)
+        if aid is None:
+            continue
+        try:
+            window.after_cancel(aid)
+        except Exception:
+            pass
+        try:
+            setattr(window, attr, None)
+        except Exception:
+            pass

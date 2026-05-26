@@ -112,6 +112,18 @@ def resize_to_target(
 
             # ถ้ายังไม่ได้ผ่าน 4 รอบ — save ที่ quality ต่ำสุดไปก่อน
             data = _save_jpeg_bytes(_scale_image(img, current_max_dim), QUALITY_STEPS[-1])
+            # Round-7 BUG-N3 (Cos retest 2026-05-24): the fallback path
+            # used to skip _verify_jpeg_readable, so a corrupt codec
+            # output could silently land on disk and only be caught when
+            # the user (or Phase 2) tries to open the file. Verify here
+            # too — if even the lowest-quality bytes fail to decode,
+            # return failure so the caller logs the bad source instead
+            # of committing junk.
+            if not _verify_jpeg_readable(data):
+                return False, {
+                    "error": "JPEG verification failed in fallback path",
+                    "original_size_kb": original_size / 1024,
+                }
             dst_path.parent.mkdir(parents=True, exist_ok=True)
             dst_path.write_bytes(data)
             return True, {

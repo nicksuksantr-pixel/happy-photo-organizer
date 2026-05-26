@@ -153,6 +153,12 @@ def scan_used_days(dest_root: Path) -> set[int]:
 def detect_target_month(dest_root: Path) -> tuple[int, int] | None:
     """หา (year, month) ที่ปรากฏมากที่สุดจากชื่อ folders ใน dest_root.
     คืน None ถ้า dest_root ว่าง / ไม่มี folder ตรง pattern.
+
+    Round-7 BUG-N5 (Cos retest 2026-05-24): the ±5 year clamp used to
+    live in `phase1_resize_and_group`'s caller, so any *other* call
+    site (future feature, test, V2 docx flow) would silently inherit
+    an implausible year like 2050. Encapsulate the clamp here so every
+    consumer is protected.
     """
     if not dest_root.exists() or not dest_root.is_dir():
         return None
@@ -187,7 +193,15 @@ def detect_target_month(dest_root: Path) -> tuple[int, int] | None:
     if not counts:
         return None
     # most common (mode) — tie-break by latest (year, month)
-    return max(counts.items(), key=lambda x: (x[1], x[0]))[0]
+    y, mm = max(counts.items(), key=lambda x: (x[1], x[0]))[0]
+    # Clamp implausible years (>5 from today) to current year. Closes
+    # round-6 BUG-M3's intent — the original site-level clamp still
+    # works, but now NEW callers of detect_target_month get the same
+    # safety for free.
+    now = datetime.now()
+    if abs(y - now.year) > 5:
+        y = now.year
+    return (y, mm)
 
 
 def _find_free_day_earliest(

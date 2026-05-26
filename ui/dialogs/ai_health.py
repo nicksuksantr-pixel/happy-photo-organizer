@@ -59,6 +59,17 @@ class AIHealthDialog(ctk.CTkToplevel):
         self._build_ui()
         self.refresh()
 
+    def destroy(self):
+        """Round-7 BUG-N6/N11 (Cos retest 2026-05-24): cancel the
+        win_chrome after-callbacks before Tk tears the window down.
+        """
+        try:
+            from ui.win_chrome import cancel_chrome_callbacks
+            cancel_chrome_callbacks(self)
+        except Exception:
+            pass
+        super().destroy()
+
     def _build_ui(self):
         container = ctk.CTkScrollableFrame(self, fg_color=COLOR_BG)
         container.pack(fill="both", expand=True, padx=12, pady=12)

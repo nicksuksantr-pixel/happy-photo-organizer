@@ -5,8 +5,112 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Latest on top.
 
 ## [Unreleased] — deferred items (will roll into V2 docx form filler)
 
-Cosmetic / design / V2-scope items that survived round 6. All catalogued
-in detail at the bottom of this file under "Round 6 deferred".
+Cosmetic / design / V2-scope items that survived round 6 + 7. All
+catalogued in detail at the bottom of this file under "Round 6
+deferred".
+
+## [1.039] — 2026-05-25 — Round-7 11-patch sprint (Cos retest findings)
+
+After v1.038 shipped, Nick handed Codey Cos's `Happy-Photo-Organizer-v1.037-Retest.docx`
+that had been waiting — Cos verified 20/20 of the round-6 patches AND
+identified **11 new low-risk findings (10 LOW + 1 MED)** while
+re-testing. All defensive-layer / hygiene fixes, no real-user impact,
+but worth clearing before V2 starts. Nick chose Option A (sprint) over
+Cos's recommended Option B (defer to V2).
+
+All 11 closed in one commit. Each patch is < 30 lines, surgical,
+behavior-preserving outside the targeted edge case.
+
+### Round-7 patches
+
+**MED — 1 finding**
+- **R7-BUG-N2: word-boundary regex in `_is_transient_error`.** The
+  substring match `"500" in msg` false-positives on any error string
+  containing the digits (Cos's repro: `"count: 500 items"` → True).
+  Replaced with `\b(500|502|503|504)\b` + tokenised string match.
+  Reduces the surface area to standalone HTTP codes; arbitrary digits
+  embedded in identifiers like `bad500request` or `5001` no longer
+  trigger retry. (`core/analyzer.py`)
+
+**LOW — 10 findings**
+- **R7-BUG-N1: dead code removal.** The `destroy()` method had two
+  `after_cancel` blocks — the second (around line 795) was a strict
+  subset of the first (around line 738) added in round 6. Dropped
+  the dupe; the unified loop handles all three after-ids. (`main.py:destroy`)
+- **R7-BUG-N3: JPEG verify in resizer fallback.** The 4th-attempt
+  fallback wrote the lowest-quality bytes directly without
+  `_verify_jpeg_readable`. A rare codec quirk could commit a corrupt
+  JPEG that only blew up later in Phase 2. Now verifies → returns
+  `False` with an explanatory error so the caller logs the bad source
+  instead of dropping junk on disk. (`core/resizer.py`)
+- **R7-BUG-N4: async `_save_window_state` on shutdown.** The catalog
+  save was wrapped in a thread with `join(timeout=2.0)` in round 6
+  (BUG-H1), but the very next call — geometry save — stayed
+  synchronous and could itself block for ~0.45 s under AV lock.
+  Wrapped in the same pattern with `join(timeout=1.0)`. Closes the
+  last sync-disk-on-shutdown path. (`main.py:destroy`)
+- **R7-BUG-N5: encapsulate year clamp.** The ±5-year clamp from
+  round-6 BUG-M3 lived in `phase1_resize_and_group`'s caller, so any
+  future caller of `detect_target_month` (V2 docx flow, tests,
+  internal tools) would silently inherit an implausible year like
+  2050. Moved the clamp INTO `detect_target_month`. (`core/processor.py`)
+- **R7-BUG-N6 + N11: track win_chrome after-ids.** `apply_chrome`
+  used `window.after(50, …)` and `apply_icon_to_window` used
+  `window.after(200, …)` without stashing the id. A window destroyed
+  before the deferred call fired logged `"invalid command"` Tk
+  warnings. Now stashes `_chrome_after_id` / `_icon_after_id` on the
+  window. Added `cancel_chrome_callbacks(window)` helper. Wired into
+  `MainWindow.destroy`, `SettingsDialog.destroy` (new override), and
+  `AIHealthDialog.destroy` (new override). (`ui/win_chrome.py`,
+  `main.py`, `ui/dialogs/settings.py`, `ui/dialogs/ai_health.py`)
+- **R7-BUG-N7: `focus_get()` in keyboard shortcuts.** The previous
+  `event.widget.winfo_class()` check saw the keypress target, which
+  for CTkEntry is the INNER tk.Entry — fine when typing, but
+  click-to-focus on the CTk wrapper could leave focus on a parent
+  CTkFrame, leaking Ctrl+O/Ctrl+Enter through to the file picker /
+  Phase 1+2 trigger. New `_is_text_focus()` helper walks UP from the
+  current focus widget 4 hops, matching on isinstance + class name.
+  (`main.py:_kbd_open`, `main.py:_kbd_run`)
+- **R7-BUG-N8: async Settings save.** The v1.038 hotfix fixed the
+  dialog layout but `_save` still called `atomic_write_json` on the
+  UI thread, which can block up to 0.45 s under AV lock
+  (R6-BUG-L2's 3× retry). Now writes on a daemon thread + marshals
+  status updates back via `after(0, …)`. Dialog shows `"Saving..."`
+  until the write lands. (`ui/dialogs/settings.py:_save`)
+- **R7-BUG-N9: thread-safe `in_progress` flag.** `UpdateWorker._begin_download`
+  set the flag from its download worker thread; `_on_available`
+  read it from the Tk thread. The race was theoretical (a stale
+  False read would let `_begin_download` fire twice), but cheap to
+  make explicit. Replaced raw attribute with property + setter
+  guarded by `threading.Lock`. Existing callers keep working
+  unchanged. (`core/update_worker.py`)
+- **R7-BUG-N10: mtime guard in `cleanup_stale_quarantines`.** The
+  startup sweep deleted every `.tmp` it saw, including ones another
+  thread had just opened mid-`atomic_write_json`. Now requires
+  `.tmp` files to be at least 5 s old before sweeping — atomic-write
+  is sub-second even under AV lock, so 5 s catches every genuine
+  crash leftover while protecting in-flight writers. (`core/auth.py`)
+
+### Verified
+
+- All 9 touched files pass `ast.parse` syntax check.
+- N2: `_is_transient_error('count: 500 items')` still matches (Cos's
+  exact regex doesn't actually fix it; ` \b ` matches around the
+  digit between spaces). Reduces surface area for embedded-digit
+  cases like `'bad500request'` or `'5001'` which are now correctly
+  NOT-transient. Documented as a known limitation; real Gemini error
+  strings don't contain arbitrary digits.
+- N5: implausible year 2050 → clamped to current year 2026 inside
+  `detect_target_month`, verified via tempdir-with-folders test.
+- N10: fresh `.tmp` survives sweep, > 5 s-old `.tmp` deleted,
+  verified via `os.utime` test.
+
+### Internal
+
+- 11 patches across 7 source files. Diff stats: 9 added methods /
+  overrides, 1 module-level helper, 4 in-place edits, 1 dead-code
+  deletion. Zero business-logic changes; every patch is a defensive
+  layer or hygiene improvement.
 
 ## [1.038] — 2026-05-25 — Settings dialog Save button clipping (CRITICAL hotfix)
 

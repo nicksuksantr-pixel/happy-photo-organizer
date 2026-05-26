@@ -99,6 +99,15 @@ def cleanup_stale_quarantines(max_age_days: int = 30) -> int:
         if not CONFIG_DIR.exists():
             return 0
         cutoff = time.time() - (max_age_days * 86400)
+        now_ts = time.time()
+        # Round-7 BUG-N10 (Cos retest 2026-05-24): a previously aggressive
+        # sweep deleted every .tmp it saw, including ones that another
+        # thread had just opened mid-atomic_write_json. Require the tmp
+        # to be at least 5 seconds old before considering it orphaned —
+        # the atomic-write window is sub-millisecond on local disk and
+        # sub-second even under AV lock, so 5 s is a wide safety margin
+        # that still catches genuine crash leftovers.
+        tmp_min_age_s = 5.0
         for entry in CONFIG_DIR.iterdir():
             try:
                 name = entry.name
@@ -107,9 +116,15 @@ def cleanup_stale_quarantines(max_age_days: int = 30) -> int:
                 is_tmp_orphan = entry.suffix == ".tmp" and entry.is_file()
                 if not (is_quarantine or is_tmp_orphan):
                     continue
-                # tmp orphans go right away regardless of age — they're
-                # never useful past their write attempt.
-                if is_tmp_orphan or entry.stat().st_mtime < cutoff:
+                if is_tmp_orphan:
+                    # Skip in-flight tmp files — the writer is still
+                    # using the handle. Sweep on the next launch when
+                    # the writer is definitely gone.
+                    if (now_ts - entry.stat().st_mtime) < tmp_min_age_s:
+                        continue
+                    entry.unlink(missing_ok=True)
+                    removed += 1
+                elif entry.stat().st_mtime < cutoff:
                     entry.unlink(missing_ok=True)
                     removed += 1
             except Exception:

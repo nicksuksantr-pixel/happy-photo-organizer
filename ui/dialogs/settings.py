@@ -169,6 +169,19 @@ class SettingsDialog(ctk.CTkToplevel):
         )
         self.auto_update_cb.pack(anchor="w", padx=20, pady=(0, 12))
 
+    def destroy(self):
+        """Round-7 BUG-N6/N11 (Cos retest 2026-05-24): cancel the
+        win_chrome after-callbacks before Tk tears the window down,
+        otherwise the deferred +50/+200 ms tasks fire against a dead
+        widget and log "invalid command" warnings.
+        """
+        try:
+            from ui.win_chrome import cancel_chrome_callbacks
+            cancel_chrome_callbacks(self)
+        except Exception:
+            pass
+        super().destroy()
+
     def _toggle_show(self):
         self.key_entry.configure(show="" if self.show_key.get() else "*")
 
@@ -261,17 +274,51 @@ class SettingsDialog(ctk.CTkToplevel):
         if not key:
             self.status.configure(text="Enter a key first", text_color=COLOR_WARN)
             return
-        # Single atomic-write call — avoids the two-step save race where the
-        # api_key update succeeds but the auto_check_updates toggle fails after.
-        ok = auth.update_config({
+        # Round-7 BUG-N8 (Cos retest 2026-05-24): atomic_write_json can
+        # block up to 0.45 s under AV lock (3× retry with 0.15s/0.30s
+        # backoff per R6-BUG-L2). Running it on the UI thread froze the
+        # dialog while Defender scanned auth.json on Nick's machine.
+        # Move the write to a daemon thread + marshal status back via
+        # after(0,...). The dialog stays interactive; user sees a
+        # "Saving..." status until the write completes.
+        updates = {
             "api_key": key,
             "model": (self.model_var.get() or auth.DEFAULT_MODEL).strip(),
             "ui_scale": float(self.scale_var.get()),
             "auto_check_updates": bool(self.auto_update_var.get()),
-        })
-        if ok:
-            if self.on_save:
-                self.on_save()
-            self.destroy()
-        else:
-            self.status.configure(text="Could not save settings", text_color=COLOR_DANGER)
+        }
+        self.status.configure(text="Saving...", text_color=COLOR_MUTED)
+        threading.Thread(
+            target=self._save_worker, args=(updates,), daemon=True,
+            name="settings-save",
+        ).start()
+
+    def _save_worker(self, updates: dict) -> None:
+        ok = auth.update_config(updates)
+
+        def done():
+            if ok:
+                if self.on_save:
+                    try:
+                        self.on_save()
+                    except Exception:
+                        pass
+                try:
+                    self.destroy()
+                except Exception:
+                    pass
+            else:
+                try:
+                    self.status.configure(
+                        text="Could not save settings",
+                        text_color=COLOR_DANGER,
+                    )
+                except Exception:
+                    pass
+
+        try:
+            self.after(0, done)
+        except Exception:
+            # Window already destroyed — drop silently. Settings already
+            # persisted on disk if ok=True.
+            pass

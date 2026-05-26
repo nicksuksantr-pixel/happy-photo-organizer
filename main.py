@@ -771,13 +771,25 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         # Final geometry save — but ONLY if window is in a real state.
         # Skipping iconic/withdrawn avoids persisting phantom geometry that
         # Tk reports after withdraw() (would open at -32000,-32000 next launch).
+        #
+        # Round-7 BUG-N4 (Cos retest 2026-05-24): wrap _save_window_state
+        # in the same worker-thread + join-timeout pattern as catalog.save()
+        # (R6-BUG-H1). If the disk is hanging (network drive, AV lock,
+        # USB unplug), the user's X-click should not be held hostage
+        # waiting for atomic_write_json to finish its 3 retries (up to
+        # 0.45 s) plus os.replace. Window state is best-effort anyway.
         try:
             st = self.wm_state()
         except Exception:
             st = "normal"
         if st not in ("iconic", "withdrawn"):
             try:
-                self._save_window_state()
+                _geo_t = threading.Thread(
+                    target=self._save_window_state, daemon=True,
+                    name="window-state-save-on-exit",
+                )
+                _geo_t.start()
+                _geo_t.join(timeout=1.0)
             except Exception:
                 pass
         # Stop the auto-update worker (cancels its periodic after-callback)
@@ -792,14 +804,21 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
                 self._tray.stop()
         except Exception:
             pass
-        # Cancel pending after() callbacks to avoid "invalid command" warnings
+        # Round-7 BUG-N6/N11 (Cos retest 2026-05-24): cancel any pending
+        # win_chrome deferred callbacks so destroy doesn't race against
+        # the +50 ms / +200 ms after-ids and trigger an "invalid
+        # command" Tk warning.
         try:
-            for attr in ("_poll_after_id", "_geo_save_after_id"):
-                aid = getattr(self, attr, None)
-                if aid:
-                    self.after_cancel(aid)
+            from ui.win_chrome import cancel_chrome_callbacks
+            cancel_chrome_callbacks(self)
         except Exception:
             pass
+        # Round-7 BUG-N1 (Cos retest 2026-05-24): the duplicate
+        # after_cancel block that used to live here was dead code —
+        # `_poll_after_id` and `_geo_save_after_id` are already cancelled
+        # by the unified loop near the top of destroy() (around the
+        # `for _attr in (...)` block). Keeping the dupe risked silently
+        # double-cancelling after a refactor that added new ids.
         super().destroy()
 
     # ─── Window state persistence ────────────────
@@ -914,19 +933,48 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
     # running, focus inside text entry, etc.) — Tk binds at root level fire
     # for every keypress and we don't want to surprise the user.
 
+    def _is_text_focus(self) -> bool:
+        """Round-7 BUG-N7 (Cos retest 2026-05-24): the previous
+        `event.widget.winfo_class()` check only saw the keypress
+        target, which for a CTkEntry is its INNER tk.Entry — but a
+        click on the wrapping frame leaves focus on a parent
+        CTkFrame, and `event.widget` reflects whatever was clicked
+        last. Walk from the current focus widget upward instead, and
+        match on isinstance + class name as belt-and-suspenders.
+        Returns True if focus is inside a typing widget so caller can
+        skip the keyboard shortcut.
+        """
+        try:
+            focus = self.focus_get()
+            if focus is None:
+                return False
+            # Walk up the widget tree a few hops in case the inner
+            # tk.Entry is one focus_get away from its CTk wrapper.
+            for _ in range(4):
+                if focus is None:
+                    break
+                if isinstance(focus, (ctk.CTkEntry, ctk.CTkTextbox, ctk.CTkComboBox)):
+                    return True
+                try:
+                    cls = str(focus.winfo_class()) if hasattr(focus, "winfo_class") else ""
+                except Exception:
+                    cls = ""
+                if cls in ("Entry", "CTkEntry", "Text", "CTkTextbox", "TEntry"):
+                    return True
+                focus = getattr(focus, "master", None)
+        except Exception:
+            pass
+        return False
+
     def _kbd_open(self, event):
         # Don't hijack Ctrl+O inside text-entry widgets (Settings dialog etc.)
-        if event and event.widget is not self:
-            w = str(event.widget.winfo_class()) if hasattr(event.widget, "winfo_class") else ""
-            if w in ("Entry", "CTkEntry", "Text", "CTkTextbox"):
-                return
+        if self._is_text_focus():
+            return
         self._on_drop_click(None)
 
     def _kbd_run(self, event):
-        if event and event.widget is not self:
-            w = str(event.widget.winfo_class()) if hasattr(event.widget, "winfo_class") else ""
-            if w in ("Entry", "CTkEntry", "Text", "CTkTextbox"):
-                return
+        if self._is_text_focus():
+            return
         if not self.source_paths or not self.dest_root:
             return  # silent — Step 1+2 status already shows what's missing
         if getattr(self, "worker", None) and self.worker.is_alive():

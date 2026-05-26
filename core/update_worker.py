@@ -51,11 +51,27 @@ class UpdateWorker:
 
         # Bookkeeping
         self._after_id = None
-        self.in_progress = False  # True while a download is actively running
+        # Round-7 BUG-N9 (Cos retest 2026-05-24): _begin_download sets
+        # this from the download worker thread while _on_available
+        # reads it from the Tk thread. The race is theoretical (a stale
+        # False read would let _begin_download fire twice), but a lock
+        # makes the invariant explicit and the cost is negligible.
+        self._in_progress_lock = threading.Lock()
+        self._in_progress = False
         # Track last poll outcome so we only log GitHub reachability state
         # transitions (ok→fail / fail→ok), not every 5-min poll while down.
         # Round-6 BUG-M6 (Cos review 2026-05-24).
         self._last_poll_ok: bool | None = None
+
+    @property
+    def in_progress(self) -> bool:
+        with self._in_progress_lock:
+            return self._in_progress
+
+    @in_progress.setter
+    def in_progress(self, value: bool) -> None:
+        with self._in_progress_lock:
+            self._in_progress = bool(value)
 
     # ─── Public lifecycle ────────────────────────────────────
 
