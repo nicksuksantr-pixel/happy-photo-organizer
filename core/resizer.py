@@ -132,7 +132,7 @@ def resize_to_target(
                 "quality": QUALITY_STEPS[-1],
                 "max_dim_used": current_max_dim,
                 "attempts": 4,
-                "warning": "เกิน target — ใช้ quality ต่ำสุด",
+                "warning": "exceeded target — saved at lowest quality",
             }
     except Exception as e:
         return False, {"error": str(e)[:200]}

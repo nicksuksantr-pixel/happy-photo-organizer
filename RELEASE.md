@@ -31,10 +31,12 @@ gh auth login
 ## Per-release (ทุกครั้งที่ปล่อย version ใหม่)
 
 ### Step 1 — Bump version
-ในไฟล์เหล่านี้ ต้องเป็นเลขเดียวกัน:
-- `main.py:150` — `APP_VERSION = "1.026"`
-- `installer/installer.py:124` — `APP_VERSION = "1.026"`
-- `PROJECT_SUMMARY.md:3` — `**Status:** v1.026 ...`
+**แก้ที่เดียว: ไฟล์ `VERSION`** (single source of truth).
+- `main.py`, `installer/installer.py`, และ AI Health อ่านค่าผ่าน `core/version.py`
+  (`read_version()` อ่านไฟล์ `VERSION`, รองรับ frozen bundle ผ่าน `sys._MEIPASS`)
+- ❌ **ไม่มี** `APP_VERSION = "..."` literal ใน main.py / installer แล้ว (ตั้งแต่ v1.029) —
+  อย่าไปไล่หาแก้ในโค้ด
+- (Optional) อัปเดตบรรทัด `**Status:** vX.XXX` ใน `PROJECT_SUMMARY.md` ให้ตรงกัน
 
 ### Step 2 — Build
 ```powershell
@@ -75,9 +77,10 @@ gh release create v1.026 dist/HappyPhotoOrganizerSetup.exe `
 
 ## Version numbering convention
 
-- Format: `1.MAJOR_OR_BUILD` (เช่น 1.024, 1.025, 1.026)
-- Tag ต้องขึ้นต้นด้วย `v` (เช่น `v1.026`) — updater strip `v` ออกอัตโนมัติ
-- เปรียบเทียบเป็น tuple: `1.025 > 1.024` ✓
+- Format: `1.MAJOR_OR_BUILD` (เช่น 1.039, 1.040, 1.041)
+- Tag ต้องขึ้นต้นด้วย `v` (เช่น `v1.041`) — updater strip `v` ออกอัตโนมัติ
+- เปรียบเทียบแบบ **per-segment integer tuple** (ผ่าน `updater.is_newer` → `_parse_version`):
+  `"1.041"` → `(1, 41)`, แล้ว pad ความยาวให้เท่ากันก่อนเทียบ → `(1,41) > (1,40)` ✓
 
 ## Asset naming
 

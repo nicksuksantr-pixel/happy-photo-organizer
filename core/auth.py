@@ -146,10 +146,10 @@ def save_config(api_key: str, model: str = DEFAULT_MODEL, ui_scale: float = 1.0)
             })
             ok = atomic_write_json(CONFIG_FILE, existing)
             if not ok:
-                return False, "บันทึกไม่ได้ (atomic write failed)"
-            return True, "บันทึก config แล้ว"
+                return False, "Save failed (atomic write error)"
+            return True, "Settings saved"
         except Exception as e:
-            return False, f"บันทึกไม่ได้: {str(e)[:200]}"
+            return False, f"Save failed: {str(e)[:200]}"
 
 
 def _load_config_unlocked() -> dict:
@@ -193,22 +193,26 @@ def update_config(updates: dict) -> bool:
 
 
 def get_api_key() -> str | None:
-    return load_config().get("api_key", "").strip() or None
+    # `(... or "")` guards a JSON `"api_key": null` (key present, value None):
+    # dict.get returns None there, and None.strip() would crash.
+    return (load_config().get("api_key") or "").strip() or None
 
 
 def get_model() -> str:
-    return load_config().get("model", DEFAULT_MODEL).strip() or DEFAULT_MODEL
+    # Same null-value guard as get_api_key — a hand-edited or partially-written
+    # `"model": null` must not crash with AttributeError on .strip().
+    return (load_config().get("model") or DEFAULT_MODEL).strip() or DEFAULT_MODEL
 
 
 def create_client(api_key: str | None = None) -> tuple[object | None, str | None]:
     """สร้าง Gemini client — ใช้ key จาก param หรือจาก config"""
     key = (api_key or get_api_key() or "").strip()
     if not key:
-        return None, "ยังไม่ได้ตั้ง API key"
+        return None, "API key not set"
     try:
         return genai.Client(api_key=key), None
     except Exception as e:
-        return None, f"สร้าง client ไม่ได้: {str(e)[:200]}"
+        return None, f"Could not create client: {str(e)[:200]}"
 
 
 def test_connection(client) -> tuple[bool, str]:
@@ -216,17 +220,18 @@ def test_connection(client) -> tuple[bool, str]:
     try:
         models = list(client.models.list())
         if not models:
-            return False, "เชื่อมต่อได้ แต่ไม่เจอ model"
-        return True, f"เชื่อมต่อสำเร็จ — เจอ {len(models)} models"
+            return False, "Connected, but no models found"
+        return True, f"Connected — found {len(models)} models"
     except Exception as e:
-        return False, f"เชื่อมต่อไม่ได้: {str(e)[:200]}"
+        return False, f"Connection failed: {str(e)[:200]}"
 
 
 def _model_version_key(name: str) -> tuple[int, int, int, str]:
     """
-    Extract version จากชื่อ model เพื่อใช้เรียงลำดับ
-    Return (major, minor, tier_rank, name) — ใหม่ก่อน, lite > flash > pro ในเวอร์ชันเดียวกัน
-    tier_rank: pro=0, flash=1, flash-lite=2 (ใช้ negate ตอน sort)
+    Extract version จากชื่อ model เพื่อใช้เรียงลำดับ.
+    Return (major, minor, tier_rank, name). Sorted with reverse=True, so the
+    NEWEST version + HIGHEST tier sorts first. Within one version:
+    pro (rank 3) > flash (rank 2) > flash-lite (rank 1) > unknown (rank 0).
     """
     import re
     m = re.search(r"gemini-(\d+)(?:\.(\d+))?", name)

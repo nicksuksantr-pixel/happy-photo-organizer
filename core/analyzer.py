@@ -131,18 +131,25 @@ def _parse_json_response(text: str) -> dict:
             return d
     except Exception:
         pass
-    # 2) regex หา JSON block (รองรับทั้ง {} และ [])
-    for pattern in (r"\{.*\}", r"\[.*\]"):
-        match = re.search(pattern, text, re.DOTALL)
-        if not match:
+    # 2) Scan for the first WELL-FORMED JSON value embedded in surrounding
+    #    text (markdown code fences, prose, or a trailing example object).
+    #    Bug (Tester 2026-06-04): the old greedy `\{.*\}` with DOTALL matched
+    #    from the first '{' to the LAST '}' in the whole string — if the model
+    #    emitted two objects or any extra braces, the captured span was invalid
+    #    JSON and parsing fell through to the error dict. raw_decode parses
+    #    exactly one balanced value starting at each candidate '{' / '[', so
+    #    nested braces and trailing junk are handled correctly.
+    decoder = json.JSONDecoder()
+    for i, ch in enumerate(text):
+        if ch not in "{[":
             continue
         try:
-            parsed = json.loads(match.group(0))
-            d = _coerce_to_dict(parsed)
-            if d is not None:
-                return d
-        except Exception:
+            parsed, _end = decoder.raw_decode(text, i)
+        except ValueError:
             continue
+        d = _coerce_to_dict(parsed)
+        if d is not None:
+            return d
     return {
         "matched_name": None,
         "suggested_name": None,

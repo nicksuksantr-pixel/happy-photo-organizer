@@ -118,6 +118,10 @@ def is_newer(current: str, latest: str) -> bool:
 
 def _fetch_latest_release(timeout: float) -> dict | None:
     url = f"{GITHUB_API}/repos/{REPO}/releases/latest"
+    # F8 (Tester 2026-06-04): record the resolved repo slug once per check so a
+    # wrong/typo'd REPO (or unset HAPPY_UPDATE_REPO in the built exe) surfaces
+    # as a diagnosable breadcrumb instead of a permanently-silent no-op updater.
+    _debug_log(f"_fetch_latest_release: GET {url}")
     req = urllib.request.Request(
         url,
         headers={
@@ -307,6 +311,19 @@ def download_installer(
             # case where Content-Length matched a stale Range response but
             # the real asset on GitHub is a different size.
             if expected_size > 0 and actual_size != expected_size:
+                # Bug (Tester 2026-06-04): unconditionally deleting + retrying
+                # here meant a STALE release-API `size` (it can lag an asset
+                # re-upload) forced 3× full re-downloads that never converged.
+                # If the transfer itself was complete — actual_size matches the
+                # transfer-level expected_total (Content-Length / Content-Range)
+                # — trust that and ACCEPT, just noting the discrepancy. Only
+                # retry-fresh when we have no transfer-level completeness signal.
+                if expected_total > 0 and actual_size == expected_total:
+                    _debug_log(
+                        f"    release-API size {expected_size:,} != file {actual_size:,}, "
+                        f"but transfer complete (matches Content-Length) — accepting"
+                    )
+                    return True, f"Downloaded {actual_size:,} bytes (release size {expected_size:,})"
                 last_err = (
                     f"size mismatch: file {actual_size:,} bytes, release reports {expected_size:,}"
                 )

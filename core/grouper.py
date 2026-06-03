@@ -77,10 +77,18 @@ def group_by_session(
             continue
 
         last_dt = current.dates[-1]
-        # ถ้าวันเดียวกัน AND ห่างไม่เกิน gap → group เดียวกัน
-        same_day = dt.date() == last_dt.date()
+        # Session = continuous shooting activity. Use the time-gap ALONE to
+        # decide session membership — do NOT also require same calendar day.
+        # Bug (Tester 2026-06-04): the old `same_day and within_gap` rule split
+        # a continuous burst that crossed midnight (e.g. 23:59 → 00:01, 2 min
+        # apart) into two folders, because the calendar day flipped. Items are
+        # sorted ascending, so the only case where within_gap is True but the
+        # day differs is exactly a near-midnight burst — which belongs in one
+        # session. A genuine next-day shoot is always > gap apart and still
+        # splits. representative_date = min(dates) keeps the folder dated by
+        # the session's first photo (the pre-midnight day).
         within_gap = (dt - last_dt) <= gap
-        if same_day and within_gap:
+        if within_gap:
             current.images.append(img)
             current.dates.append(dt)
             current.date_sources.append(src)
