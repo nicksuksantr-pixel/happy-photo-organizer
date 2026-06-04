@@ -20,14 +20,21 @@
 ## 📂 Key files
 
 ```
-main.py                          ← GUI (v1.024)
-core/                            ← analyzer/catalog/processor/rate_limiter/etc.
-data/job_catalog.json            ← 138 jobs
+main.py                          ← GUI (MainWindow + entry, ~1,245 lines)
+core/                            ← 15 modules: analyzer/catalog/processor/rate_limiter/etc.
+ui/                              ← 7 modules: theme/job_row/step_card/dialogs/etc.
+data/job_catalog.json            ← 146 jobs (121 bundled + 25 user-added)
+tests/test_core.py               ← 27 pure-Python tests (run: python tests/test_core.py)
+scripts/smoke_test.py            ← live Gemini smoke test (synthetic-image fallback)
 assets/                          ← icons + mascot
 installer/                       ← creative installer
 HappyPhotoOrganizer.spec         ← PyInstaller spec
+VERSION                          ← single source of truth (1.041); version.py reads it
 dist/HappyPhotoOrganizerSetup.exe ← Final installer (share this)
 ```
+
+> Version is bumped by editing the `VERSION` file ONLY — `main.py` and the
+> installer read it at runtime (do not hunt for an `APP_VERSION = "..."` literal).
 
 ## 🎯 V2 roadmap (Nick to confirm before starting)
 

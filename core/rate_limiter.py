@@ -74,6 +74,10 @@ class TierConfig:
     rpd: int = 500
     tpm: int = 250_000
     throttle: bool = True
+    # The Gemini model this tier implies (e.g. "gemini-2.5-flash"). None for
+    # "paid"/"custom" tiers, which leave the model to the user's Settings
+    # choice. Carried here so the source of truth is one place.
+    model: str | None = None
 
     @classmethod
     def from_preset(cls, tier_name: str) -> "TierConfig":
@@ -85,6 +89,7 @@ class TierConfig:
             rpd=int(p.get("rpd", 0) or 0),
             tpm=int(p.get("tpm", 0) or 0),
             throttle=bool(p.get("throttle", True)),
+            model=p.get("model"),
         )
 
     @classmethod
@@ -96,6 +101,7 @@ class TierConfig:
             rpd=int(rpd),
             tpm=int(tpm),
             throttle=rpm > 0 or rpd > 0,
+            model=None,
         )
 
     @property
@@ -169,7 +175,9 @@ class RateLimiter:
             else:
                 sleep_sec = 0
             # update last_call_ts BEFORE sleep (claim slot)
-            self._last_call_ts = now + sleep_sec
+            prev_call_ts = self._last_call_ts
+            claimed_ts = now + sleep_sec
+            self._last_call_ts = claimed_ts
         if sleep_sec > 0:
             # Cancel-aware sleep — wake every 200 ms to honor cancel_event.
             # Without this, a 4 s throttle delay = 4 s of quota burn after Cancel.
@@ -179,6 +187,12 @@ class RateLimiter:
                 if remaining <= 0:
                     break
                 if cancel_event is not None and cancel_event.is_set():
+                    # Roll back the slot we claimed (only if no later call has
+                    # advanced it) so the NEXT worker isn't penalised with an
+                    # extra idle interval for our cancellation.
+                    with self._lock:
+                        if self._last_call_ts == claimed_ts:
+                            self._last_call_ts = prev_call_ts
                     raise _CancelledError("cancelled during throttle")
                 time.sleep(min(remaining, 0.2))
 

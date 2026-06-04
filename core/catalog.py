@@ -22,6 +22,16 @@ def _normalize(name: str) -> str:
     return s.rstrip(".")
 
 
+def _date_sort_key(date_str: str) -> tuple[int, int, int]:
+    """Sort key for a 'DD-MM-YY' date string → (yy, mm, dd) for chronological
+    order. Unparseable strings sort last (large sentinel)."""
+    try:
+        dd, mm, yy = (int(x) for x in date_str.split("-"))
+        return (yy, mm, dd)
+    except Exception:
+        return (9999, 99, 99)
+
+
 def _extract_keywords(name: str) -> list[str]:
     tokens = re.findall(r"[a-zA-Z]+", name.lower())
     # Round-6 BUG-L1 (Cos review 2026-05-24): expanded stop list. Original
@@ -176,7 +186,11 @@ class JobCatalog:
                 entry["ships"].sort()
             if date_str and date_str not in entry.get("dates_seen", []):
                 entry.setdefault("dates_seen", []).append(date_str)
-                entry["dates_seen"].sort()
+                # Sort CHRONOLOGICALLY, not lexicographically. Dates are stored
+                # as "DD-MM-YY", so a plain str sort orders by day-of-month first
+                # ("01-12-25" < "02-01-24"). Parse to (yy, mm, dd) for a true
+                # timeline. Unparseable strings sink to the end (Tester 2026-06-04).
+                entry["dates_seen"].sort(key=_date_sort_key)
             # populate months_seen (format: 'May 26' หรือ 'Conquest/May 26' ถ้ามี ship)
             month_label = self._format_month_label(date_str, ship)
             if month_label and month_label not in entry.get("months_seen", []):

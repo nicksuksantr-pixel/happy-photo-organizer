@@ -151,7 +151,11 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         self.dest_root: Path | None = None
         self.catalog = JobCatalog()
         self.plan: Plan | None = None
-        self._plan_lock = threading.Lock()  # protect self.plan (worker vs UI)
+        # self.plan is only ever assigned a FULLY-BUILT Plan object (a single
+        # reference assignment — atomic under the GIL), and cleared to None.
+        # No partial mutation is published across threads, so no lock is needed.
+        # (An earlier _plan_lock was created but never acquired — removed
+        # 2026-06-04 to stop implying protection that didn't exist.)
         self.cancel_event = threading.Event()
         self.worker: threading.Thread | None = None
 
@@ -711,7 +715,7 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
             pass
 
     def _poll_quota_badge(self):
-        """Auto-refresh badge every 5s"""
+        """Auto-refresh badge every 2s (RPM is more dynamic than RPD)."""
         try:
             self._update_tier_badge()
             # also refresh AI Health dialog if open
@@ -1088,6 +1092,14 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
                 return
 
         self._rename_done = False
+        # F6 (Tester 2026-06-04): clear the PREVIOUS run's plan + review table.
+        # Without this, a second batch left the stale plan in place, so Step 3
+        # showed the old run's rows + a "ready" status while the new analysis
+        # was still in flight. Reset to a clean "analyzing" slate.
+        self.plan = None
+        for _w in self.table_scroll.winfo_children():
+            _w.destroy()
+        self.review_summary.configure(text="Analyzing…", text_color=COLOR_MUTED)
         self.phase12_btn.configure(state="disabled")
         self.phase4_btn.configure(state="disabled")
         self.cancel_btn.configure(state="normal")
@@ -1162,6 +1174,18 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
 
             if self.cancel_event.is_set():
                 self.after(0, lambda: self._log("Cancelled during Phase 2", "warn"))
+            elif plan.ai_error:
+                # F7 (Tester 2026-06-04): AI couldn't run at all (e.g. bad/
+                # missing key). Surface it as an error + alert instead of the
+                # misleading "Phase 2 done" line — every row is an AI-error
+                # placeholder, not a real result.
+                err = plan.ai_error
+                self.after(0, lambda e=err: self._log(f"Phase 2 FAILED — AI did not run: {e}", "err"))
+                self.after(0, lambda e=err: messagebox.showerror(
+                    "AI tagging failed",
+                    f"The AI could not analyze your photos:\n\n{e}\n\n"
+                    "Check your API key in Settings and your internet connection, then try again.",
+                ))
             else:
                 self.after(0, lambda: self._log("Phase 2 done — awaiting review", "ok"))
 

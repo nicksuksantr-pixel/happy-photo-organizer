@@ -67,6 +67,13 @@ class SettingsDialog(ctk.CTkToplevel):
 
         cfg = auth.load_config()
 
+        # F3 (Tester 2026-06-04): the UI-scale slider applies globally LIVE via
+        # _on_scale_change while dragging, but Cancel/Escape/X used to leave
+        # that preview applied (only a restart reverted it). Remember the scale
+        # we opened with and restore it on close UNLESS the user saved.
+        self._original_scale = float(cfg.get("ui_scale", 1.0))
+        self._committed = False
+
         # ─── v1.038: bottom button row packed FIRST + status above it ───
         # Tk pack processes calls in order. side="bottom" claims from the
         # bottom of whatever cavity remains at pack-time. By packing the
@@ -225,6 +232,14 @@ class SettingsDialog(ctk.CTkToplevel):
             except Exception:
                 pass
             self._refresh_models_after_id = None
+        # F3 (Tester 2026-06-04): revert the live UI-scale preview if the user
+        # didn't save. On a successful save _committed is True and the new
+        # scale (already applied live) must stick.
+        if not getattr(self, "_committed", False):
+            try:
+                ctk.set_widget_scaling(self._original_scale)
+            except Exception:
+                pass
         super().destroy()
 
     def _toggle_show(self):
@@ -343,6 +358,9 @@ class SettingsDialog(ctk.CTkToplevel):
 
         def done():
             if ok:
+                # Mark committed so destroy() keeps the live UI-scale preview
+                # (the saved value) instead of reverting it (F3).
+                self._committed = True
                 if self.on_save:
                     try:
                         self.on_save()

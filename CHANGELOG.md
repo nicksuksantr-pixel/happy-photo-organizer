@@ -9,6 +9,63 @@ Cosmetic / design / V2-scope items that survived round 6 + 7 + 8. All
 catalogued in detail at the bottom of this file under "Round 6
 deferred".
 
+## [1.041] — 2026-06-04 — Tester round (3-agent audit · 25 fixes · first real test suite · docs rewrite)
+
+Nick triggered **"Tester"**: 3 read-only audit agents swept the whole tree in
+parallel (functional gaps · code correctness · holistic + doc accuracy). Every
+finding was verified against the real code, then all confirmed ones fixed with no
+approval gate. Built `tests/test_core.py` (27 pure-Python tests, all green) — the
+previously-claimed "67/67 tests" never existed. Live Gemini smoke test passes.
+
+### Fixed — correctness (real bugs)
+- **grouper**: a continuous photo burst crossing midnight (e.g. 23:59 → 00:01) was
+  split into two folders because the day flipped. Now session membership uses the
+  time-gap alone; `representative_date` keeps the pre-midnight date. (`core/grouper.py`)
+- **processor / date allocation**: when the target month is full, every overflowing
+  folder was slammed onto the last day of the month. Now each keeps its own EXIF day
+  (clamped to month length), so distinct jobs don't pile onto one date. (`core/processor.py`)
+- **processor**: a directly-dropped non-image file is now image-filtered before resize
+  (was inflating counts + failing silently); confidence parse made exception-safe;
+  redundant duplicate year-clamp removed (lived in both `detect_target_month` and caller).
+- **analyzer**: JSON-response parsing rewritten to use `JSONDecoder.raw_decode` — the
+  old greedy `\{.*\}` regex grabbed first-`{`-to-last-`}` and failed on prose/extra braces.
+- **auth**: `get_api_key()` / `get_model()` null-safe (a `"key": null` in auth.json no
+  longer crashes with `None.strip()`).
+
+### Fixed — AI / rate limiter / UX
+- **AI tier model**: selecting a model-named free tier in AI Health now also sets the
+  Gemini model (the preset's `model` field was dead — quota math and the actual model
+  silently diverged). `TierConfig` carries `model`; "paid"/"custom" leave Settings' model.
+- **Phase 2 wholesale failure** (bad/missing key) now surfaces an error log + alert
+  instead of a misleading "Phase 2 done — awaiting review".
+- **rate limiter**: cancel during a throttle sleep rolls back the claimed slot so the
+  next worker isn't penalised an extra interval.
+- **Settings UI scale**: Cancel/Escape/X now reverts the live scale preview (only Save
+  keeps it); was leaking the previewed scale until restart.
+- **AI Health**: tier radio shows an "unsaved" hint until Apply; 7-day history strptime
+  guarded against a malformed `today_pt`.
+- **stale plan**: starting a second batch clears the previous run's plan + review table.
+- **updater**: a stale release-API `size` no longer forces 3× full re-downloads when the
+  transfer itself was complete (Content-Length matched); resolved repo slug now logged.
+- **installer**: writes `auth.json` atomically + perm-locked (was a plain write_text).
+- **i18n**: remaining Thai user-facing strings in `core/auth` + `core/resizer` → English.
+
+### Fixed — docs (rewritten to match code)
+- PROJECT_SUMMARY / CLAUDE / RELEASE corrected: LOC (~7,000, not 5,650), file count
+  (32, not 32-claimed-but-different), catalog split (**121 bundled + 25 user = 146**, not
+  138+8), `ui/` module count (7, not 8), `main.py` size, the fabricated "67/67 tests",
+  and the obsolete RELEASE.md "edit APP_VERSION" step (the `VERSION` file is the single
+  source). Removed "mascot bounces" from the installer docstring. Fixed `_poll_quota_badge`
+  (2s, not 5s) and `_model_version_key` docstrings.
+
+### Added
+- `tests/test_core.py` — 27 pure-Python regression tests (grouping, date allocation,
+  JSON parsing, transient-error classification, catalog, rate-limiter tiers, version
+  compare, auth null-safety). Run: `python tests/test_core.py`.
+- `scripts/smoke_test.py` rewritten — no longer depends on a hard-coded D-drive sample
+  path; resolves photos via `$HAPPY_TEST_PHOTOS` / `tests/_assets/` / a synthetic image,
+  and stops logging the API key's tail.
+
 ## [1.040] — 2026-05-25 — Settings dialog UX polish (Round 8)
 
 After v1.039 closed all 11 Round-7 N-bugs, Cos returned a second
@@ -850,6 +907,12 @@ during the regression hunt Nick requested. Both fixes are tiny (1 conditional
 - English UI, dark theme, drag-drop sources + destination picker.
 - Three-phase workflow: resize+group, AI tagging, rename.
 
+[1.041]: https://github.com/nicksuksantr-pixel/happy-photo-organizer/releases/tag/v1.041
+[1.040]: https://github.com/nicksuksantr-pixel/happy-photo-organizer/releases/tag/v1.040
+[1.039]: https://github.com/nicksuksantr-pixel/happy-photo-organizer/releases/tag/v1.039
+[1.038]: https://github.com/nicksuksantr-pixel/happy-photo-organizer/releases/tag/v1.038
+[1.037]: https://github.com/nicksuksantr-pixel/happy-photo-organizer/releases/tag/v1.037
+[1.036]: https://github.com/nicksuksantr-pixel/happy-photo-organizer/releases/tag/v1.036
 [1.035]: https://github.com/nicksuksantr-pixel/happy-photo-organizer/releases/tag/v1.035
 [1.034]: https://github.com/nicksuksantr-pixel/happy-photo-organizer/releases/tag/v1.034
 [1.033]: https://github.com/nicksuksantr-pixel/happy-photo-organizer/releases/tag/v1.033

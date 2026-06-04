@@ -185,6 +185,7 @@ class AIHealthDialog(ctk.CTkToplevel):
 
         cfg = auth.load_config()
         current_tier_name = cfg.get("tier", DEFAULT_TIER)
+        self._loaded_tier = current_tier_name  # to detect unsaved radio changes
         self.tier_var = ctk.StringVar(value=current_tier_name)
 
         for key, preset in TIER_PRESETS.items():
@@ -217,11 +218,12 @@ class AIHealthDialog(ctk.CTkToplevel):
         self.custom_rpd.insert(0, str(cfg.get("custom_rpd", 500)))
         enable_paste(self.custom_rpd)
 
-        ctk.CTkButton(
-            tier_select, text="Apply tier", height=30, width=120,
+        self._apply_btn = ctk.CTkButton(
+            tier_select, text="Apply tier", height=30, width=160,
             fg_color=COLOR_PRIMARY, hover_color=COLOR_ACCENT,
             command=self._apply_tier,
-        ).pack(padx=12, pady=(0, 10))
+        )
+        self._apply_btn.pack(padx=12, pady=(0, 10))
 
         # ─── 7. Bottom action row ───
         action_row = ctk.CTkFrame(container, fg_color="transparent")
@@ -321,10 +323,14 @@ class AIHealthDialog(ctk.CTkToplevel):
 
     def _render_history(self, snap):
         history = snap.get("history_7d", {}) or {}
-        today = (
-            datetime.strptime(snap.get("today_pt"), "%Y-%m-%d").date()
-            if snap.get("today_pt") else datetime.now().date()
-        )
+        # Guard a malformed today_pt string — a corrupt-but-dict usage_log that
+        # _load accepted would otherwise raise here, and refresh()'s bare except
+        # would silently blank the whole dialog. Fall back to local today.
+        today_pt = snap.get("today_pt")
+        try:
+            today = datetime.strptime(today_pt, "%Y-%m-%d").date() if today_pt else datetime.now().date()
+        except (ValueError, TypeError):
+            today = datetime.now().date()
         today_count = snap.get("today_count", 0)
 
         rows = []
@@ -364,8 +370,17 @@ class AIHealthDialog(ctk.CTkToplevel):
     # ─── tier change ───
 
     def _on_tier_radio(self):
-        # preview-only — actual apply is on the button
-        pass
+        # Selecting a radio doesn't take effect until "Apply tier" is clicked.
+        # Bug (Tester 2026-06-04): there used to be NO feedback that a click
+        # was pending, so a user who picked a radio and closed the dialog lost
+        # the change silently. Flag the pending state on the Apply button.
+        try:
+            if self.tier_var.get() != self._loaded_tier:
+                self._apply_btn.configure(text="Apply tier  •  unsaved")
+            else:
+                self._apply_btn.configure(text="Apply tier")
+        except Exception:
+            pass
 
     def _apply_tier(self):
         tier_name = self.tier_var.get()
@@ -381,6 +396,17 @@ class AIHealthDialog(ctk.CTkToplevel):
                 return
             updates["custom_rpm"] = rpm
             updates["custom_rpd"] = rpd
+        else:
+            # Bug (Tester 2026-06-04): the preset's `model` field was dead —
+            # selecting "Free — Gemini 2.5 Flash" changed the RPM/RPD throttle
+            # but kept calling whatever model Settings held, so quota math and
+            # the actual model silently diverged. A model-named tier IS an
+            # explicit model choice, so apply it. "paid" has model=None →
+            # leave the user's Settings model untouched. (Settings still lets
+            # the user override the model afterward.)
+            preset_model = (TIER_PRESETS.get(tier_name) or {}).get("model")
+            if preset_model:
+                updates["model"] = preset_model
         # Use update_config (atomic + serialized) so a concurrent window-state
         # debounce save doesn't lose the tier change in a read-modify-write race.
         if not auth.update_config(updates):
@@ -389,6 +415,12 @@ class AIHealthDialog(ctk.CTkToplevel):
         # Reload the full config to pass to the rate limiter — update_config
         # has the latest tier + any custom_* values it just wrote.
         update_tier_from_config(auth.load_config())
+        # Applied — clear the "unsaved" hint and update the baseline.
+        self._loaded_tier = tier_name
+        try:
+            self._apply_btn.configure(text="Apply tier")
+        except Exception:
+            pass
         self.refresh()
         if self.on_tier_change:
             self.on_tier_change()

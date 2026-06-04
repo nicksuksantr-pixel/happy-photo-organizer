@@ -4,7 +4,6 @@ Happy Photo Organizer — Setup (Creative Single-Page Hero)
 Design:
   • One screen, no wizard navigation
   • Animated gradient background (subtle ส้ม-ชมพู pulse)
-  • Mascot character bounces gently
   • Sparkles fade in/out on canvas
   • Hero card with shadow
   • Smooth phase transitions: Setup → Installing → Done
@@ -387,7 +386,25 @@ class Installer:
                 existing.update({"api_key": self.api_key.strip()})
                 if "model" not in existing:
                     existing["model"] = "gemini-3.1-flash-lite"
-                cfg_file.write_text(json.dumps(existing, indent=2), encoding="utf-8")
+                # Atomic write + perm-lock (mirrors core.auth.atomic_write_json):
+                # a crash mid-install must not truncate a prior config, and the
+                # key file shouldn't be left world-readable. (Tester 2026-06-04
+                # C15/E3 — the old plain write_text had neither guarantee.)
+                _tmp = cfg_file.with_suffix(".json.tmp")
+                try:
+                    _tmp.write_text(json.dumps(existing, indent=2), encoding="utf-8")
+                    os.replace(str(_tmp), str(cfg_file))
+                    try:
+                        import stat as _stat
+                        os.chmod(cfg_file, _stat.S_IRUSR | _stat.S_IWUSR)
+                    except Exception:
+                        pass
+                except Exception:
+                    try:
+                        _tmp.unlink()
+                    except Exception:
+                        pass
+                    cfg_file.write_text(json.dumps(existing, indent=2), encoding="utf-8")
 
             # Shortcuts
             exe_path = self._find_exe()

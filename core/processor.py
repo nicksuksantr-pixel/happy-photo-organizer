@@ -15,6 +15,7 @@ from __future__ import annotations
 import re
 import shutil
 import threading
+import time
 import traceback
 import uuid as _uuid
 from calendar import monthrange
@@ -29,7 +30,7 @@ from .analyzer import analyze_group
 from .auth import create_client
 from .catalog import JobCatalog
 from .exif_reader import format_folder_date
-from .image_io import collect_images
+from .image_io import collect_images, is_supported_image
 from .resizer import resize_to_target
 
 # ─── safe filename ───
@@ -91,6 +92,11 @@ class Plan:
     # Count of images that hit resizer fallback path (target_kb_max exceeded
     # even at lowest quality). Reported in the UI so Nick knows to spot-check.
     oversized_count: int = 0
+    # Set to a non-empty message when Phase 2 could NOT run the AI at all
+    # (e.g. client creation failed — bad/missing key). Distinguishes a
+    # wholesale AI failure from a normal "done — awaiting review" so the UI
+    # can surface an error instead of a cheerful completion line.
+    ai_error: str = ""
 
 
 @dataclass
@@ -262,8 +268,15 @@ def assign_unique_dates(
         free_day = _find_free_day_earliest(base.day, last_day, occupied)
 
         if free_day is None:
-            # ทั้งเดือนเต็ม → ใช้วันสุดท้าย (ยอมซ้ำ, แก้มือ)
-            new_day = last_day
+            # Month is full (all day-numbers 1..last_day already taken, per
+            # Nick's unique-day-across-months rule). We must reuse a day.
+            # Bug (Tester 2026-06-04): previously every overflowing assignment
+            # was slammed onto `last_day`, so multiple different jobs all
+            # collapsed to e.g. 31-05-26 — losing their real dates and risking
+            # same-name merges. Instead keep the photo's OWN EXIF day (clamped
+            # to the month length). Different source days then stay on
+            # different folder dates; only genuinely-same-day jobs share one.
+            new_day = min(base.day, last_day)
             a.date_was_capped = True
             capped += 1
         else:
@@ -313,7 +326,13 @@ def phase1_resize_and_group(
     items: list[tuple[Path, str]] = []  # (image_path, source_label)
     for src in sources:
         if src.is_file():
-            items.append((src, src.parent.name))
+            # Bug (Tester 2026-06-04): a directly-dropped non-image file
+            # (.txt / .mp4 / etc.) used to be appended unconditionally, then
+            # failed silently in resize_to_target while still inflating
+            # total_images. Gate single files through the same image filter
+            # the directory branch already uses (collect_images → is_supported).
+            if is_supported_image(src):
+                items.append((src, src.parent.name))
         elif src.is_dir():
             for img in collect_images(src, recursive=True):
                 items.append((img, src.name))
@@ -361,11 +380,23 @@ def phase1_resize_and_group(
         temp_folder = dest_root / temp_name
         temp_folder.mkdir(parents=True, exist_ok=True)
 
+        # source_label = the source folder most images in this group came from.
+        # Groups can mix sources (sessions are built across all sources by time),
+        # so picking the first image's label was arbitrary; use the majority.
+        if g.images:
+            _label_counts: dict[str, int] = {}
+            for _im in g.images:
+                _lbl = label_map.get(_im, "")
+                _label_counts[_lbl] = _label_counts.get(_lbl, 0) + 1
+            _src_label = max(_label_counts.items(), key=lambda kv: kv[1])[0]
+        else:
+            _src_label = ""
+
         assignment = JobAssignment(
             folder_date=g.representative_date,
             images=list(g.images),
             temp_folder=temp_folder,
-            source_label=label_map.get(g.images[0], "") if g.images else "",
+            source_label=_src_label,
         )
 
         for seq, img in enumerate(sorted(g.images), 1):
@@ -403,15 +434,12 @@ def phase1_resize_and_group(
     # year 2050) from landing as `01-05-50` folders (round-3 BUG-3-6).
     now = datetime.now()
     if target_ym is None:
+        # Empty dest (no anchor folders) → default to current month/year.
+        # The ±5-year implausible-year clamp now lives inside
+        # detect_target_month (round-7 BUG-N5), so the non-None branch no
+        # longer needs to re-clamp — that duplicate clamp was removed
+        # (Tester 2026-06-04: dead code, both sites did the same thing).
         target_ym = (now.year, now.month)
-    else:
-        # Round-6 BUG-M3 (Cos review 2026-05-24): clamp detected year to
-        # ±5 of today. If a stray dest folder like '01-05-50' (year 2050)
-        # exists and happens to be the mode, every new folder would inherit
-        # year 2050. Reject implausible years and fall back to current.
-        ty, tm = target_ym
-        if abs(ty - now.year) > 5:
-            target_ym = (now.year, tm)
     plan.pre_existing_dates = sorted(f"{d:02d}" for d in used_days)
     plan.shifted_count, plan.capped_count = assign_unique_dates(
         plan, used_days, target_year_month=target_ym,
@@ -431,7 +459,13 @@ def _apply_result_to_assignment(
     """Apply AI result → mutate assignment in place. Safe to call from main thread."""
     matched = result.get("matched_name")
     suggested = result.get("suggested_name")
-    confidence = float(result.get("confidence") or 0.0)
+    # Defensive: a future caller / odd model reply could put a non-numeric
+    # value here. float("high") would raise and abort the whole phase-2 loop
+    # (this runs outside the per-future try). Clamp to 0.0 on bad input.
+    try:
+        confidence = float(result.get("confidence") or 0.0)
+    except (TypeError, ValueError):
+        confidence = 0.0
 
     # fuzzy fallback เผื่อ AI สะกดต่าง
     resolved = None
@@ -472,6 +506,9 @@ def phase2_ai_analyze(
     """
     client, err = create_client()
     if err:
+        # Wholesale AI failure — flag it on the plan so the caller logs an
+        # error + alerts the user, rather than reporting "Phase 2 done".
+        plan.ai_error = err
         for a in plan.assignments:
             a.reasoning = f"AI error: {err}"
             a.is_new_suggestion = True
@@ -617,9 +654,9 @@ def phase4_rename_folders(
                         break
                     except OSError as oe:
                         _last_err = oe
-                        # Brief, escalating backoff: 0.3s, 0.9s
-                        import time as _time
-                        _time.sleep(0.3 * (_attempt + 1) ** 2)
+                        # Brief, escalating backoff: 0.3s, 1.2s, 2.7s
+                        # (0.3 * (attempt+1)^2 for attempt 0,1,2).
+                        time.sleep(0.3 * (_attempt + 1) ** 2)
                 if _last_err is not None:
                     raise _last_err
 
