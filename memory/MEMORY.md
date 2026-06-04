@@ -2,6 +2,7 @@
 
 > สแนปช็อต onboarding หลักของโปรเจคนี้ (ไฟล์เดียว) — Nick สั่ง "อ่านเมมโมรี่" = อ่านไฟล์นี้
 > สร้างจากการ onboard ตาม MASTER Section 5 เมื่อ **2026-06-04** | Version ปัจจุบัน: **v1.041** (Tester round)
+> ✅ **Re-verified 2026-06-04** (session ใหม่ — วัดกับโค้ดจริง ไม่ใช่จำ): 32 files · 7,198 LOC · core 15 · ui 7 · main.py 1,240 · catalog 146 (121 bundled + 25 user) · 14 formats · `tests/test_core.py` 27/27 PASS — **ทุกตัวเลขตรงกับเมมโมรี่** (แก้จุดเดียว: main.py ~1,245 → 1,240)
 
 ---
 
@@ -95,11 +96,11 @@
 - `core/auth.py` — API key (atomic auth.json + quarantine)
 - `scripts/smoke_test.py` — มี smoke test (tests ใช้ stub `google.genai` — **AI จริงเทสได้แค่บนเครื่อง Nick + key จริง**)
 
-**สถานะ:** v1.041 · **~7,000 LOC / 32 ไฟล์** (core 15 + ui 7 modules, main.py ~1,245) · catalog **146 (121 bundled + 25 user)** · 14 formats · ผ่าน audit 8 รอบ (Cos) + **Tester round v1.041** (3-agent, 18 code fixes)
+**สถานะ:** v1.041 · **7,198 LOC / 32 ไฟล์** (core 15 + ui 7 modules, main.py 1,240) · catalog **146 (121 bundled + 25 user)** · 14 formats · ผ่าน audit 8 รอบ (Cos) + **Tester round v1.041** (3-agent, 18 code fixes)
 **Tests (จริง):** `tests/test_core.py` = **27/27 PASS** (pure-Python, ไม่ต้องใช้ key/รูป) · `scripts/smoke_test.py` = live Gemini smoke 6/6 (มี synthetic-image fallback). ⚠️ คำว่า "67/67 tests" ใน docs เก่า = ของปลอม (ไม่เคยมี test suite) — แก้แล้ว
 **Tester v1.041 fixes สำคัญ:** grouper ข้ามเที่ยงคืน · date allocation เดือนเต็มเก็บวัน EXIF เดิม · analyzer JSON raw_decode · tier→model wiring · auth null-safe · settings scale revert on Cancel · installer atomic auth.json · Thai→EN strings
 
-**Build:** `dist/HappyPhotoOrganizerSetup.exe` (~80MB) · auto-updater ผ่าน GitHub Releases
+**Build/Release:** `dist/HappyPhotoOrganizerSetup.exe` (82.7 MB / 86,752,959 B) · **v1.041 ปล่อยขึ้น GitHub Releases แล้ว 2026-06-04** → `/releases/latest` = v1.041 (auto-updater เห็น, ไม่ใช่ prerelease) · tag `v1.041` → dca0706 · local `main` sync = 1.041 แล้ว · auto-updater ผ่าน GitHub Releases API
 
 **Known limitations:** Phase 1 ช้ากว่า Nick_Resizer 5-10x (iterative quality) · AI accuracy ขึ้นกับ catalog completeness · ไม่มี undo Phase 4 · ทดสอบ AI จริงต้องมี key + รูปจริง
 
