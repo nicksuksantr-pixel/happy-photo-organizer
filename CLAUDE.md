@@ -17,6 +17,16 @@
 - ❌ Don't remove uninstaller or registry registration
 - ❌ Don't refactor Phase 2 to sequential (parallel = 4x faster)
 
+## 🔀 Workflow (decided 2026-06-04 — Nick)
+
+- ✅ **Work directly on `main`** — no feature branches, no PRs. The old
+  `tester/* → PR → merge` flow is retired (PR #1 + its branch were cleaned up).
+- ✅ **Commit, push, build, and publish GitHub Releases without asking.** Nick gave
+  standing authorization ("อัพขึ้นเลยตามปกติ ไม่ต้องถาม"). Run the normal release
+  flow (see [RELEASE.md](RELEASE.md)) and report what shipped at the end.
+- Unchanged: bump version via the `VERSION` file only; tag `vX.XXX`; keep the asset
+  named `HappyPhotoOrganizerSetup.exe` (the auto-updater depends on both).
+
 ## 📂 Key files
 
 ```

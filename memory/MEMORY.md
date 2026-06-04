@@ -74,6 +74,10 @@
 - ไม่จำกัด token/agent — ออกแบบให้ agent ทำงานขนานได้
 - (เฉพาะแอปมือถือ: ตั้งชื่อ APK/AAB ชัดเจน + version, รันเทสใน emulator ก่อน build ขึ้น Play — *โปรเจคนี้เป็น desktop ไม่ใช้*)
 
+### 🔀 Git workflow (Nick สั่ง 2026-06-04 — override ของเดิม)
+- **เลิก PR/feature-branch — ทำงานบน `main` ตรงๆ** (เดิม `tester/* → PR → merge`; ปิดแล้ว — branch `tester/v1.041-audit-fixes` + PR #1 ลบ/ปิดทั้ง local+remote)
+- **commit + push + build + ปล่อย GitHub Release ได้เลย ไม่ต้องถาม** — Nick ให้ standing authorization ("อัพขึ้นเลยตามปกติ ไม่ต้องถาม") → ทำ flow ปกติ (ดู RELEASE.md) แล้วรายงานท้าย
+
 ---
 
 ## หมวด E — สิ่งที่ต้องอัปเดต SHARED
