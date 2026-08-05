@@ -1,6 +1,6 @@
 # 🎨 Happy Photo Organizer — Project Summary
 
-**Status:** v1.041 (2026-06-04 — **Tester round**: 3-agent full-system audit → 25 fixes + first real test suite + docs rewritten to match code)
+**Status:** v1.042 (2026-08-05 — **small-screen layout fix**: Step 3 Review is now the primary area — 3-column top row, shrink-priority pack order, 150 px review-table minimum)
 **Author:** Nick (with Codey — Claude Code)
 **Family:** Happy AI Family (sibling: HAPPY AI Agent)
 **Last full review:** Tester sprint 2026-06-04 (Codey, 3 parallel audit agents) — see "Audit history" below

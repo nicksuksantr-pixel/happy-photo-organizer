@@ -9,6 +9,33 @@ Cosmetic / design / V2-scope items that survived round 6 + 7 + 8. All
 catalogued in detail at the bottom of this file under "Round 6
 deferred".
 
+## [1.042] — 2026-08-05 — Small-screen layout: Step 3 becomes the primary area
+
+Nick reported (with screenshot) that on some computers a maximized window still
+left Step 3 "Review & Edit Names" — the panel where the real reviewing work
+happens — squeezed to an unusable sliver.
+
+### Changed — layout (`main.py`, UI-only)
+- Top area re-arranged from 2 columns ([Step 1 stacked on Step 2] | Log) to
+  **3 side-by-side columns (Step 1 | Step 2 | Log)** — uses the abundant
+  horizontal space instead of the scarce vertical space; the top row shrank
+  from ~430 px to ~200 px tall.
+- **Pack-order priority flip:** Step 3 is packed (`side="bottom"`) *before* the
+  top row, so a short window squeezes the top row — Step 3 always keeps its
+  height (previously Step 3 was packed last and collapsed first).
+- Step 3's review table requests a **guaranteed 150 px minimum** and still
+  expands into all remaining window height (big screens simply give it more).
+- Compaction: drop zone 96→64 px · log box requests 110 px (no longer drives
+  row height) · source list capped at 3 lines (was 6) · label wraplength
+  520→280 for the narrower cards · workflow caption shortened ("AI Tagging" →
+  "AI Tag").
+
+### Verified
+- `tests/test_core.py` 27/27 PASS.
+- Real app launched at Nick's saved 960×621 geometry **and** force-resized to
+  1000×600 physical (below the app's own 960×600 logical minsize): Step 3 stays
+  full-size and usable; top cards intact.
+
 ## [1.041] — 2026-06-04 — Tester round (3-agent audit · 25 fixes · first real test suite · docs rewrite)
 
 Nick triggered **"Tester"**: 3 read-only audit agents swept the whole tree in

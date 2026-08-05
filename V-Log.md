@@ -24,3 +24,4 @@ Full version history, oldest → newest. Detail per version lives in `CHANGELOG.
 | v1.039 | 2026-05-25 | Round-7: 11-patch sprint (transient-error regex, fallback JPEG verify, async saves, thread-safe flags, mtime-guarded sweep) |
 | v1.040 | 2026-05-25 | Round-8: Settings dialog UX polish (4 paper-cuts + Risk-B deferred-callback cancel) |
 | **v1.041** | **2026-06-04** | **Tester round** — 3-agent full-system audit → 18 code fixes + all doc/code mismatches corrected; first real test suite (`tests/test_core.py`, 27 tests); midnight-grouping + full-month date-allocation bugs fixed; tier→model wiring; live AI smoke test green |
+| **v1.042** | **2026-08-05** | **Small-screen layout fix** — Step 3 (Review & Edit Names) is now the primary area: top row re-arranged to 3 columns (Step 1 \| Step 2 \| Log, ~200 px), Step 3 packed with shrink priority + 150 px guaranteed review-table minimum, drop zone/log/labels compacted; on short displays Step 3 no longer collapses |

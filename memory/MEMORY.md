@@ -1,7 +1,15 @@
 # MEMORY.md — Happy Photo Organizer
 
+> ## ⛔ #1 HARD RULE — AGENT CAP (read BEFORE spawning ANY agent — the most-violated rule)
+> Default **≤ 3 agents/round** · max **5** with a clear reason · **> 5 → STOP, ask Nick first**. Count worst-case before spawning; per-finding/file/page fan-out is forbidden unless you can name its cap.
+> **"Unlimited tokens" ≠ unlimited agents** → Tester = exactly **3** (no sub-fan-out) · Lucifer = `lucifer.js` only (≤5/round). ❌ NEVER self-start Tester/Lucifer/any fleet — Nick must type the trigger.
+> Cause: 24-agent burn 2026-06-10, repeated 2026-06-13 · = command_pattern #16.
+>
+> **🛑 FAIL = STOP, not retry (other half of #16):** a workflow/agent that returns fail / error / empty / unexpected → **report in plain words + wait for Nick**. ❌ never re-launch Tester/Lucifer yourself · ❌ never retry or tweak-args-and-refire · ❌ never loop silently · diagnose **0-agent** first. **1 Nick-trigger = 1 launch**; re-run only on Nick's word. Cause: 2026-06-13 args bug → 60-agent burn (6 Lucifer × 10) from blind retries.
+
+
 > สแนปช็อต onboarding หลักของโปรเจคนี้ (ไฟล์เดียว) — Nick สั่ง "อ่านเมมโมรี่" = อ่านไฟล์นี้
-> สร้างจากการ onboard ตาม MASTER Section 5 เมื่อ **2026-06-04** | Version ปัจจุบัน: **v1.041** (Tester round)
+> สร้างจากการ onboard ตาม MASTER Section 5 เมื่อ **2026-06-04** | Version ปัจจุบัน: **v1.042** (small-screen layout fix 2026-08-05)
 > ✅ **Re-verified 2026-06-04** (session ใหม่ — วัดกับโค้ดจริง ไม่ใช่จำ): 32 files · 7,198 LOC · core 15 · ui 7 · main.py 1,240 · catalog 146 (121 bundled + 25 user) · 14 formats · `tests/test_core.py` 27/27 PASS — **ทุกตัวเลขตรงกับเมมโมรี่** (แก้จุดเดียว: main.py ~1,245 → 1,240)
 
 ---
@@ -50,7 +58,7 @@
 
 ---
 
-## หมวด D — command_pattern 11 ข้อ (Quick Reference)
+## หมวด D — command_pattern 12 ข้อ (Quick Reference)
 
 1. **Project Boundary** — ทำงานแค่ในโฟลเดอร์โปรเจคนี้ · โปรเจคอื่นอ่านได้/เอา idea ได้ แต่ห้ามแก้
 2. **Gemini** — AI Studio key เท่านั้น · default `gemini-3.1-flash-lite` · RPM15/RPD500 · เตือนก่อน batch ใหญ่
@@ -63,6 +71,7 @@
 9. **Log** — บันทึกการคุย+คำสั่งแยกตาม version ใน `log\log_vX.md`
 10. **Bug Log** — บันทึก bug+fix แยกตาม version ใน `bug\bug_vX.md`
 11. **V-Log** — timeline ทุกเวอร์ชันใน `V-Log.md`
+12. **Lucifer** (routing) — พิมพ์ "Lucifer: <งาน>" → **ต้องรัน Workflow tool ด้วย scriptPath `C:\Users\NickSuksanTr\Documents\Claude\Projects\Nick\lucifer.js` เท่านั้น** (deterministic บังคับด้วยโค้ด) · ❌ ห้ามจำลอง 3 agent เอง · ❌ ห้ามเขียน+ให้คะแนนเอง · ❌ ห้าม build/อัพ ก่อนผ่านด่าน · Coddy เตรียม git worktree (args.workdir) + build/อัพ หลัง passed เท่านั้น (คอม: build + GitHub Release)
 
 > หมายเหตุ: ข้อ 7–8 (log/bug/changelog หมุนตาม version) = คนละตัวกับ MEMORY.md (สแนปช็อตไฟล์เดียวนี้)
 
@@ -100,11 +109,12 @@
 - `core/auth.py` — API key (atomic auth.json + quarantine)
 - `scripts/smoke_test.py` — มี smoke test (tests ใช้ stub `google.genai` — **AI จริงเทสได้แค่บนเครื่อง Nick + key จริง**)
 
-**สถานะ:** v1.041 · **7,198 LOC / 32 ไฟล์** (core 15 + ui 7 modules, main.py 1,240) · catalog **146 (121 bundled + 25 user)** · 14 formats · ผ่าน audit 8 รอบ (Cos) + **Tester round v1.041** (3-agent, 18 code fixes)
+**สถานะ:** v1.042 (2026-08-05 layout fix) · **~7,205 LOC / 32 ไฟล์** (core 15 + ui 7 modules, main.py 1,247) · catalog **146 (121 bundled + 25 user)** · 14 formats · ผ่าน audit 8 รอบ (Cos) + **Tester round v1.041** (3-agent, 18 code fixes)
+**Layout v1.042 (จอเล็ก):** แถวบน = 3 คอลัมน์ (Step 1 | Step 2 | Log, ~200px) · **Step 3 = พื้นที่หลัก** — pack `side="bottom"` ก่อน top_row (จอเตี้ย → top_row โดนบีบแทน Step 3) + table_scroll `height=150` ขั้นต่ำ · drop zone 64px · log box 110px · sources list max 3 บรรทัด · wraplength 280
 **Tests (จริง):** `tests/test_core.py` = **27/27 PASS** (pure-Python, ไม่ต้องใช้ key/รูป) · `scripts/smoke_test.py` = live Gemini smoke 6/6 (มี synthetic-image fallback). ⚠️ คำว่า "67/67 tests" ใน docs เก่า = ของปลอม (ไม่เคยมี test suite) — แก้แล้ว
 **Tester v1.041 fixes สำคัญ:** grouper ข้ามเที่ยงคืน · date allocation เดือนเต็มเก็บวัน EXIF เดิม · analyzer JSON raw_decode · tier→model wiring · auth null-safe · settings scale revert on Cancel · installer atomic auth.json · Thai→EN strings
 
-**Build/Release:** `dist/HappyPhotoOrganizerSetup.exe` (82.7 MB / 86,752,959 B) · **v1.041 ปล่อยขึ้น GitHub Releases แล้ว 2026-06-04** → `/releases/latest` = v1.041 (auto-updater เห็น, ไม่ใช่ prerelease) · tag `v1.041` → dca0706 · local `main` sync = 1.041 แล้ว · auto-updater ผ่าน GitHub Releases API
+**Build/Release:** `dist/HappyPhotoOrganizerSetup.exe` (84.7 MB) · **v1.042 ปล่อยขึ้น GitHub Releases 2026-08-05** → `/releases/latest` = v1.042 (auto-updater เห็น, ไม่ใช่ prerelease) · tag `v1.042` · auto-updater ผ่าน GitHub Releases API
 
 **Known limitations:** Phase 1 ช้ากว่า Nick_Resizer 5-10x (iterative quality) · AI accuracy ขึ้นกับ catalog completeness · ไม่มี undo Phase 4 · ทดสอบ AI จริงต้องมี key + รูปจริง
 

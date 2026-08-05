@@ -270,27 +270,30 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         self._update_tier_badge()
         self._poll_after_id = self.after(1000, self._poll_quota_badge)
 
-        # 2-column row: LEFT = Step 1 stacked on Step 2, RIGHT = Log (full height)
+        # 3-column row: Step 1 | Step 2 | Log — side-by-side so the top area
+        # stays short on small screens and Step 3 (the real work area) gets
+        # the rest of the window height.
         self.top_row = ctk.CTkFrame(self, fg_color="transparent")
-        self.top_row.pack(fill="x", padx=12, pady=(12, 6))
         self.top_row.grid_columnconfigure(0, weight=1, uniform="col")
         self.top_row.grid_columnconfigure(1, weight=1, uniform="col")
+        self.top_row.grid_columnconfigure(2, weight=1, uniform="col")
         self.top_row.grid_rowconfigure(0, weight=1)
-
-        # Left column wrapper — holds Step 1 (top) and Step 2 (bottom)
-        self.left_col = ctk.CTkFrame(self.top_row, fg_color="transparent")
-        self.left_col.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
-        self.left_col.grid_columnconfigure(0, weight=1)
 
         self._build_step1()
         self._build_step2()
         self._build_log()
         self._build_step3()
 
-    # Step 1: Input (LEFT column, TOP — compact)
+        # Pack order = shrink priority. Step 3 is packed BEFORE top_row so a
+        # short screen squeezes the top row, never Step 3 (which used to be
+        # packed last and collapsed to a sliver on small displays).
+        self.step3.pack(side="bottom", fill="both", expand=True, padx=12, pady=(0, 12))
+        self.top_row.pack(side="top", fill="x", padx=12, pady=(10, 6))
+
+    # Step 1: Input (column 1 of the top row)
     def _build_step1(self):
-        self.step1 = StepCard(self.left_col, 1, "Drop Photos or Folders")
-        self.step1.grid(row=0, column=0, sticky="nsew", pady=(0, 3))
+        self.step1 = StepCard(self.top_row, 1, "Drop Photos or Folders")
+        self.step1.grid(row=0, column=0, sticky="nsew", padx=(0, 4))
 
         body = self.step1.body
 
@@ -299,7 +302,7 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         self.drop_zone = ctk.CTkFrame(
             body, fg_color="#1A2538",
             border_color=COLOR_BG_INPUT, border_width=2,
-            corner_radius=10, height=96,
+            corner_radius=10, height=64,
         )
         self.drop_zone.pack(fill="x", pady=(2, 6))
         self.drop_zone.pack_propagate(False)
@@ -346,26 +349,26 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         self.sources_label = ctk.CTkLabel(
             body, text="No source selected", anchor="w", justify="left",
             font=("Segoe UI", 10), text_color=COLOR_MUTED,
-            wraplength=520,
+            wraplength=280,
         )
         self.sources_label.pack(fill="x", pady=(4, 0))
 
         self.dest_label = ctk.CTkLabel(
             body, text="Destination: —", anchor="w",
             font=("Segoe UI", 10), text_color=COLOR_MUTED,
-            wraplength=520,
+            wraplength=280,
         )
         self.dest_label.pack(fill="x", pady=(2, 0))
 
-    # Step 2: Workflow (LEFT column, BOTTOM — below Step 1)
+    # Step 2: Workflow (column 2 of the top row)
     def _build_step2(self):
-        self.step2 = StepCard(self.left_col, 2, "Workflow")
-        self.step2.grid(row=1, column=0, sticky="nsew", pady=(3, 0))
+        self.step2 = StepCard(self.top_row, 2, "Workflow")
+        self.step2.grid(row=0, column=1, sticky="nsew", padx=4)
 
         body = self.step2.body
 
         ctk.CTkLabel(
-            body, text="① Resize & Group  →  ② AI Tagging  →  ③ Review  →  ④ Rename",
+            body, text="① Resize & Group → ② AI Tag → ③ Review → ④ Rename",
             font=("Segoe UI", 10), text_color=COLOR_MUTED, anchor="w",
         ).pack(fill="x", pady=(0, 6))
 
@@ -411,17 +414,17 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         self.status_detail = ctk.CTkLabel(
             body, text="Ready", anchor="w",
             font=("Segoe UI", 10), text_color=COLOR_MUTED,
-            wraplength=520, justify="left",
+            wraplength=280, justify="left",
         )
         self.status_detail.pack(fill="x", pady=(2, 0))
 
         # ETA tracking
         self._phase_start: float | None = None
 
-    # Log Panel (RIGHT column — spans full height of Step 1 + Step 2)
+    # Log Panel (column 3 of the top row)
     def _build_log(self):
         log_card = ctk.CTkFrame(self.top_row, fg_color=COLOR_BG_CARD, corner_radius=10)
-        log_card.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
+        log_card.grid(row=0, column=2, sticky="nsew", padx=(4, 0))
 
         log_header = ctk.CTkFrame(log_card, fg_color="transparent")
         log_header.pack(fill="x", padx=10, pady=(8, 2))
@@ -443,14 +446,15 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
             text_color="#CBD5E1",
             font=("Consolas", 10),
             corner_radius=6,
+            height=110,  # small request — the step cards, not the log, set row height
         )
         self.log_box.pack(fill="both", expand=True, padx=10, pady=(0, 8))
         self.log_box.configure(state="disabled")
 
-    # Step 3: Review (full width, expand) — Commit Rename button on right
+    # Step 3: Review (full width — the main work area; packed in _build_ui
+    # before top_row so it always keeps its height on small screens)
     def _build_step3(self):
         self.step3 = StepCard(self, 3, "Review & Edit Names")
-        self.step3.pack(fill="both", expand=True, padx=12, pady=(0, 12))
 
         body = self.step3.body
 
@@ -476,7 +480,10 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         )
         self.phase4_btn.pack(side="right")
 
-        self.table_scroll = ctk.CTkScrollableFrame(body, fg_color=COLOR_BG, corner_radius=8)
+        self.table_scroll = ctk.CTkScrollableFrame(
+            body, fg_color=COLOR_BG, corner_radius=8,
+            height=150,  # guaranteed minimum — keeps Step 3 usable on short screens
+        )
         self.table_scroll.pack(fill="both", expand=True, pady=(0, 4))
 
     # ─── State / status ─────────────────────────
@@ -1036,9 +1043,9 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
                 total += 1
                 lines.append(f"[file] {p.name}")
         header = f"{len(self.source_paths)} source(s)  •  {total} photos total"
-        text = header + "\n" + "\n".join(lines[:6])
-        if len(lines) > 6:
-            text += f"\n   ... and {len(lines) - 6} more"
+        text = header + "\n" + "\n".join(lines[:3])
+        if len(lines) > 3:
+            text += f"\n   ... and {len(lines) - 3} more"
         self.sources_label.configure(text=text, text_color=COLOR_TEXT)
 
     def _pick_dest(self):
