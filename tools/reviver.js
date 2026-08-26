@@ -357,22 +357,57 @@ const solo = clusters.filter(cl => cl.firms.size === 1).flatMap(cl =>
 //    cleared จริง 6 รายการ ส่วนใหญ่คนละเรื่องกันในไฟล์เดียวกัน) และ under-report (พลาด conflict จริงที่
 //    A บอก "อย่าเพิ่มการตรวจตอนสตาร์ต" ขณะที่ B ยื่นว่า "มันขาด" เพราะ absence anchor ไม่มีเลขบรรทัด).
 //    ตอนนี้ต้อง **ข้อกล่าวอ้างซ้อนกัน** ด้วย ไม่ใช่แค่ไฟล์ใกล้กัน
-const STOP = new Set(['the','a','an','is','are','of','to','in','and','or','it','that','this','for','on','at','be','not','no','ที่','การ','ของ','ให้','ได้','แล้ว','เป็น','ไม่','จะ','กับ','และ','ใน','มี'])
-const toks = s => new Set(String(s || '').toLowerCase().split(/[^a-z0-9ก-๙_]+/).filter(w => w.length > 2 && !STOP.has(w)))
-const overlap = (a, b) => { const A = toks(a), B = toks(b); if (!A.size || !B.size) return 0
-  let n = 0; A.forEach(w => { if (B.has(w)) n++ }); return n / Math.min(A.size, B.size) }
-const CLAIM_HIT = 0.25
+// ⚠️ บั๊กรอบสาม (พบโดย reviver เอง บน SHIP-MONITORING 2026-08-26): เวอร์ชันก่อนตัดคำด้วย
+//    split(/[^a-z0-9ก-๙_]+/) — **ภาษาไทยไม่มีช่องว่างระหว่างคำ ทั้งวลีจึงกลายเป็นโทเค็นเดียว**
+//    overlap = 0 เสมอ ทั้งที่อินพุตจริงของตัวจับคู่คือภาษาไทยล้วน → conflict ถูกทิ้งหมด
+//    และ Math.min ทำให้ claim สั้นๆ ได้คะแนนเฟ้อ (2 โทเค็นตรง 1 = 0.5) = over-report กลับมาในรูปใหม่
+const STOP = new Set(['the','a','an','is','are','of','to','in','and','or','it','that','this','for','on','at','be','not','no'])
+const hasThai = s => /[฀-๿]/.test(String(s || ''))
+// ละติน: ตัดเป็นคำ · ไทย: ตัดเป็น 3-gram ตัวอักษร (จับ "ตอนสตาร์ต" ที่ซ้อนกันได้โดยไม่ต้องมีตัวตัดคำ)
+const toks = s => {
+  const raw = String(s || '').toLowerCase()
+  const out = new Set()
+  raw.split(/[^a-z0-9฀-๿_]+/).forEach(w => {
+    if (!w) return
+    if (hasThai(w)) { for (let i = 0; i + 3 <= w.length; i++) out.add(w.slice(i, i + 3)) }
+    else if (w.length > 2 && !STOP.has(w)) out.add(w)
+  })
+  return out
+}
+const overlap = (a, b) => {
+  const A = toks(a), B = toks(b)
+  if (!A.size || !B.size) return 0
+  let n = 0; A.forEach(w => { if (B.has(w)) n++ })
+  return n / ((A.size + B.size) / 2)      // ค่าเฉลี่ย ไม่ใช่ min — กันคะแนนเฟ้อจากฝั่งที่สั้นกว่า
+}
+const CLAIM_HIT = 0.18                    // ปรับลงเพราะ 3-gram ทำให้เซตใหญ่ขึ้น สัดส่วนซ้อนจึงต่ำกว่าคำเต็ม
+const FEW_TOKENS = 4                      // ฝั่งไหนโทเค็นน้อยกว่านี้ → ต้องอยู่จุดเดียวกันด้วย ห้ามตัดสินจากข้อความอย่างเดียว
 
+// ⛔ ตัวชี้วัดต้องไม่ fail-open: "conflicts: 0" อ่านได้สองแบบ — "ไม่มีข้อขัดแย้ง" กับ "ตัวจับคู่ใช้ไม่ได้"
+//    จึงต้องรายงาน **จำนวนคู่ที่เทียบ** และ **คู่ที่เกือบผ่าน** ด้วย ถ้าเทียบ 0 คู่ต้องดังออกมา
 const seenConflict = new Set()
 const conflicts = []
+const nearMiss = []
+let comparedPairs = 0, bothHaveTokens = 0
 allFindings.forEach(f => allCleared.forEach(c => {
   if (c.firm === f.firm) return
+  comparedPairs++
   const fText = `${f.title} ${f.problem}`
   const cText = `${c.claim || ''} ${c.what || ''}`
+  const fT = toks(fText), cT = toks(cText)
+  if (fT.size && cT.size) bothHaveTokens++
   const claimSim = overlap(fText, cText)
   const near = sameSpot(c.file, f.file)
-  // ต้องพูดถึงเรื่องเดียวกันจริง: ใกล้กัน+ข้อกล่าวอ้างซ้อน หรือ ข้อกล่าวอ้างซ้อนกันมากจนตำแหน่งไม่สำคัญ
-  if (!((near && claimSim >= CLAIM_HIT) || claimSim >= 0.5)) return
+  const few = Math.min(fT.size, cT.size) < FEW_TOKENS
+  // ต้องพูดถึงเรื่องเดียวกันจริง · ฝั่งที่โทเค็นน้อยต้องอยู่จุดเดียวกันด้วย ห้ามตัดสินจากข้อความอย่างเดียว
+  const hit = few ? (near && claimSim >= CLAIM_HIT)
+                  : ((near && claimSim >= CLAIM_HIT) || claimSim >= 0.45)
+  if (!hit) {
+    if (claimSim >= CLAIM_HIT * 0.6 || (near && claimSim > 0))
+      nearMiss.push({ file: f.file, filedBy: f.firm, clearedBy: c.firm, sim: Math.round(claimSim * 100),
+                      near, finding: f.title, clearedClaim: c.claim })
+    return
+  }
   const k = `${f.firm}|${c.firm}|${norm(f.title)}|${norm(c.claim || c.what)}`
   if (seenConflict.has(k)) return
   seenConflict.add(k)
@@ -381,6 +416,12 @@ allFindings.forEach(f => allCleared.forEach(c => {
                    clearedReason: c.whyNotAProblem,
                    match: near ? `จุดเดียวกัน + ข้อกล่าวอ้างซ้อน ${Math.round(claimSim*100)}%` : `ข้อกล่าวอ้างซ้อน ${Math.round(claimSim*100)}% (คนละตำแหน่ง)` })
 }))
+nearMiss.sort((a, b) => b.sim - a.sim)
+const matcherHealth =
+  comparedPairs === 0 ? '⚠️ ไม่ได้เทียบสักคู่ — ไม่มี findings หรือไม่มี cleared เลย (ไม่ใช่ "ไม่มีข้อขัดแย้ง")'
+  : bothHaveTokens === 0 ? `🔴 เทียบ ${comparedPairs} คู่ แต่ **ตัดโทเค็นไม่ได้เลยสักคู่** — ตัวจับคู่ใช้ไม่ได้กับข้อความชุดนี้ อย่าอ่าน conflicts:0 ว่า "ไม่มีข้อขัดแย้ง"`
+  : conflicts.length === 0 ? `✅ เทียบ ${comparedPairs} คู่ (มีโทเค็นทั้งสองฝั่ง ${bothHaveTokens}) — ไม่พบข้อขัดแย้งจริง · คู่ที่เกือบผ่าน ${nearMiss.length} คู่ (ดู nearMiss เพื่อปรับเกณฑ์)`
+  : `เทียบ ${comparedPairs} คู่ · เจอขัดกัน ${conflicts.length} · เกือบผ่านอีก ${nearMiss.length}`
 
 // ── ⑤ เจตนา/ขอบเขต ตรงกันไหม ──
 const intents = reports.map(r => ({ firm: r.firm, target: r.sheet?.header?.target || '(ไม่ระบุ)',
@@ -423,6 +464,8 @@ return {
 
   corroborated,
   solo,
+  matcherHealth,          // ⛔ อ่านตัวนี้ก่อน conflicts เสมอ — conflicts:0 อาจแปลว่า "ตัวจับคู่ใช้ไม่ได้"
+  nearMiss,               // คู่ที่เกือบผ่านเกณฑ์ พร้อม % ที่ได้ — ใช้ปรับ CLAIM_HIT จากข้อมูลจริง ไม่ใช่เดา
   conflicts,
   findings: allFindings,
   cleared: allCleared,
