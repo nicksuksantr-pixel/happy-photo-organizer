@@ -11,24 +11,31 @@
 
 ## How the `reviver` trigger executes this procedure
 
-`reviver` runs `reviver.js` through the Workflow tool: **exactly 3 review-only agents in parallel**,
-one per dimension group. Each agent reads both volumes from the project's `memory/`, then works
-this procedure over its own group. The count is enforced by the script (agent cap #16).
+`reviver` runs `reviver.js` through the Workflow tool: **exactly 3 review-only agents in parallel —
+three independent review FIRMS.** The count is enforced by the script (agent cap #16).
 
-| Lens | Owns dimensions | Its question |
-|---|---|---|
-| ① **Logic + state** | A, D | Does it do what it claims? |
-| ② **Failure + trust** | B, C | What happens when it doesn't? |
-| ③ **Consistency + gaps** | H, E, F, J (sweeps G, I) | Does it match the rest of the codebase, and what is missing? |
+> ⚠️ **They do not split the work.** Every firm gets the identical job and must walk **all 7 parts
+> and score all 10 dimensions A–J itself**. (An earlier design gave each agent a third of the
+> dimensions; Nick corrected it on 2026-08-26.) **Splitting the dimensions is distribution, not
+> verification — nobody would be checking anybody.** A cross-check means several parties do the
+> *same* work and you see whether the answers match.
 
-**Cross-checking is the point of running three.** Every lens returns two lists: `findings` and
-**`cleared`** (looked suspicious → checked → not a problem). The script then reports **`conflicts`**:
-a location one lens filed as a bug while another lens had cleared it. **Coddy resolves each conflict
-by opening the real code — never by siding with a lens.** A finding two lenses reach independently
-is high-confidence; a single-lens finding is verified before it is reported.
+**What gets compared afterwards** — this is why three is worth the cost:
 
-**Running solo?** The same procedure applies; you simply own all ten dimensions and there is no
-`conflicts` list to settle. The evidence gates in step 05 do not get cheaper.
+| Signal | Reads as |
+|---|---|
+| **`scoreAgreement`** | All three scored the same → trustworthy. Differ by ≥2 → **someone missed something, or saw something the others didn't. Find out which.** |
+| **`dimensionComparison`** | Per dimension, what each firm scored. A dimension they disagree on is where you open the code personally. |
+| **`thoroughness`** | Catches a firm that worked sloppily — no `[TRACE]`, never found callers or siblings, never said which instance it read, left `[Q]` open, scored fewer than 10 dimensions. Its verdict then carries less weight, **and that must be said in the report.** |
+| **`conflicts`** | One firm filed a bug where another filed a `cleared`. **Resolve by opening the real code, never by siding with a firm.** |
+| **`corroborated` / `solo`** | Reached by 2+ firms independently = high confidence. Reached by one = verify before reporting. |
+| **`intentAgreement`** | If the firms read the intent differently, the task text is ambiguous — every finding resting on it is suspect. |
+
+The final score reported to Nick is **the lowest verified dimension**, never the average of the
+three firms' scores.
+
+**Running solo?** The same procedure applies — you own all ten dimensions either way; there is
+simply no second opinion to compare against. The evidence gates in step 05 do not get cheaper.
 
 **`reviver` never auto-fixes** (unlike Tester/supertester). It produces a graded review; fixing is a
 separate decision.
