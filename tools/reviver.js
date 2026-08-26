@@ -267,9 +267,29 @@ const reports = (await parallel(FIRMS.map(f => () =>
   agent(buildPrompt(f), { label:`บริษัท ${f}`, phase:'รีวิว', schema: REPORT })
 ))).filter(Boolean)
 
-const norm  = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '')
-const fileOf = s => norm(String(s || '').split('@')[0].split(':')[0])
-const sev   = { BLOCKER:0, MAJOR:1, MINOR:2 }
+const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '')
+const sev  = { BLOCKER:0, MAJOR:1, MINOR:2 }
+
+// ⚠️ บั๊กที่เจอตอนรันจริงครั้งแรก (SHIP-MONITORING 2026-08-26): เดิมจับคู่ด้วย "ชื่อไฟล์" อย่างเดียว
+//    (ตัดที่ ':') → ทุก finding ใน bridge.py ไปชนกับทุก cleared ใน bridge.py = conflicts ปลอม ~100 แถว
+//    และ corroborated ขึ้น A+B+C หมดทุกอัน. ต้องจับที่ **ไฟล์ + บรรทัดที่ใกล้กัน** เท่านั้น
+const normPath = s => String(s || '').toLowerCase().replace(/\\/g, '/').replace(/[^a-z0-9/._-]+/g, '')
+const locOf = s => {
+  const raw = String(s || '').trim()
+  const head = raw.split(/\s+[@(—·]|\s{2,}/)[0].trim()   // ตัดคำอธิบายท้าย: "@sha", "(ทางเรียก: ...)", "— absence anchor"
+  const m = head.match(/^(.*?):(\d+)/)
+  if (m) return { path: normPath(m[1]), line: parseInt(m[2], 10) }
+  return { path: normPath(head.split(':')[0]), line: null, label: norm(raw) }
+}
+const NEAR = 30   // บรรทัดห่างกันไม่เกินนี้ = ถือว่าพูดถึงจุดเดียวกัน
+const sameSpot = (a, b) => {
+  const x = locOf(a), y = locOf(b)
+  if (!x.path || x.path !== y.path) return false
+  if (x.line !== null && y.line !== null) return Math.abs(x.line - y.line) <= NEAR
+  // ไม่มีเลขบรรทัด (เช่น absence anchor / ชื่อเทสต์) → ต้องเป็นข้อความเดียวกันจริงๆ ถึงนับ
+  return (x.label || '') === (y.label || '')
+}
+const spotKey = s => { const l = locOf(s); return l.line === null ? `${l.path}#${l.label || ''}` : `${l.path}:${Math.round(l.line / NEAR)}` }
 
 // ── ผลรวมทุกบริษัท ──
 const allFindings = reports.flatMap(r => (r.findings || []).map(f => ({ ...f, firm: r.firm })))
@@ -310,23 +330,34 @@ const dimensionComparison = Object.keys(byDim).sort().map(k => {
 const missingDims = reports.filter(r => (r.dimensionScores || []).length < 10)
   .map(r => `บริษัท ${r.firm} ให้คะแนนแค่ ${(r.dimensionScores||[]).length}/10 มิติ`)
 
-// ── ③ finding: กี่บริษัทเจอตรงกัน ──
-const seen = {}
-allFindings.forEach(f => { const k = fileOf(f.file); (seen[k] = seen[k] || new Set()).add(f.firm) })
-const corroborated = []
-const solo = []
+// ── ③ finding: กี่บริษัทเจอ "จุดเดียวกัน" (ไฟล์ + บรรทัดใกล้กัน ไม่ใช่แค่ชื่อไฟล์) ──
+const clusters = []                       // [{ members:[finding], firms:Set }]
 allFindings.forEach(f => {
-  const firms = [...(seen[fileOf(f.file)] || new Set())]
-  const row = { severity: f.severity, title: f.title, file: f.file, dimension: f.dimension, firms, firm: f.firm }
-  if (firms.length > 1) { if (!corroborated.some(c => c.file === f.file && c.title === f.title)) corroborated.push(row) }
-  else solo.push(row)
+  const hit = clusters.find(cl => cl.members.some(m => sameSpot(m.file, f.file)))
+  if (hit) { hit.members.push(f); hit.firms.add(f.firm) }
+  else clusters.push({ members: [f], firms: new Set([f.firm]) })
 })
+const corroborated = clusters.filter(cl => cl.firms.size > 1).map(cl => {
+  const worst = cl.members.slice().sort((a,b) => (sev[a.severity] ?? 9) - (sev[b.severity] ?? 9))[0]
+  return { severity: worst.severity, file: worst.file, dimension: worst.dimension,
+           firms: [...cl.firms].sort(),
+           titles: cl.members.map(m => `${m.firm}: ${m.title}`) }
+})
+const solo = clusters.filter(cl => cl.firms.size === 1).flatMap(cl =>
+  cl.members.map(f => ({ severity: f.severity, title: f.title, file: f.file, dimension: f.dimension, firm: f.firm })))
 
-// ── ④ ขัดกัน: บริษัทหนึ่งยื่นเป็นบั๊ก อีกบริษัทเคลียร์ทิ้ง ──
-const conflicts = allFindings.flatMap(f => allCleared
-  .filter(c => c.firm !== f.firm && fileOf(c.file) && fileOf(c.file) === fileOf(f.file))
-  .map(c => ({ file: f.file, filedBy: f.firm, severity: f.severity, finding: f.title,
-               clearedBy: c.firm, clearedWhat: c.what, clearedReason: c.whyNotAProblem })))
+// ── ④ ขัดกัน: บริษัทหนึ่งยื่นเป็นบั๊ก "ตรงจุดเดียวกัน" ที่อีกบริษัทเคลียร์ทิ้ง (dedupe แล้ว) ──
+const seenConflict = new Set()
+const conflicts = []
+allFindings.forEach(f => allCleared.forEach(c => {
+  if (c.firm === f.firm) return
+  if (!sameSpot(c.file, f.file)) return
+  const k = `${spotKey(f.file)}|${f.firm}|${c.firm}|${norm(f.title)}`
+  if (seenConflict.has(k)) return
+  seenConflict.add(k)
+  conflicts.push({ file: f.file, filedBy: f.firm, severity: f.severity, finding: f.title,
+                   clearedBy: c.firm, clearedAt: c.file, clearedWhat: c.what, clearedReason: c.whyNotAProblem })
+}))
 
 // ── ⑤ เจตนา/ขอบเขต ตรงกันไหม ──
 const intents = reports.map(r => ({ firm: r.firm, target: r.sheet?.header?.target || '(ไม่ระบุ)',
