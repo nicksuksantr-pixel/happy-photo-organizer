@@ -81,8 +81,11 @@ const REPORT = { type:'object',
       } } },
 
     cleared:{ type:'array', description:'[DROP] ที่ดูน่าสงสัยแต่ตรวจแล้วไม่ใช่ปัญหา — ⭐ ใช้เทียบข้ามบริษัท', items:{ type:'object',
-      required:['what','file','whyNotAProblem'], properties:{
-        what:{ type:'string' }, file:{ type:'string' }, whyNotAProblem:{ type:'string' },
+      required:['what','file','whyNotAProblem','claim'], properties:{
+        what:{ type:'string' },
+        file:{ type:'string' },
+        whyNotAProblem:{ type:'string' },
+        claim:{ type:'string', description:'⭐ **ข้อกล่าวอ้างที่คุณกำลังปฏิเสธ** เขียนเป็นประโยคเดียวแบบที่คนยื่นบั๊กจะเขียน (เช่น "การส่ง OFF ไปยังรีเลย์ที่ถูกปฏิเสธ ตัดพัลส์ STOP ของกว้าน") — ใช้จับคู่ข้ามบริษัทว่าใครเคลียร์สิ่งที่อีกคนยื่น ⛔ ห้ามเขียนกว้างๆ แบบ "โค้ดส่วนนี้โอเค"' },
       } } },
 
     notCovered:{ type:'string', description:'สิ่งที่ไม่ได้ตรวจ + เพราะอะไร (รวม UNRESOLVED Q) ⛔ ห้ามเว้นว่าง' },
@@ -223,6 +226,9 @@ const buildPrompt = (firm) => [
   `   1 = ห้าม merge (ทำของเดิมพัง หรือ **สมมติฐานตั้งต้นผิด** — ยิ่งตรรกะเนียนยิ่งอันตราย)`,
   `   **คะแนนรวม = มิติที่ต่ำที่สุด ห้ามเฉลี่ยเด็ดขาด** — ช่องโหว่ 1 จุดไม่ถูกหักล้างด้วยโค้ดสวยอีก 9 จุด · ระบุว่ามิติไหนกดคะแนน`,
   `**6.3 \`cleared\`** = ตรวจแล้วไม่ต้องแก้ — **มีค่าเท่ากับของที่เจอ** เพราะกันไม่ให้ใครไปแก้ของที่ไม่ต้องแก้ (= เพิ่มความเสี่ยงฟรี) และกันรอบหน้าเสียเวลาซ้ำ`,
+  `   ⭐ **ทุกรายการต้องมีช่อง \`claim\`** — เขียน **ข้อกล่าวอ้างที่คุณกำลังปฏิเสธ** เป็นประโยคเดียว **แบบที่คนยื่นบั๊กจะเขียน** (เช่น *"การส่ง OFF ไปยังรีเลย์ที่ถูกปฏิเสธ ตัดพัลส์ STOP ของกว้าน"*) ไม่ใช่สรุปสิ่งที่คุณตรวจ`,
+  `   เหตุผล: อีกสองบริษัทอาจยื่นข้อกล่าวอ้างนั้นเป็นบั๊ก — \`claim\` คือสิ่งที่ใช้จับคู่ว่าใครเคลียร์สิ่งที่ใครยื่น **ถ้าเขียนกว้างๆ ("โค้ดส่วนนี้โอเค") การตรวจทานข้ามบริษัทจะพัง**`,
+  `   ⛔ ถ้าคุณ "เคลียร์" เพราะคิดว่าบางอย่าง **ไม่ควรถูกเพิ่มเข้ามา** (เช่น "ไม่ต้องเพิ่มการตรวจตอนสตาร์ต") ให้เขียน claim เป็นข้อกล่าวอ้างฝั่งตรงข้ามให้ชัด — นั่นคือจุดที่ความเห็นขัดกันจริงและมีค่าที่สุด`,
   `**6.4 \`notCovered\`** = สิ่งที่ไม่ได้ตรวจ + เพราะอะไร (รวม out-of-scope + ที่ตัดทิ้ง + มิติ N/A + **ทุก Q ที่ UNRESOLVED**) ⛔ ห้ามเว้นว่าง`,
   ``,
   `═══ พาท 07 — ปิดงาน ═══`,
@@ -346,17 +352,34 @@ const corroborated = clusters.filter(cl => cl.firms.size > 1).map(cl => {
 const solo = clusters.filter(cl => cl.firms.size === 1).flatMap(cl =>
   cl.members.map(f => ({ severity: f.severity, title: f.title, file: f.file, dimension: f.dimension, firm: f.firm })))
 
-// ── ④ ขัดกัน: บริษัทหนึ่งยื่นเป็นบั๊ก "ตรงจุดเดียวกัน" ที่อีกบริษัทเคลียร์ทิ้ง (dedupe แล้ว) ──
+// ── ④ ขัดกัน: บริษัทหนึ่งยื่นเป็นบั๊กในสิ่งที่อีกบริษัทเคลียร์ทิ้ง ──
+// ⚠️ บั๊กรอบสอง (SHIP-MONITORING 2026-08-26): เดิมจับที่ "ตำแหน่ง" อย่างเดียว → over-report (20 แถวจาก
+//    cleared จริง 6 รายการ ส่วนใหญ่คนละเรื่องกันในไฟล์เดียวกัน) และ under-report (พลาด conflict จริงที่
+//    A บอก "อย่าเพิ่มการตรวจตอนสตาร์ต" ขณะที่ B ยื่นว่า "มันขาด" เพราะ absence anchor ไม่มีเลขบรรทัด).
+//    ตอนนี้ต้อง **ข้อกล่าวอ้างซ้อนกัน** ด้วย ไม่ใช่แค่ไฟล์ใกล้กัน
+const STOP = new Set(['the','a','an','is','are','of','to','in','and','or','it','that','this','for','on','at','be','not','no','ที่','การ','ของ','ให้','ได้','แล้ว','เป็น','ไม่','จะ','กับ','และ','ใน','มี'])
+const toks = s => new Set(String(s || '').toLowerCase().split(/[^a-z0-9ก-๙_]+/).filter(w => w.length > 2 && !STOP.has(w)))
+const overlap = (a, b) => { const A = toks(a), B = toks(b); if (!A.size || !B.size) return 0
+  let n = 0; A.forEach(w => { if (B.has(w)) n++ }); return n / Math.min(A.size, B.size) }
+const CLAIM_HIT = 0.25
+
 const seenConflict = new Set()
 const conflicts = []
 allFindings.forEach(f => allCleared.forEach(c => {
   if (c.firm === f.firm) return
-  if (!sameSpot(c.file, f.file)) return
-  const k = `${spotKey(f.file)}|${f.firm}|${c.firm}|${norm(f.title)}`
+  const fText = `${f.title} ${f.problem}`
+  const cText = `${c.claim || ''} ${c.what || ''}`
+  const claimSim = overlap(fText, cText)
+  const near = sameSpot(c.file, f.file)
+  // ต้องพูดถึงเรื่องเดียวกันจริง: ใกล้กัน+ข้อกล่าวอ้างซ้อน หรือ ข้อกล่าวอ้างซ้อนกันมากจนตำแหน่งไม่สำคัญ
+  if (!((near && claimSim >= CLAIM_HIT) || claimSim >= 0.5)) return
+  const k = `${f.firm}|${c.firm}|${norm(f.title)}|${norm(c.claim || c.what)}`
   if (seenConflict.has(k)) return
   seenConflict.add(k)
   conflicts.push({ file: f.file, filedBy: f.firm, severity: f.severity, finding: f.title,
-                   clearedBy: c.firm, clearedAt: c.file, clearedWhat: c.what, clearedReason: c.whyNotAProblem })
+                   clearedBy: c.firm, clearedAt: c.file, clearedClaim: c.claim, clearedWhat: c.what,
+                   clearedReason: c.whyNotAProblem,
+                   match: near ? `จุดเดียวกัน + ข้อกล่าวอ้างซ้อน ${Math.round(claimSim*100)}%` : `ข้อกล่าวอ้างซ้อน ${Math.round(claimSim*100)}% (คนละตำแหน่ง)` })
 }))
 
 // ── ⑤ เจตนา/ขอบเขต ตรงกันไหม ──
