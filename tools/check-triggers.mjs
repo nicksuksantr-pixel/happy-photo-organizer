@@ -281,6 +281,11 @@ for (const [file, re, want, why] of [
   // permits a 4th digit is licensing a fleet-strand. It reached both files and had to be cut twice.
   ['command_pattern.md', /4th place is allowed|fourth place is allowed \(`vX\.NNNN`\)(?!" )/, false, '#14.7 still permits a 4th digit — the comparator cannot order it'],
   ['nick-master-workflow.md', /A 4th place is allowed/, false, 'the brief still permits a 4th digit (#14.7)'],
+  // #27's housekeeping half: `clean` must carry the tidy report, and it must NOT be a 5th gate —
+  // a broken bin listing may never block a code review. Both halves reach all three documents.
+  ['clean.js', /housekeepingWarning/, true, 'clean.js drops the housekeeping report silently instead of flagging it'],
+  ['command_pattern.md', /`tidy` must stay runnable alone/, true, '#27 omits that tidy must still run on its own'],
+  ['nick-master-workflow.md', /tidy\.mjs --project/, true, 'the brief omits the housekeeping step of #27'],
 ]) {
   const p = path.join(DIR, file)
   const present = fs.existsSync(p) && re.test(fs.readFileSync(p, 'utf8'))
