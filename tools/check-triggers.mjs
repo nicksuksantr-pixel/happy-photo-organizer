@@ -277,6 +277,10 @@ for (const [file, re, want, why] of [
   // came back truncated. maxLength turns that into a schema error the model can read and correct.
   ['reviver.js', /maxLength/, true, 'the schema has no maxLength — over-long output returns unparseable JSON, not a fixable error'],
   ['clean.js', /maxLength/, true, 'the schema has no maxLength — same truncation death as reviver'],
+  // #14.7: `vX.NNNN` parses to the same tuple as `vX.NNN` (_parse truncates to 3), so any doc that
+  // permits a 4th digit is licensing a fleet-strand. It reached both files and had to be cut twice.
+  ['command_pattern.md', /4th place is allowed|fourth place is allowed \(`vX\.NNNN`\)(?!" )/, false, '#14.7 still permits a 4th digit — the comparator cannot order it'],
+  ['nick-master-workflow.md', /A 4th place is allowed/, false, 'the brief still permits a 4th digit (#14.7)'],
 ]) {
   const p = path.join(DIR, file)
   const present = fs.existsSync(p) && re.test(fs.readFileSync(p, 'utf8'))
