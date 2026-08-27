@@ -52,7 +52,11 @@ let failed = 0, passed = 0
 const fail = m => { console.log('  ✗ ' + m); failed++ }
 const ok = m => { passed++; say('  ✓ ' + m) }
 
-const REVIEW = ['tester.js', 'supertester.js', 'supertester-security.js', 'reviver.js']
+// clean.js belongs in REVIEW: it is a 3-firm, read-only, report-only script and carries the same
+// contract (real agent count, notCovered required, read-only Bash + the import warning, a degraded STOP).
+// Added the day it was written (#27, 2026-08-27) rather than "later" - a script the guard does not
+// know about is a script nothing protects, which is the whole reason this file exists.
+const REVIEW = ['tester.js', 'supertester.js', 'supertester-security.js', 'reviver.js', 'clean.js']
 const ALL = [...REVIEW, 'lucifer.js']
 const ROUNDS = ['supertester.js', 'supertester-security.js']
 const read = f => fs.readFileSync(path.join(DIR, f), 'utf8')

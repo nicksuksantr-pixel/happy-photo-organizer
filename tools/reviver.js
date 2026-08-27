@@ -35,8 +35,19 @@ const DIMENSION_LIST = 'A ความถูกต้อง · B พฤติก
 //    "output schema too large to classify safely" → ทั้ง 3 บริษัทตายก่อนเริ่ม.
 //    ฉบับนี้ = โครงแบน + ไม่มี description (คำสอนทุกข้อย้ายไปอยู่ใน "รูปแบบผลลัพธ์" ท้าย prompt แทน —
 //    เนื้อหาการรีวิวเท่าเดิมทุกประการ) · ตัว aggregation ด้านล่างอ่าน field แบนพวกนี้ตรงๆ
+// ⛔ ความยาว คือสิ่งที่ฆ่าบริษัท ไม่ใช่จำนวนช่อง (พิสูจน์จาก transcript จริง 2026-08-27 รอบ SM updater)
+// ข้อความจริงที่ harness ตอบกลับคือ **"could not be parsed as JSON"** ไม่ใช่ "ไม่ตรงสคีมา":
+//   บริษัท A ส่ง 67,609 → 55,009 → 57,206 bytes · บริษัท B ส่ง 68,134 → 36,288 → 48,145 · พังทุกครั้ง
+//   บริษัท C ส่ง 56 KB ผ่าน (ครั้งแรกพลาดสคีมาจริงๆ แล้วแก้ได้)
+// = ผลลัพธ์ยาวเกินโควตา output ต่อคำตอบ → ถูกตัดกลางประโยค → วงเล็บปิดไม่ครบ → parse ไม่ได้ →
+//   ลองใหม่ก็ยาวอีก → ครบ 5 ครั้งตาย. ภาษาไทยกินโทเค้นต่ออักษรสูง และตอนนั้น context อยู่ที่ 200-240K แล้ว
+// ⚠ นี่คือเหตุผลที่การไล่ลด `required` 21→8 สองรอบก่อนหน้า **ไม่ช่วยเลย** — แก้ผิดที่มาตลอด
+// วิธีที่ได้ผลคือ **ผูก maxLength**: เกินแล้วได้ error แบบ "ไม่ตรงสคีมา" ซึ่งโมเดลอ่านรู้เรื่องและแก้ได้
+//   ต่างจาก JSON ที่ถูกตัด ซึ่งมันไม่มีทางรู้ว่าต้องแก้อะไร
+// ❌ ห้ามถอด maxLength ออก · จะเพิ่มช่องใหม่ ต้องผูกความยาวมาด้วยเสมอ
 const STR = { type:'string' }
-const ARR = { type:'array', items:{ type:'string' } }
+const S = n => ({ type:'string', maxLength: n })
+const ARR = { type:'array', items:{ type:'string', maxLength: 240 }, maxItems: 12 }
 const REPORT = { type:'object',
   // ⚠ 2026-08-27 (รอบ 2): required เดิม 21 ช่อง → **2 ใน 3 บริษัทตายด้วย "StructuredOutput retry cap (5)
   // exceeded — 5 failed calls with no valid output"** คือทำสคีมาให้ถูกไม่ได้แม้ลอง 5 ครั้ง = เครื่องมือ
@@ -48,27 +59,29 @@ const REPORT = { type:'object',
   required:['verdictSummary','dimensionScores','overallScore','overallScoreFrom','findings','cleared','notCovered','confidence'],
   properties:{
     firm: STR,
-    verdictSummary: STR,
-    target: STR,
-    intent: STR,
+    verdictSummary: S(1200),
+    target: S(500),
+    intent: S(400),
     intentTag: { type:'string', enum:['STATED','INFERRED','ASSUMED'] },
-    scopeNotes: STR,
+    scopeNotes: S(700),
     entryPoints: ARR,
     layers: ARR,
     callers: ARR,
     siblings: ARR,
-    instances: STR,
+    instances: S(400),
     trace: ARR,
     questions: ARR,
     questionsResolved: ARR,
-    dimensionScores:{ type:'array', items:{ type:'object',
+    // 10 มิติ × ข้อความยาว = ก้อนที่ใหญ่ที่สุดในรายงาน · ผูกสั้นไว้ แล้วเขียนยาวได้ใน overallScoreFrom
+    // เฉพาะมิติที่กดคะแนน — ซึ่งเป็นมิติเดียวที่ Coddy ต้องอ่านละเอียดอยู่แล้ว
+    dimensionScores:{ type:'array', maxItems: 10, items:{ type:'object',
       required:['dimension','score','why','evidence'],
-      properties:{ dimension: STR, score:{ type:'integer', minimum:1, maximum:5 }, why: STR, evidence: STR } } },
+      properties:{ dimension: S(60), score:{ type:'integer', minimum:1, maximum:5 }, why: S(450), evidence: S(300) } } },
     // ผูกช่วง 1-5 เหมือน lucifer REVIEW (reviver #26 รอบ 3 · บริษัท B · 2026-08-27): เดิมเป็น number เปล่าๆ
     // ตัวรวมผลกรอง `n > 0` ทิ้ง → คะแนน 0 จะถูกอ่านว่า "บริษัทนั้นไม่ได้ให้คะแนน" ทั้งที่ให้มาแล้ว
     // = รายงานว่ารันไม่ครบทั้งที่ครบ ซึ่งเป็นบั๊กตระกูลเดียวกับที่รอบนี้ตามล้างทั้งวัน แค่กลับด้าน
     overallScore:{ type:'integer', minimum:1, maximum:5 },
-    overallScoreFrom: STR,
+    overallScoreFrom: S(600),
     findings:{ type:'array', items:{ type:'object',
       // เหลือ 5 ช่องที่ทำให้ finding "เป็น finding" ตามรูบริค (ไม่มี failureScenario = ไม่ใช่ finding อย่าทัก)
       // ที่เหลือยังขอครบใน prompt แต่ไม่ hard-fail — reviver #26 รอบ 3 · บริษัท B: F15 ลด required ชั้นบน
@@ -76,14 +89,17 @@ const REPORT = { type:'object',
       // (คือสาเหตุที่ 2 ใน 3 บริษัทตายด้วย StructuredOutput retry cap รอบก่อน)
       required:['severity','title','file','problem','failureScenario'],
       properties:{ severity:{ type:'string', enum:['BLOCKER','MAJOR','MINOR'] },
-        title: STR, file: STR, dimension: STR, problem: STR, failureScenario: STR,
-        evidence: STR, gatesPassed: STR, suggestedFix: STR, blastRadius: STR } } },
-    cleared:{ type:'array', items:{ type:'object',
+        title: S(140), file: S(200), dimension: S(60), problem: S(600), failureScenario: S(800),
+        evidence: S(600), gatesPassed: S(400), suggestedFix: S(500), blastRadius: S(350) } },
+      // ⚠ maxItems ที่นี่ = การตัดของจริงทิ้ง ไม่ใช่แค่ตัดข้อความ → prompt สั่งไว้ว่าถ้าเกิน
+      // ให้ยื่นที่ร้ายแรงที่สุดก่อน แล้ว **นับที่เหลือลง notCovered** — ห้ามหายเงียบ
+      maxItems: 12 },
+    cleared:{ type:'array', maxItems: 12, items:{ type:'object',
       required:['what','file','whyNotAProblem','claim'],
-      properties:{ what: STR, file: STR, whyNotAProblem: STR, claim: STR } } },
-    notCovered: STR,
-    confidence: STR,
-    crossProjectLesson: STR,
+      properties:{ what: S(160), file: S(200), whyNotAProblem: S(450), claim: S(300) } } },
+    notCovered: S(1500),
+    confidence: S(900),
+    crossProjectLesson: S(700),
   } }
 
 const scopeLine = target
@@ -280,6 +296,17 @@ const buildPrompt = (firm) => [
   `  • \`findings[].file\` = "path:line @ sha" · ของที่หายไป (มิติ J) ใช้ absence anchor (path ที่ควรมีแต่ไม่มี) · \`gatesPassed\` = ผ่านด่าน 1/2/5 อย่างไร + ผลด่าน 3/4`,
   `  • \`cleared[].claim\` = ข้อกล่าวอ้างที่คุณปฏิเสธ **ประโยคเดียวแบบที่คนยื่นบั๊กจะเขียน** (ดู 6.3 — ห้ามกว้างๆ)`,
   `  • \`crossProjectLesson\` ไม่มีใส่ "-"`,
+  ``,
+  `═══ 📏 งบความยาว — อ่านก่อนเริ่มเขียนผลลัพธ์ ═══`,
+  `**ผลลัพธ์ทั้งก้อนต้องไม่เกิน ~30 KB** · เกินแล้วมันจะถูกตัดกลางประโยค กลายเป็น JSON ที่อ่านไม่ออก`,
+  `แล้ว **ทั้งบริษัทของคุณจะหายไปจากรายงาน** — งานที่ทำมาทั้งหมดสูญเปล่า ไม่มีใครได้อ่านสักบรรทัด`,
+  `(เกิดขึ้นจริง 2026-08-27: 2 ใน 3 บริษัทส่ง 36-68 KB แล้วตายทั้งคู่ · บริษัทที่รอดส่งสั้นกว่า)`,
+  `  • ทุกช่องมี \`maxLength\` ผูกไว้ **เขียนให้อยู่ในนั้นตั้งแต่แรก** อย่าเขียนยาวแล้วหวังว่าจะผ่าน`,
+  `  • \`dimensionScores[].why\` คือก้อนที่ใหญ่ที่สุด (10 อัน) — **มิติที่ให้ 4-5 เขียน 1 ประโยคพอ**`,
+  `    เก็บคำอธิบายยาวไว้ให้ **มิติที่กดคะแนน** เท่านั้น ซึ่งเป็นมิติเดียวที่คนอ่านต้องการรายละเอียด`,
+  `  • **ตัดคำ ไม่ใช่ตัดงาน** — เดินให้ครบ 7 พาท 10 มิติเหมือนเดิม แค่รายงานให้กระชับ`,
+  `  • ถ้ามี finding เกิน 12 ข้อ: ยื่นที่ร้ายแรงที่สุด 12 ข้อ แล้ว **นับที่เหลือลง \`notCovered\`**`,
+  `    ("อีก N ข้อระดับ MINOR ที่ยังไม่ได้ยื่น: <หัวข้อสั้นๆ>") — ห้ามให้หายเงียบ`,
 ].join('\n')
 
 phase('รีวิว')
@@ -535,6 +562,15 @@ const thoroughness = reports.map(r => {
 
 log(`reviver เสร็จ: ${reports.length}/3 บริษัท · คะแนน ${firmScores.map(f=>f.firm+'='+f.overall).join(' ')} · ${scoreAgreement.replace(/[✅🟡🔴]/g,'').trim()} · findings ${allFindings.length} (ตรงกัน ${corroborated.length} · เดี่ยว ${solo.length}) · ขัดกัน ${conflicts.length}`)
 
+// ⚠ maxItems ที่เพิ่งผูกไว้ (findings 12 · cleared 12) แก้ปัญหาหนึ่งแล้วเปิดอีกปัญหาหนึ่ง:
+// บริษัทที่เจอ 20 ข้อจะยื่นมา 12 ข้อ แล้ว "12" หน้าตาเหมือนจำนวนเต็มทุกประการ = การตัดขอบเขตแบบเงียบ
+// ซึ่งรูบริคเรียกว่า "ข้อบกพร่องของตัวรีวิวเอง" · prompt สั่งให้นับที่เหลือลง notCovered แต่คำสั่งไม่ใช่กลไก
+// → ชนเพดานพอดี = ธงให้ Coddy ไปอ่าน notCovered ของบริษัทนั้นก่อนสรุปว่า "เจอเท่านี้"
+const FINDINGS_CAP = 12, CLEARED_CAP = 12
+const capHit = reports
+  .filter(r => (r.findings || []).length >= FINDINGS_CAP || (r.cleared || []).length >= CLEARED_CAP)
+  .map(r => `บริษัท ${r.firm}: findings ${(r.findings || []).length}/${FINDINGS_CAP} · cleared ${(r.cleared || []).length}/${CLEARED_CAP}`)
+
 return {
   // ⛔ คืนจำนวน "จริง" ไม่ใช่จำนวนที่ตั้งใจเปิด (audit ตัวเอง 2026-08-27 · #16 FAIL=STOP)
   // เดิมคืน FIRMS.length = 3 เสมอ ทั้งที่ .filter(Boolean) ทิ้งบริษัทที่ตายไปเงียบๆ — รายงาน 2 บริษัท
@@ -545,6 +581,11 @@ return {
   degraded: reports.length < FIRMS.length,
   deadFirms,
   crossCheckValid: reports.length >= 2,
+  capHit,                 // ชนเพดาน maxItems = อาจมีของที่ไม่ได้ยื่น → ไปอ่าน notCovered ของบริษัทนั้น
+  capWarning: capHit.length
+    ? `⚠ ${capHit.length} บริษัทยื่นข้อเสนอชนเพดานพอดี (${capHit.join(' · ')}) — ` +
+      'ตัวเลขนี้อาจไม่ใช่ "ทั้งหมดที่เจอ" แต่คือ "เท่าที่ยื่นได้" · อ่าน notCovered ของบริษัทนั้นก่อนสรุปจำนวน'
+    : '',
   degradedWarning: reports.length < FIRMS.length
     ? `⚠ ได้ผลแค่ ${reports.length}/${FIRMS.length} บริษัท (ขาด ${deadFirms.join(', ')}) — ` +
       (reports.length === 0
