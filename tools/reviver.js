@@ -28,74 +28,50 @@ if (!workdir)
 
 const DIMENSION_LIST = 'A ความถูกต้อง · B พฤติกรรมตอนพัง · C เส้นแบ่งความเชื่อถือ · D สถานะและข้อมูล · E สัญญา/อินเทอร์เฟซ · F เทสต์ · G อ่านออก/ดูแลต่อ · H ความสอดคล้อง · I ประสิทธิภาพ · J สิ่งที่หายไป'
 
+// ⚠️ 2026-08-27: schema ฉบับเดิม (ซ้อน 4 ชั้น + คำอธิบายไทยยาวทุก field) โดน harness ปฏิเสธ
+//    "output schema too large to classify safely" → ทั้ง 3 บริษัทตายก่อนเริ่ม.
+//    ฉบับนี้ = โครงแบน + ไม่มี description (คำสอนทุกข้อย้ายไปอยู่ใน "รูปแบบผลลัพธ์" ท้าย prompt แทน —
+//    เนื้อหาการรีวิวเท่าเดิมทุกประการ) · ตัว aggregation ด้านล่างอ่าน field แบนพวกนี้ตรงๆ
+const STR = { type:'string' }
+const ARR = { type:'array', items:{ type:'string' } }
 const REPORT = { type:'object',
-  required:['firm','verdictSummary','sheet','dimensionScores','overallScore','overallScoreFrom','findings','cleared','notCovered','confidence'],
+  required:['firm','verdictSummary','target','intent','intentTag','scopeNotes','entryPoints','layers','callers','siblings','instances','trace','questions','questionsResolved','dimensionScores','overallScore','overallScoreFrom','findings','cleared','notCovered','confidence'],
   properties:{
-    firm:            { type:'string', description:'ชื่อบริษัทที่ได้รับมอบหมาย (A/B/C)' },
-    verdictSummary:  { type:'string', description:'3-6 ประโยค: รีวิวอะไร เห็นอะไร สรุปว่าอย่างไร' },
-
-    sheet: { type:'object', required:['header','map','trace','questions','questionsResolved'], properties:{
-      header: { type:'object', required:['target','intent','intentTag','inScope','outOfScope','depth','cutReason'], properties:{
-        target:     { type:'string', description:'1.1 ref จริงที่รีวิว' },
-        intent:     { type:'string', description:'1.2 ประโยคเดียว "หลังแก้แล้ว X ควร Y" ที่พิสูจน์ผิดได้' },
-        intentTag:  { type:'string', description:'STATED | INFERRED | ASSUMED' },
-        inScope:    { type:'array', items:{ type:'string' } },
-        outOfScope: { type:'array', items:{ type:'string' }, description:'พร้อมเหตุผลคำเดียวต่ออัน' },
-        depth:      { type:'string', description:'skim | standard | deep' },
-        cutReason:  { type:'string', description:'ตัดอะไรทิ้งเพราะกฎไหน · ไม่ได้ตัด = "ไม่ได้ตัด"' },
-      } },
-      map: { type:'object', required:['entryPoints','layers','callers','siblings','instances'], properties:{
-        entryPoints:{ type:'array', items:{ type:'string' }, description:'2.1 file:line → ชื่อ' },
-        layers:     { type:'array', items:{ type:'string' }, description:'2.2 path = view|controller|service|model|infra|util|test|config' },
-        callers:    { type:'array', items:{ type:'string' }, description:'2.3 symbol: file:line,... (N) · N=0 ต้องระบุว่าโค้ดตายหรือคนนอกใช้' },
-        siblings:   { type:'array', items:{ type:'string' }, description:'2.4 path:line — เป็นคู่ของอะไร' },
-        instances:  { type:'string', description:'2.5 dev vs installed/build vs worktree — อ่านตัวไหนอยู่' },
-      } },
-      trace:            { type:'array', items:{ type:'string' }, description:'3.2 file:line → file:line — ห้ามขาดตอน' },
-      questions:        { type:'array', items:{ type:'string' }, description:'[Q] คำถามค้างที่ตั้งไว้ระหว่างทาง' },
-      questionsResolved:{ type:'array', items:{ type:'string' }, description:'05.0 ทุก Q ต้องมีสถานะ: verified | became finding Fn | UNRESOLVED' },
-    } },
-
-    dimensionScores:{ type:'array', description:'⛔ ต้องครบ **ทั้ง 10 มิติ A–J** ไม่มีข้อยกเว้น (ไม่เกี่ยว = score 0 + เหตุผล)', items:{ type:'object',
-      required:['dimension','score','why','evidence'], properties:{
-        dimension:{ type:'string', description:'ตัวอักษร A-J + ชื่อมิติ' },
-        score:    { type:'number', description:'1-5 · 0 = N/A' },
-        why:      { type:'string', description:'อะไรกดคะแนน หรือทำไม N/A' },
-        evidence: { type:'string', description:'ตรวจอะไรถึงให้คะแนนนี้ (file:line หรือคำสั่งที่รัน) — ห้ามให้คะแนนลอยๆ' },
-      } } },
-    overallScore:    { type:'number', description:'= **มิติต่ำสุดที่ไม่ใช่ 0** ห้ามเฉลี่ย' },
-    overallScoreFrom:{ type:'string', description:'มิติไหนกดคะแนน + เพราะอะไร' },
-
+    firm: STR,
+    verdictSummary: STR,
+    target: STR,
+    intent: STR,
+    intentTag: { type:'string', enum:['STATED','INFERRED','ASSUMED'] },
+    scopeNotes: STR,
+    entryPoints: ARR,
+    layers: ARR,
+    callers: ARR,
+    siblings: ARR,
+    instances: STR,
+    trace: ARR,
+    questions: ARR,
+    questionsResolved: ARR,
+    dimensionScores:{ type:'array', items:{ type:'object',
+      required:['dimension','score','why','evidence'],
+      properties:{ dimension: STR, score:{ type:'number' }, why: STR, evidence: STR } } },
+    overallScore:{ type:'number' },
+    overallScoreFrom: STR,
     findings:{ type:'array', items:{ type:'object',
-      required:['severity','title','file','dimension','problem','failureScenario','evidence','gatesPassed','suggestedFix','blastRadius'], properties:{
-        severity:       { type:'string', enum:['BLOCKER','MAJOR','MINOR'] },
-        title:          { type:'string' },
-        file:           { type:'string', description:'path:line @ <sha ถ้ารู้> — บังคับ · ถ้าเป็นของที่ "ขาดหายไป" ให้ใส่ absence anchor (path ที่ควรมีแต่ไม่มี)' },
-        dimension:      { type:'string', description:'มิติ A-J' },
-        problem:        { type:'string', description:'ผิดตรงไหน 1 ประโยค' },
-        failureScenario:{ type:'string', description:'input จริง → ผลผิดจริง · ⛔ เขียนไม่ได้ = ห้ามยื่น' },
-        evidence:       { type:'string' },
-        gatesPassed:    { type:'string', description:'ผ่านด่าน 1/2/5 อย่างไร + ผลของด่าน 3/4 (ขยายขอบเขตไหม)' },
-        suggestedFix:   { type:'string' },
-        blastRadius:    { type:'string', description:'แก้แล้วกระทบอะไร' },
-      } } },
-
-    cleared:{ type:'array', description:'[DROP] ที่ดูน่าสงสัยแต่ตรวจแล้วไม่ใช่ปัญหา — ⭐ ใช้เทียบข้ามบริษัท', items:{ type:'object',
-      required:['what','file','whyNotAProblem','claim'], properties:{
-        what:{ type:'string' },
-        file:{ type:'string' },
-        whyNotAProblem:{ type:'string' },
-        claim:{ type:'string', description:'⭐ **ข้อกล่าวอ้างที่คุณกำลังปฏิเสธ** เขียนเป็นประโยคเดียวแบบที่คนยื่นบั๊กจะเขียน (เช่น "การส่ง OFF ไปยังรีเลย์ที่ถูกปฏิเสธ ตัดพัลส์ STOP ของกว้าน") — ใช้จับคู่ข้ามบริษัทว่าใครเคลียร์สิ่งที่อีกคนยื่น ⛔ ห้ามเขียนกว้างๆ แบบ "โค้ดส่วนนี้โอเค"' },
-      } } },
-
-    notCovered:{ type:'string', description:'สิ่งที่ไม่ได้ตรวจ + เพราะอะไร (รวม UNRESOLVED Q) ⛔ ห้ามเว้นว่าง' },
-    confidence:{ type:'string', description:'สูง/กลาง/ต่ำ + เพราะอะไร — เดินครบทุกพาทไหม มีอะไรที่เข้าไม่ถึง' },
-    crossProjectLesson:{ type:'string', description:'บั๊กชนิดนี้กัดโปรเจคอื่นได้ไหม: อาการ → สาเหตุ → วิธีกัน · ไม่มีใส่ "-"' },
+      required:['severity','title','file','dimension','problem','failureScenario','evidence','gatesPassed','suggestedFix','blastRadius'],
+      properties:{ severity:{ type:'string', enum:['BLOCKER','MAJOR','MINOR'] },
+        title: STR, file: STR, dimension: STR, problem: STR, failureScenario: STR,
+        evidence: STR, gatesPassed: STR, suggestedFix: STR, blastRadius: STR } } },
+    cleared:{ type:'array', items:{ type:'object',
+      required:['what','file','whyNotAProblem','claim'],
+      properties:{ what: STR, file: STR, whyNotAProblem: STR, claim: STR } } },
+    notCovered: STR,
+    confidence: STR,
+    crossProjectLesson: STR,
   } }
 
 const scopeLine = target
   ? `**${target}**`
-  : `**การเปลี่ยนแปลงปัจจุบันของโปรเจค** — หาเองจาก git (uncommitted diff ก่อน · tree สะอาด → commit ล่าสุด) แล้วเขียนใน sheet.header.target ว่าคุณเลือกอะไร`
+  : `**การเปลี่ยนแปลงปัจจุบันของโปรเจค** — หาเองจาก git (uncommitted diff ก่อน · tree สะอาด → commit ล่าสุด) แล้วเขียนใน \`target\` ว่าคุณเลือกอะไร`
 
 // ── คำสั่งเต็ม: หลักการทุกข้อถูกสอนไว้ในนี้ (Nick 2026-08-26: "สอนมันไว้ในคำสั่งเลย ไม่ใช่ล๊วกๆ") ──
 const buildPrompt = (firm) => [
@@ -263,6 +239,16 @@ const buildPrompt = (firm) => [
   ``,
   `❌ ห้าม pad nit · ❌ ห้าม rubber-stamp · ไม่แน่ใจ = severity ต่ำ + บอกตรงๆ ว่ายังไม่ยืนยัน`,
   `⛔ **dimensionScores ต้องครบ 10 มิติ** (${DIMENSION_LIST}) · **notCovered และ confidence ห้ามเว้นว่าง**`,
+  ``,
+  `═══ 📋 รูปแบบผลลัพธ์ (field แบน — ใบรีวิวทั้งใบอยู่ในนี้) ═══`,
+  `  • \`target\` = 1.1 ref จริงที่รีวิว · \`intent\` = 1.2 ประโยค "หลังแก้แล้ว X ควร Y" ที่พิสูจน์ผิดได้ · \`intentTag\` = STATED|INFERRED|ASSUMED`,
+  `  • \`scopeNotes\` = รวม 1.4-1.6 ในช่องเดียว: IN [...] / CONTEXT [...] / OUT [...] / depth (skim|standard|deep) / cutReason (ไม่ได้ตัด = "ไม่ได้ตัด")`,
+  `  • \`entryPoints\` = 2.1 "file:line → ชื่อ" · \`layers\` = 2.2 "path = view|controller|service|model|infra|util|test|config" · \`callers\` = 2.3 "symbol: file:line,... (N)" (N=0 ระบุว่าโค้ดตายหรือคนนอกใช้) · \`siblings\` = 2.4 "path:line — คู่ของอะไร" · \`instances\` = 2.5 อ่านสำเนาไหน/runtime รันตัวไหน`,
+  `  • \`trace\` = 3.2 "file:line → file:line" ห้ามขาดตอน · \`questions\` = [Q] ที่ตั้งระหว่างทาง · \`questionsResolved\` = ทุก Q พร้อมสถานะ verified | became finding Fn | UNRESOLVED`,
+  `  • \`dimensionScores\` ครบ 10 (score 1-5 · 0 = N/A + เหตุผล · \`evidence\` = ตรวจอะไรถึงให้คะแนนนี้ file:line — ห้ามให้ลอยๆ) · \`overallScore\` = **มิติต่ำสุดที่ไม่ใช่ 0 ห้ามเฉลี่ย** · \`overallScoreFrom\` = มิติไหนกด + ทำไม`,
+  `  • \`findings[].file\` = "path:line @ sha" · ของที่หายไป (มิติ J) ใช้ absence anchor (path ที่ควรมีแต่ไม่มี) · \`gatesPassed\` = ผ่านด่าน 1/2/5 อย่างไร + ผลด่าน 3/4`,
+  `  • \`cleared[].claim\` = ข้อกล่าวอ้างที่คุณปฏิเสธ **ประโยคเดียวแบบที่คนยื่นบั๊กจะเขียน** (ดู 6.3 — ห้ามกว้างๆ)`,
+  `  • \`crossProjectLesson\` ไม่มีใส่ "-"`,
 ].join('\n')
 
 phase('รีวิว')
@@ -424,25 +410,24 @@ const matcherHealth =
   : `เทียบ ${comparedPairs} คู่ · เจอขัดกัน ${conflicts.length} · เกือบผ่านอีก ${nearMiss.length}`
 
 // ── ⑤ เจตนา/ขอบเขต ตรงกันไหม ──
-const intents = reports.map(r => ({ firm: r.firm, target: r.sheet?.header?.target || '(ไม่ระบุ)',
-                                    intent: r.sheet?.header?.intent || '(ไม่ระบุ)', tag: r.sheet?.header?.intentTag || '?' }))
+const intents = reports.map(r => ({ firm: r.firm, target: r.target || '(ไม่ระบุ)',
+                                    intent: r.intent || '(ไม่ระบุ)', tag: r.intentTag || '?' }))
 const intentAgreement = new Set(intents.map(i => norm(i.intent))).size === 1
   ? '✅ ทั้ง 3 บริษัทเข้าใจเจตนาตรงกัน'
   : '⚠️ เข้าใจเจตนาไม่ตรงกัน — Coddy ต้องตัดสินว่าเจตนาจริงคืออะไรก่อนชั่งน้ำหนัก findings'
 
 // ── ⑥ ความครบถ้วนของงานแต่ละบริษัท (จับบริษัทที่ทำลวกๆ) ──
 const thoroughness = reports.map(r => {
-  const s = r.sheet || {}
   const gaps = []
-  if (!(s.trace || []).length) gaps.push('ไม่มี [TRACE] — ไม่ได้เดินเส้นทาง')
-  if (!(s.map?.entryPoints || []).length) gaps.push('ไม่มีจุดเข้า')
-  if (!(s.map?.callers || []).length) gaps.push('ไม่ได้หาคนเรียก')
-  if (!(s.map?.siblings || []).length) gaps.push('ไม่ได้หาพี่น้อง')
-  if (!s.map?.instances) gaps.push('ไม่ได้ระบุว่าอ่านสำเนาไหน')
-  if (!(s.questionsResolved || []).length && (s.questions || []).length) gaps.push('เปิด [Q] แล้วไม่ปิด')
+  if (!(r.trace || []).length) gaps.push('ไม่มี [TRACE] — ไม่ได้เดินเส้นทาง')
+  if (!(r.entryPoints || []).length) gaps.push('ไม่มีจุดเข้า')
+  if (!(r.callers || []).length) gaps.push('ไม่ได้หาคนเรียก')
+  if (!(r.siblings || []).length) gaps.push('ไม่ได้หาพี่น้อง')
+  if (!r.instances) gaps.push('ไม่ได้ระบุว่าอ่านสำเนาไหน')
+  if (!(r.questionsResolved || []).length && (r.questions || []).length) gaps.push('เปิด [Q] แล้วไม่ปิด')
   if ((r.dimensionScores || []).length < 10) gaps.push(`ให้คะแนนแค่ ${(r.dimensionScores||[]).length}/10 มิติ`)
   if (!r.notCovered) gaps.push('ไม่บอกว่าอะไรไม่ได้ตรวจ')
-  return { firm: r.firm, traceHops: (s.trace || []).length, dims: (r.dimensionScores || []).length,
+  return { firm: r.firm, traceHops: (r.trace || []).length, dims: (r.dimensionScores || []).length,
            findings: (r.findings || []).length, cleared: (r.cleared || []).length,
            gaps: gaps.length ? gaps : ['ครบทุกพาท'] }
 })
