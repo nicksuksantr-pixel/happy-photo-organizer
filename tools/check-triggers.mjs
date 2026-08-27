@@ -269,6 +269,14 @@ for (const [file, re, want, why] of [
   ['nick-master-workflow.md', /≤10 total/, true, "the brief omits Lucifer's ≤10-total cap"],
   ['nick-master-workflow.md', /3 consecutive `waiting` ticks/, true, 'the brief lacks the waiting escape'],
   ['CODE_REVIEW_PROCEDURE.md', /`import` is not read-only/, true, '8.4 shows the unsafe import example'],
+  // a trigger whose script exists but whose RULE does not is invisible to a fresh session:
+  // clean.js sat built, guarded and synced for a day with nothing in the rulebook naming it
+  ['command_pattern.md', /^## 27\. "clean"/m, true, '#27 `clean` has no rule — a fresh session cannot know the trigger exists'],
+  ['nick-master-workflow.md', /\*\*clean \(#27/, true, 'the brief (the file every session actually reads) omits #27'],
+  // both scripts died at StructuredOutput because generation ran past the output quota and the JSON
+  // came back truncated. maxLength turns that into a schema error the model can read and correct.
+  ['reviver.js', /maxLength/, true, 'the schema has no maxLength — over-long output returns unparseable JSON, not a fixable error'],
+  ['clean.js', /maxLength/, true, 'the schema has no maxLength — same truncation death as reviver'],
 ]) {
   const p = path.join(DIR, file)
   const present = fs.existsSync(p) && re.test(fs.readFileSync(p, 'utf8'))
