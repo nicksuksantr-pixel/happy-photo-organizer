@@ -22,7 +22,10 @@ let _A = args
 if (typeof _A === 'string') { try { _A = JSON.parse(_A) } catch { _A = {} } }
 _A = _A || {}
 const workdir = _A.workdir
-const target = (_A.target || '').trim()
+// `.toString()` เหมือนพี่น้อง supertester/security (reviver #26 บริษัท A · 2026-08-27):
+// เดิม `(_A.target || '').trim()` เดาว่าเป็น string เสมอ — ส่ง array ของ path มาเป็น target
+// (ซึ่งเป็นสิ่งที่คนจะทำโดยธรรมชาติ) จะ TypeError ตรงนี้เลย แทนที่จะไปเจอ error ที่อ่านรู้เรื่องข้างล่าง
+const target = (_A.target || '').toString().trim()
 if (!workdir)
   return { error:'reviver: ไม่มี workdir ใน args — ส่ง args เป็น object {workdir, target?}', findings:[], cleared:[], firms:[] }
 
@@ -35,7 +38,14 @@ const DIMENSION_LIST = 'A ความถูกต้อง · B พฤติก
 const STR = { type:'string' }
 const ARR = { type:'array', items:{ type:'string' } }
 const REPORT = { type:'object',
-  required:['firm','verdictSummary','target','intent','intentTag','scopeNotes','entryPoints','layers','callers','siblings','instances','trace','questions','questionsResolved','dimensionScores','overallScore','overallScoreFrom','findings','cleared','notCovered','confidence'],
+  // ⚠️ 2026-08-27 (รอบ 2): required เดิม 21 ช่อง → **2 ใน 3 บริษัทตายด้วย "StructuredOutput retry cap (5)
+  // exceeded — 5 failed calls with no valid output"** คือทำสคีมาให้ถูกไม่ได้แม้ลอง 5 ครั้ง = เครื่องมือ
+  // เชื่อถือไม่ได้ทุกรอบ (ตระกูลเดียวกับ schema-too-large ที่ฆ่าทั้ง 3 บริษัทเมื่อ 2026-08-27 เช้า)
+  // ตัดเหลือ 8 ช่องที่ตัวรวมผล "ต้องมีจริงๆ" · ที่เหลือยังขออยู่ครบใน prompt แต่ไม่ hard-fail
+  // เหตุผลที่ปลอดภัยที่จะผ่อน: ช่องเดินงาน (trace/siblings/callers/…) มีกลไกจับอยู่แล้วคือ `thoroughness`
+  // ซึ่ง "รายงานว่าบริษัทไหนทำลวก" — ดีกว่าทำให้บริษัทนั้นตายไปเลยแล้วไม่เหลือใครตรวจทาน
+  // ❌ ห้ามยัดกลับเป็น 21 ช่อง · จะเพิ่มช่องใหม่ ให้เพิ่มใน properties + prompt ไม่ใช่ใน required
+  required:['verdictSummary','dimensionScores','overallScore','overallScoreFrom','findings','cleared','notCovered','confidence'],
   properties:{
     firm: STR,
     verdictSummary: STR,
@@ -53,11 +63,18 @@ const REPORT = { type:'object',
     questionsResolved: ARR,
     dimensionScores:{ type:'array', items:{ type:'object',
       required:['dimension','score','why','evidence'],
-      properties:{ dimension: STR, score:{ type:'number' }, why: STR, evidence: STR } } },
-    overallScore:{ type:'number' },
+      properties:{ dimension: STR, score:{ type:'integer', minimum:1, maximum:5 }, why: STR, evidence: STR } } },
+    // ผูกช่วง 1-5 เหมือน lucifer REVIEW (reviver #26 รอบ 3 · บริษัท B · 2026-08-27): เดิมเป็น number เปล่าๆ
+    // ตัวรวมผลกรอง `n > 0` ทิ้ง → คะแนน 0 จะถูกอ่านว่า "บริษัทนั้นไม่ได้ให้คะแนน" ทั้งที่ให้มาแล้ว
+    // = รายงานว่ารันไม่ครบทั้งที่ครบ ซึ่งเป็นบั๊กตระกูลเดียวกับที่รอบนี้ตามล้างทั้งวัน แค่กลับด้าน
+    overallScore:{ type:'integer', minimum:1, maximum:5 },
     overallScoreFrom: STR,
     findings:{ type:'array', items:{ type:'object',
-      required:['severity','title','file','dimension','problem','failureScenario','evidence','gatesPassed','suggestedFix','blastRadius'],
+      // เหลือ 5 ช่องที่ทำให้ finding "เป็น finding" ตามรูบริค (ไม่มี failureScenario = ไม่ใช่ finding อย่าทัก)
+      // ที่เหลือยังขอครบใน prompt แต่ไม่ hard-fail — reviver #26 รอบ 3 · บริษัท B: F15 ลด required ชั้นบน
+      // เหลือ 8 แต่ปล่อยชั้นนี้ไว้ 10 ช่อง/รายการ → โหมดตาย all-or-nothing แค่ย้ายลงมาหนึ่งชั้น
+      // (คือสาเหตุที่ 2 ใน 3 บริษัทตายด้วย StructuredOutput retry cap รอบก่อน)
+      required:['severity','title','file','problem','failureScenario'],
       properties:{ severity:{ type:'string', enum:['BLOCKER','MAJOR','MINOR'] },
         title: STR, file: STR, dimension: STR, problem: STR, failureScenario: STR,
         evidence: STR, gatesPassed: STR, suggestedFix: STR, blastRadius: STR } } },
@@ -234,7 +251,21 @@ const buildPrompt = (firm) => [
   ``,
   `═══ ⛔ กฎเหล็ก (Nick #16 — เหตุ 70-agent 2026-06-13) ═══`,
   `  • ❌ **ห้ามเรียก Agent/Task tool · ห้าม spawn subagent ใดๆ** — คุณทำงานคนเดียวทั้งบริษัท`,
-  `  • ❌ **ห้ามแก้/เขียน/build/run อะไรทั้งสิ้น** — ใช้ **Read / Grep / Glob เท่านั้น**`,
+  `  • ❌ **ห้ามแก้/เขียน/build/deploy อะไรทั้งสิ้น** — คุณ "อ่านแล้วรายงาน"`,
+  `  • ✅ **ใช้ Read / Grep / Glob ได้ + Bash แบบอ่านอย่างเดียวได้ด้วย**: \`git diff/log/show/grep/worktree list\`, \`ls\`, \`md5sum\`, \`node --check\``,
+  `  • ✅ **ดูค่าจริงของฟังก์ชันได้** แต่ต้องทำให้ถูกวิธี: ⛔ **\`import\` โมดูล = รัน top-level ของโมดูลนั้น**`,
+  `    (สร้างโฟลเดอร์ เปิดไฟล์ ต่อ DB ยิงเน็ตได้ทั้งนั้น) — \`python -c "from m import f"\` จึง **ไม่ใช่** การอ่านอย่างเดียว`,
+  `    วิธีที่ปลอดภัย: **คัดลอกตัวฟังก์ชันนั้นออกมาวางใน snippet เปล่าๆ แล้วรัน** (ไม่แตะโมดูลจริง) — เช่น`,
+  `    \`node -e "const f = (…วางโค้ดฟังก์ชันที่ copy มา…); console.log(f('ค่าทดสอบ'))"\``,
+  `    จะ import จริงได้ต่อเมื่อ **เปิดอ่าน top-level ของโมดูลนั้นด้วยตาแล้ว** และยืนยันว่ามีแต่การประกาศ`,
+  `    (นี่คือช่องที่การแก้รอบแรกเขียนตัวอย่างไว้ผิดเอง — reviver #26 บริษัท A จับได้ 2026-08-27)`,
+  `    เหตุผล (audit ตัวเอง 2026-08-27): ขั้น **8.4 "Run the thing"** ใน CODE_REVIEW_PROCEDURE บังคับให้พิสูจน์ด้วยการรัน`,
+  `    และเอกสารนั้นยังแจกตารางคำสั่งรันเทสต์รายโปรเจคมาให้ — แต่ prompt นี้เคยห้าม Bash ทั้งหมด แปลว่า`,
+  `    **บริษัทรีวิวทำขั้นตอนของมาตรฐานที่ตัวเองบังคับใช้ไม่ได้** และตารางคำสั่งนั้นคือโทเค้นที่ไม่มีใครใช้ได้`,
+  `    ราคาของมันพิสูจน์แล้ว: SHIP-MONITORING 2026-08-27 — ช่องโหว่ ACL จริงถูกเจอด้วยการ **รัน** \`build_acl_text(...)\``,
+  `    ซึ่ง 3 บริษัทที่อ่านอย่างเดียวไม่มีทางเจอ · **ดูค่าจริงชนะการให้เหตุผลจากซอร์สเสมอ**`,
+  `  • ❌ ยังห้ามอยู่: รันชุดเทสต์เต็ม · เปิดแอป · build/ติดตั้ง · ยิงเน็ต · เขียน/ลบไฟล์ — พวกนี้เปลี่ยนสถานะ และเป็นขั้นของ Coddy ไม่ใช่ของคุณ`,
+  `    ถ้าต้องรันชุดเทสต์ถึงจะตอบได้ → เขียนใน \`notCovered\` ว่า "ต้องรัน X ถึงยืนยันได้" แล้วให้ Coddy รันแทน`,
   `  • ต้องการตัวช่วยเพิ่ม → อย่า spawn · เขียนเป็น finding ให้ Coddy แทน`,
   ``,
   `❌ ห้าม pad nit · ❌ ห้าม rubber-stamp · ไม่แน่ใจ = severity ต่ำ + บอกตรงๆ ว่ายังไม่ยืนยัน`,
@@ -255,9 +286,15 @@ phase('รีวิว')
 
 // ⛔ เป๊ะ 3 บริษัท — parallel ครั้งเดียว ไม่มี fan-out · ทุกบริษัทได้ prompt "เหมือนกันทุกประการ" ต่างแค่ชื่อ
 const FIRMS = ['A', 'B', 'C']
-const reports = (await parallel(FIRMS.map(f => () =>
+const rawReports = await parallel(FIRMS.map(f => () =>
   agent(buildPrompt(f), { label:`บริษัท ${f}`, phase:'รีวิว', schema: REPORT })
-))).filter(Boolean)
+))
+
+// ผูกชื่อบริษัทจาก "ลำดับที่สคริปต์รู้อยู่แล้ว" ไม่ใช่ค่า `firm` ที่ agent พิมพ์กลับมา (audit ตัวเอง 2026-08-27):
+// parallel รักษาลำดับ → index i คือ FIRMS[i] เสมอ · ถ้าสองบริษัทเผลอคืน "A" เหมือนกัน คะแนน/finding จะกองรวมกัน
+// dimensionComparison จะเทียบ A กับ A เอง และ "หายไปบริษัทไหน" จะดูไม่ออก ซึ่งพังทั้งกลไกตรวจทานของ #26
+const reports    = FIRMS.map((f, i) => rawReports[i] ? { ...rawReports[i], firm: f } : null).filter(Boolean)
+const deadFirms  = FIRMS.filter((f, i) => !rawReports[i])
 
 const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '')
 const sev  = { BLOCKER:0, MAJOR:1, MINOR:2 }
@@ -273,15 +310,31 @@ const locOf = s => {
   if (m) return { path: normPath(m[1]), line: parseInt(m[2], 10) }
   return { path: normPath(head.split(':')[0]), line: null, label: norm(raw) }
 }
+// ⚠️ path เต็มกับ path ย่อ = ที่เดียวกัน (reviver #26 บริษัท A · 2026-08-27):
+// เดิมเทียบสตริงตรงๆ → "c:/users/.../nick/reviver.js:316" กับ "reviver.js:316" ถือเป็นคนละที่
+// ผลคือบริษัทที่เห็นตรงกันแต่เขียน path คนละแบบ จะถูกรายงานว่า "ไม่มีใครยืนยัน" (solo) ทั้งที่ยืนยันกันอยู่
+// = ตัวเลข corroborated ต่ำเกินจริง ซึ่งเป็นตัวเลขที่ Coddy ใช้ตัดสินว่าจะเชื่อ finding แค่ไหน
+// เทียบแบบ "หางตรงกันที่ขอบ segment" — ใส่ '/' นำหน้าเพื่อกัน 'myreviver.js' ไปแมตช์ 'reviver.js'
+const samePath = (a, b) => {
+  if (!a || !b) return false
+  if (a === b) return true
+  const A = '/' + a, B = '/' + b
+  return A.endsWith(B) || B.endsWith(A)
+}
+const pathTail = p => String(p || '').split('/').filter(Boolean).slice(-2).join('/')
+
 const NEAR = 30   // บรรทัดห่างกันไม่เกินนี้ = ถือว่าพูดถึงจุดเดียวกัน
 const sameSpot = (a, b) => {
   const x = locOf(a), y = locOf(b)
-  if (!x.path || x.path !== y.path) return false
+  if (!x.path || !samePath(x.path, y.path)) return false
   if (x.line !== null && y.line !== null) return Math.abs(x.line - y.line) <= NEAR
   // ไม่มีเลขบรรทัด (เช่น absence anchor / ชื่อเทสต์) → ต้องเป็นข้อความเดียวกันจริงๆ ถึงนับ
   return (x.label || '') === (y.label || '')
 }
-const spotKey = s => { const l = locOf(s); return l.line === null ? `${l.path}#${l.label || ''}` : `${l.path}:${Math.round(l.line / NEAR)}` }
+// (เคยมี `spotKey` ตรงนี้ — ลบออก 2026-08-27: reviver #26 รอบ 3 ทั้ง 3 บริษัทชี้ตรงกันว่ามันเป็น dead code
+//  ไม่มีใครเรียกเลยสักที่ และคอมเมนต์เดิมยังอธิบายว่า "เป็นคีย์คลัสเตอร์" ทั้งที่การคลัสเตอร์จริงใช้ sameSpot()
+//  โค้ดตายที่มีคอมเมนต์อธิบายผิด แย่กว่าโค้ดตายเปล่าๆ เพราะคนอ่านจะเชื่อคำอธิบายแล้วเข้าใจกลไกผิดทั้งอัน
+//  ⚠️ ผมยังไปแก้มันตอน F9 ด้วย = เสียแรงแก้ของที่ไม่มีใครใช้)
 
 // ── ผลรวมทุกบริษัท ──
 const allFindings = reports.flatMap(r => (r.findings || []).map(f => ({ ...f, firm: r.firm })))
@@ -300,24 +353,60 @@ const firmScores = reports.map(r => ({
 }))
 const nums = firmScores.map(f => f.overall).filter(n => typeof n === 'number' && n > 0)
 const spread = nums.length ? Math.max(...nums) - Math.min(...nums) : null
-const scoreAgreement = spread === null ? 'ไม่มีคะแนน'
-  : spread === 0 ? `✅ ทั้ง 3 บริษัทให้ ${nums[0]} เท่ากัน — เชื่อถือได้สูง`
+
+// ⛔ "ตรงกัน" ต้องนับจากจำนวนบริษัทที่พูดจริง ไม่ใช่จาก spread ของกลุ่มตัวอย่างที่เหลือ
+// (reviver #26 บริษัท A · 2026-08-27 — และรอบที่ยื่น finding นี้ก็พิมพ์คำโกหกนั้นออกมาเองสดๆ:
+//  ได้ผลบริษัทเดียว แต่หัวข้อขึ้นว่า "✅ ทั้ง 3 บริษัทให้ 2 เท่ากัน — เชื่อถือได้สูง")
+// spread ของตัวอย่างเดียว = 0 เสมอ → เดิมมันเลยอ่านว่า "เอกฉันท์" ทั้งที่ไม่มีใครมาเทียบด้วย
+// และนี่คือช่องที่ `next` ข้อ 1 สั่งให้ Coddy อ่านเป็นอย่างแรก = จุดที่โกหกแล้วเจ็บที่สุด
+const scoreAgreement =
+    nums.length === 0 ? '⛔ ไม่มีคะแนนเลย — ไม่มีบริษัทไหนคืนผล (ไม่ใช่ "ไม่มีข้อขัดแย้ง")'
+  : nums.length === 1 ? `⛔ มีคะแนนจากบริษัทเดียว (${nums[0]}) — **ไม่มีการตรวจทาน** ห้ามอ่านว่าเอกฉันท์ ` +
+      `นี่คือความเห็นเดี่ยว ต้องเอาไปตรวจกับโค้ดจริงเองทุกข้อก่อนเชื่อ`
+  : nums.length < FIRMS.length ? `⚠️ เทียบได้แค่ ${nums.length}/${FIRMS.length} บริษัท` +
+      (spread === 0 ? ` — ให้ ${nums[0]} ตรงกัน แต่เป็นการตรงกันของกลุ่มที่ไม่ครบ อย่ารายงานว่าตรวจทาน 3 ทาง`
+                    : ` — ต่างกัน ${spread} ระดับ (${nums.join('/')}) บนกลุ่มที่ไม่ครบ`)
+  : spread === 0 ? `✅ ทั้ง ${FIRMS.length} บริษัทให้ ${nums[0]} เท่ากัน — เชื่อถือได้สูง`
   : spread === 1 ? `🟡 ต่างกัน 1 ระดับ (${nums.join('/')}) — ปกติ ดูว่ามิติไหนทำให้ต่าง`
   : `🔴 ต่างกัน ${spread} ระดับ (${nums.join('/')}) — **มีบริษัทที่ตรวจหลุด หรือเห็นอะไรที่คนอื่นไม่เห็น ต้องสืบ**`
 
 // ── ② เทียบคะแนนรายมิติ: มิติไหนที่ 3 บริษัทเห็นไม่ตรงกัน = จุดที่ต้องเปิดโค้ดเอง ──
 const byDim = {}
+// ⚠️ อย่าเดามิติจาก "ตัวอักษรแรก" ของข้อความที่ agent พิมพ์มา (reviver #26 บริษัท A · 2026-08-27):
+// เดิมใช้ charAt(0) → "Correctness (A)" กับ "Consistency (H)" ตกถังเดียวกันหมดที่ C แล้ว spread จะมั่ว
+// หลักการของ #12 คือ "จัดกลุ่มด้วยสิ่งที่สคริปต์รู้ ไม่ใช่สิ่งที่ agent พิมพ์" — ตอนนั้นใช้กับ lens/angle/firm
+// แต่ลืม dimension ซึ่งเป็น free-text ในสคีมา · ตอนนี้ดึงตัวอักษรมิติ A–J ที่ปรากฏจริงในข้อความแทน
+const DIM_LETTERS = 'ABCDEFGHIJ'
+const dimLetterOf = s => {
+  const t = String(s || '').trim()
+  let m = t.match(/\(([A-J])\)/)                    // "Correctness (A)"
+  if (!m) m = t.match(/^([A-J])\b[\s.:—-]/)         // "A — ความถูกต้อง" / "A. ..." / "A: ..."
+  if (!m) m = t.match(/^([A-J])$/)                  // "A"
+  return m && DIM_LETTERS.includes(m[1]) ? m[1] : null
+}
 reports.forEach(r => (r.dimensionScores || []).forEach(d => {
-  const k = String(d.dimension || '').trim().charAt(0).toUpperCase()
-  if (!k) return
-  ;(byDim[k] = byDim[k] || []).push({ firm: r.firm, score: d.score, why: d.why })
+  // จัดไม่ได้ = เข้าถัง "?" ไม่ใช่เดามั่ว — จะได้เห็นในรายงานว่ามีมิติที่อ่านชื่อไม่ออก
+  const k = dimLetterOf(d.dimension) || '?'
+  ;(byDim[k] = byDim[k] || []).push({ firm: r.firm, score: d.score, why: d.why, raw: String(d.dimension || '') })
 }))
+// ⛔ ธง ✅ ต้องแปลว่า "หลายบริษัทให้คะแนนมิตินี้แล้วตรงกัน" ไม่ใช่ "มีคนเดียวให้คะแนน spread เลยเป็น 0"
+// (reviver #26 รอบ 3 · A+B+C · 2026-08-27 — ตระกูลเดียวกับ scoreAgreement/intentAgreement ครบชุดแล้ว)
 const dimensionComparison = Object.keys(byDim).sort().map(k => {
   const rows = byDim[k]
   const ns = rows.map(x => x.score).filter(n => typeof n === 'number' && n > 0)
   const sp = ns.length > 1 ? Math.max(...ns) - Math.min(...ns) : 0
+  const flag =
+      k === '?' ? '❓ อ่านชื่อมิติไม่ออก — จัดเข้าถังนี้ไว้ ยังไม่ได้เทียบกับใคร'
+    : ns.length === 0 ? '⛔ ไม่มีคะแนนที่ใช้ได้ในมิตินี้'
+    : ns.length === 1 ? `⚠️ มีบริษัทเดียวให้คะแนนมิตินี้ (${rows[0].firm}) — **เทียบไม่ได้ ไม่ใช่ "ตรงกัน"**`
+    : sp >= 2 ? '🔴 เห็นไม่ตรงกันมาก'
+    : sp === 1 ? '🟡'
+    : ns.length < FIRMS.length ? `✅ ตรงกัน แต่มีแค่ ${ns.length}/${FIRMS.length} บริษัทที่ให้คะแนนมิตินี้`
+    : '✅'
   return { dimension: k, scores: rows.map(x => `${x.firm}=${x.score}`).join(' '), spread: sp,
-           flag: sp >= 2 ? '🔴 เห็นไม่ตรงกันมาก' : sp === 1 ? '🟡' : '✅', why: rows.map(x => `${x.firm}: ${x.why}`) }
+           scoredBy: ns.length, flag,
+           why: rows.map(x => `${x.firm}: ${x.why}`),
+           ...(k === '?' ? { rawNames: rows.map(x => x.raw) } : {}) }
 })
 const missingDims = reports.filter(r => (r.dimensionScores || []).length < 10)
   .map(r => `บริษัท ${r.firm} ให้คะแนนแค่ ${(r.dimensionScores||[]).length}/10 มิติ`)
@@ -412,9 +501,21 @@ const matcherHealth =
 // ── ⑤ เจตนา/ขอบเขต ตรงกันไหม ──
 const intents = reports.map(r => ({ firm: r.firm, target: r.target || '(ไม่ระบุ)',
                                     intent: r.intent || '(ไม่ระบุ)', tag: r.intentTag || '?' }))
-const intentAgreement = new Set(intents.map(i => norm(i.intent))).size === 1
-  ? '✅ ทั้ง 3 บริษัทเข้าใจเจตนาตรงกัน'
-  : '⚠️ เข้าใจเจตนาไม่ตรงกัน — Coddy ต้องตัดสินว่าเจตนาจริงคืออะไรก่อนชั่งน้ำหนัก findings'
+// ⛔ "ไม่มีข้อมูล" ≠ "ตรงกัน" — บั๊กเดียวกับ scoreAgreement เป๊ะ แต่อยู่คนละบล็อก และ **การลด required
+// เหลือ 8 ช่อง (F15) คือสิ่งที่ทำให้มันเข้าถึงได้จริง**: พอ `intent` ไม่บังคับ บริษัทที่ไม่ตอบจะได้
+// '(ไม่ระบุ)' เหมือนกันหมด → Set ขนาด 1 → พิมพ์ว่า "ทั้ง 3 บริษัทเข้าใจเจตนาตรงกัน" จากความเงียบ 3 ครั้ง
+// (reviver #26 รอบ 3 · A+B+C เจอตรงกันทั้ง 3 บริษัท · 2026-08-27)
+const statedIntents = intents.filter(i => i.intent && i.intent !== '(ไม่ระบุ)')
+const intentAgreement =
+    statedIntents.length === 0
+      ? '⛔ ไม่มีบริษัทไหนระบุเจตนาเลย — นี่คือ "ไม่มีข้อมูล" ไม่ใช่ "ตรงกัน" (อย่าใช้ชั่งน้ำหนัก findings)'
+  : statedIntents.length === 1
+      ? `⛔ มีบริษัทเดียวที่ระบุเจตนา (${statedIntents[0].firm}) — เทียบกับใครไม่ได้ ไม่ใช่ข้อสรุป`
+  : new Set(statedIntents.map(i => norm(i.intent))).size !== 1
+      ? '⚠️ เข้าใจเจตนาไม่ตรงกัน — Coddy ต้องตัดสินว่าเจตนาจริงคืออะไรก่อนชั่งน้ำหนัก findings'
+  : statedIntents.length < FIRMS.length
+      ? `⚠️ ${statedIntents.length}/${FIRMS.length} บริษัทที่ระบุเจตนาเข้าใจตรงกัน — อีก ${FIRMS.length - statedIntents.length} ไม่ระบุ (= ไม่รู้ ไม่ใช่เห็นด้วย)`
+      : `✅ ทั้ง ${FIRMS.length} บริษัทเข้าใจเจตนาตรงกัน`
 
 // ── ⑥ ความครบถ้วนของงานแต่ละบริษัท (จับบริษัทที่ทำลวกๆ) ──
 const thoroughness = reports.map(r => {
@@ -435,7 +536,28 @@ const thoroughness = reports.map(r => {
 log(`reviver เสร็จ: ${reports.length}/3 บริษัท · คะแนน ${firmScores.map(f=>f.firm+'='+f.overall).join(' ')} · ${scoreAgreement.replace(/[✅🟡🔴]/g,'').trim()} · findings ${allFindings.length} (ตรงกัน ${corroborated.length} · เดี่ยว ${solo.length}) · ขัดกัน ${conflicts.length}`)
 
 return {
-  agentsUsed: FIRMS.length,          // = 3 เสมอ (script บังคับ)
+  // ⛔ คืนจำนวน "จริง" ไม่ใช่จำนวนที่ตั้งใจเปิด (audit ตัวเอง 2026-08-27 · #16 FAIL=STOP)
+  // เดิมคืน FIRMS.length = 3 เสมอ ทั้งที่ .filter(Boolean) ทิ้งบริษัทที่ตายไปเงียบๆ — รายงาน 2 บริษัท
+  // จะอ่านเหมือนรีวิว 3 บริษัท ทั้งที่กลไกทั้งหมดของ #26 คือ "หลายคนทำงานเดียวกันแล้วผลตรงกันไหม":
+  // เหลือ 2 = การตรวจทานอ่อนลงมาก · เหลือ 1 = ไม่มีการตรวจทานเลย แค่ความเห็นเดียว
+  agentsExpected: FIRMS.length,      // = 3 เสมอ (script บังคับ ไม่มีทางเกิน)
+  agentsUsed: reports.length,        // ที่คืนผลมาจริง — ❌ ห้ามเปลี่ยนกลับไปเป็น FIRMS.length
+  degraded: reports.length < FIRMS.length,
+  deadFirms,
+  crossCheckValid: reports.length >= 2,
+  degradedWarning: reports.length < FIRMS.length
+    ? `⚠️ ได้ผลแค่ ${reports.length}/${FIRMS.length} บริษัท (ขาด ${deadFirms.join(', ')}) — ` +
+      (reports.length === 0
+        // เคสนี้เกิดจริงในการรันครั้งแรกหลังแก้ (2026-08-27): ทั้ง 3 บริษัทตายพร้อมกันเพราะโควตาบัญชีหมด
+        // ฉบับแรกของข้อความนี้แตกเงื่อนไขแค่ ">=2 / else" เลยไปทักว่า "เหลือบริษัทเดียว" ทั้งที่เหลือศูนย์
+        ? '**ไม่มีบริษัทไหนคืนผลเลยสักตัว = ไม่มีการรีวิวเกิดขึ้น** — ทุกช่องที่ว่างด้านล่าง (findings/cleared/conflicts) ' +
+          'แปลว่า "ไม่ได้ตรวจ" ไม่ใช่ "ตรวจแล้วสะอาด" · 🛑 STOP ตาม #16: รายงาน Nick ว่ารอบนี้ล้ม พร้อมสาเหตุที่อ่านได้จาก ' +
+          'failures/journal (0 agent) แล้ว **รอให้เขาพิมพ์ trigger ใหม่** ❌ ห้ามยิงซ้ำเอง'
+        : reports.length === 1
+          ? 'เหลือบริษัทเดียว = **ไม่มีการตรวจทาน** ทั้ง corroborated/conflicts/scoreAgreement ไม่มีความหมาย ' +
+            '(เป็นแค่ความเห็นเดียว) — รายงาน Nick ว่ารอบนี้ใช้ไม่ได้ ตาม #16 แล้วรอให้เขาสั่งใหม่'
+          : 'scoreAgreement/conflicts/corroborated ยังอ่านได้แต่ "อ่อนลง" — ❌ อย่ารายงานว่าตรวจทานครบ 3 ทาง')
+    : '',
   design: '3 บริษัทอิสระ ทำงานเดียวกันครบ 7 พาท × 10 มิติ — ไม่ได้แบ่งงานกันทำ',
   target: target || '(การเปลี่ยนแปลงปัจจุบัน — ดู intents ว่าแต่ละบริษัทเลือกอะไร)',
 
@@ -456,7 +578,18 @@ return {
   cleared: allCleared,
   fullReports: reports,
 
-  next: [
+  // ⛔ ช่อง `next` คือคำสั่งที่ Coddy อ่านจริง — มันต้องเปลี่ยนเมื่อรอบนั้นล้ม ไม่ใช่ปล่อยให้คำสั่ง
+  // "ไล่ให้คะแนนตามปกติ" ยืนอยู่แล้วซ่อนคำเตือนไว้อีกช่องหนึ่ง (reviver #26 บริษัท A · 2026-08-27)
+  // การแก้รอบแรกใส่ STOP ให้ tester/supertester/security ครบ **แต่ลืม reviver เอง** — พี่น้อง 3 ใน 4 อีกแล้ว
+  next: (reports.length < 2 ? [
+    `🛑 STOP (#16) — รอบนี้ได้ผลแค่ ${reports.length}/${FIRMS.length} บริษัท (ขาด ${deadFirms.join(', ') || '—'})`,
+    '**การตรวจทานไม่ได้เกิดขึ้น** — ทั้ง corroborated / conflicts / scoreAgreement / dimensionComparison',
+    'คำนวณจากกลุ่มตัวอย่างที่ไม่พอ ห้ามอ่านเป็นข้อสรุป และ**ห้ามรายงาน Nick ว่า "รีวิวแล้วผ่าน"**',
+    'ช่องที่ว่าง (findings/cleared/conflicts) แปลว่า "ไม่ได้ตรวจ" ไม่ใช่ "ตรวจแล้วสะอาด"',
+    '1) วินิจฉัยด้วย 0 agent ก่อน — อ่าน failures + journal.jsonl ว่าบริษัทที่หายตายเพราะอะไร',
+    '2) findings ของบริษัทที่รอด (ถ้ามี) = **ความเห็นเดี่ยว** ใช้ได้ต่อเมื่อ Coddy เปิดโค้ดยืนยันเองทุกข้อ',
+    '3) รายงาน Nick ตรงๆ ว่ารอบนี้ไม่ครบ + สาเหตุ แล้ว**รอให้เขาพิมพ์ trigger ใหม่** ❌ ห้ามยิงซ้ำเอง (1 trigger = 1 launch)',
+  ] : [
     'Coddy (ตัวหลัก) ทำต่อ 0 agent — นี่คือขั้น "ประเมินผลของแต่ละบริษัท":',
     '1) ดู `scoreAgreement` ก่อน — ต่างกัน ≥2 ระดับ = มีบริษัทตรวจหลุดหรือเห็นอะไรที่คนอื่นไม่เห็น **ต้องสืบว่าใครถูก**',
     '2) ดู `thoroughness` — บริษัทที่มี gaps (ไม่มี TRACE / ไม่หาพี่น้อง / ให้คะแนนไม่ครบ 10 มิติ) = ผลของบริษัทนั้นน้ำหนักน้อยลง **ต้องบอกใน รายงาน**',
@@ -466,5 +599,8 @@ return {
     '6) คะแนนสุดท้ายที่รายงาน Nick = **มิติต่ำสุดจากภาพรวมที่ verify แล้ว** ไม่ใช่ค่าเฉลี่ยของ 3 บริษัท',
     '7) รายงานต้องมี: findings + **cleared (ตรวจแล้วไม่ต้องแก้)** + **notCovered (ไม่ได้ตรวจ)** + คะแนนของแต่ละบริษัทและเหตุผลที่ต่างกัน',
     '8) ❌ **ไม่แก้โค้ดอัตโนมัติ** — เสนอแผนแก้ + blast radius แล้วถาม Nick ก่อน เว้นแต่สั่งมาแล้ว',
-  ].join('\n'),
+    ...(reports.length < FIRMS.length
+      ? [`⚠️ หมายเหตุ: ได้ผล ${reports.length}/${FIRMS.length} บริษัท (ขาด ${deadFirms.join(', ')}) — การตรวจทานอ่อนกว่าที่ออกแบบไว้ ต้องเขียนข้อนี้ลงในรายงานถึง Nick ด้วย`]
+      : []),
+  ]).join('\n'),
 }
