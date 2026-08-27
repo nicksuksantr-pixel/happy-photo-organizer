@@ -18,7 +18,7 @@ export const meta = {
 // ❌ ห้ามจำลอง 3 agent เอง / ห้ามให้คะแนนตัวเอง / ห้าม build ก่อนผ่าน — ตัว script บังคับให้เป๊ะ
 // ───────────────────────────────────────────────────────────────────────
 
-// ⚠️ args มาถึงสคริปต์เป็น JSON "string" ในฮาร์เนสนี้ (พิสูจน์ 2026-06-13: ส่ง object → typeof args==='string')
+// ⚠ args มาถึงสคริปต์เป็น JSON "string" ในฮาร์เนสนี้ (พิสูจน์ 2026-06-13: ส่ง object → typeof args==='string')
 // → ต้อง parse ก่อนเสมอ + กัน throw (JSON.parse("undefined")/quote แตก = SyntaxError) · ❌ ห้ามลบ guard นี้
 let _A = args
 if (typeof _A === 'string') { try { _A = JSON.parse(_A) } catch { _A = {} } }
@@ -134,7 +134,7 @@ for (let round = 1; round <= MAX_ROUNDS; round++) {
   const low = scored.reduce((m, s) => (s.result.score < m.result.score ? s : m), scored[0])
   review = low.result
   log(`รอบ ${round}: คะแนนต่ำสุด ${review.score}/5 (panel: ${scored.map(s => s.result.score).join('/')}` +
-      `${deadReviewers.length ? ` ⚠️ ตายไป ${deadReviewers.join(',')}` : ''})`)
+      `${deadReviewers.length ? ` ⚠ ตายไป ${deadReviewers.join(',')}` : ''})`)
 
   const passBar = round === 1 ? 5 : 4   // รอบ1 ต้อง 5 · รอบ2 รับ 4–5
   if (review.score >= passBar)
@@ -151,7 +151,7 @@ for (let round = 1; round <= MAX_ROUNDS; round++) {
   const allIssues = scored
     .flatMap(s => (s.result.issues || []).map(x => ({ ...x, by: `ผู้ตรวจ#${s.no}` })))
     .filter(x => {
-      // ⚠️ คีย์ต้องเป็น "ข้อความเต็ม" ไม่ใช่ 80 ตัวอักษรแรก (reviver #26 บริษัท A · 2026-08-27):
+      // ⚠ คีย์ต้องเป็น "ข้อความเต็ม" ไม่ใช่ 80 ตัวอักษรแรก (reviver #26 บริษัท A · 2026-08-27):
       // ฉบับแรกตัดที่ 80 ตัว → ปัญหาคนละเรื่องที่ขึ้นต้นเหมือนกัน (ซึ่งเป็นวิธีเขียนปกติของภาษาไทย
       // "ในไฟล์ X ฟังก์ชัน Y ...") จะถูกนับเป็นอันเดียวกันแล้วโดนทิ้ง = สร้างการสูญหายแบบแคบลง
       // ซ้ำรอยบั๊กที่การแก้นี้เพิ่งลบไปเอง · **ยอมซ้ำดีกว่ายอมหาย** — สถาปนิกอ่านของซ้ำได้ แต่หาของที่ไม่เคยเห็นไม่ได้

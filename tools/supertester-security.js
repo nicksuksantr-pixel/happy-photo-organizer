@@ -21,7 +21,7 @@ export const meta = {
 //    pin signature → updater ตาย, เข้ม validation → ข้อมูลถูกต้องโดน reject) → บนระบบเรือจริง "ห้าม" auto-fix เหมือน Tester.
 //    Coddy ต้อง เสนอ→รออนุมัติ→แก้บน branch เท่านั้น. agent = read-only อยู่แล้ว (ออดิตไม่มีทางพังระบบ); ด่านอนุมัตินี้กันช่วง "แก้".
 //
-// 🛡️ กรอบงาน = DEFENSIVE / AUTHORIZED: ระบบของ Nick เอง, audit เพื่อป้องกัน. agent หา "ช่องโหว่จริง" จากการอ่านโค้ด
+// 🛡 กรอบงาน = DEFENSIVE / AUTHORIZED: ระบบของ Nick เอง, audit เพื่อป้องกัน. agent หา "ช่องโหว่จริง" จากการอ่านโค้ด
 //    แล้วรายงาน + เสนอวิธี harden. ❌ ไม่เขียน exploit/PoC พร้อมยิง · ❌ ไม่เขียนมัลแวร์/เครื่องมือหลบการตรวจจับ · ❌ ไม่ยิง/สแกน/รัน/ต่อระบบจริง
 //
 // ⛔ AGENT CAP (Nick #16): 3 ตัว/รอบ · ทำ "ทีละรอบ" (Coddy เรียกสคริปต์นี้ทีละครั้ง) → ไม่เกิน 3 ตัวพร้อมกันเลย
@@ -30,14 +30,14 @@ export const meta = {
 //    🛑 FAIL=STOP: รอบไหน error/empty/0-agent → รายงาน + หยุด รอ Nick (1 trigger = 1 รัน 3 รอบ) · ❌ ห้าม blind-retry
 // ───────────────────────────────────────────────────────────────────────
 
-// ⚠️ args มาถึงสคริปต์เป็น JSON "string" ในฮาร์เนสนี้ (พิสูจน์ 2026-06-13) → ต้อง parse + กัน throw · ❌ ห้ามลบ guard
+// ⚠ args มาถึงสคริปต์เป็น JSON "string" ในฮาร์เนสนี้ (พิสูจน์ 2026-06-13) → ต้อง parse + กัน throw · ❌ ห้ามลบ guard
 let _A = args
 if (typeof _A === 'string') { try { _A = JSON.parse(_A) } catch { _A = {} } }
 _A = _A || {}
 const workdir = _A.workdir
 if (!workdir)
   return { error:'supertester-security: ไม่มี workdir ใน args — ส่ง args เป็น object {workdir, round, scope}', findings:[], angles:[] }
-// ⚠️ ❌ ห้ามเขียน `Number(x) || 1` (reviver #26 บริษัท A · 2026-08-27) — เหตุผลเดียวกับ supertester.js:
+// ⚠ ❌ ห้ามเขียน `Number(x) || 1` (reviver #26 บริษัท A · 2026-08-27) — เหตุผลเดียวกับ supertester.js:
 // มันกลืน 0/''/NaN ให้กลายเป็นรอบ 1 เงียบๆ ซึ่งคือบั๊กเดียวกับ `ROUND_FOCUS[round] || ROUND_FOCUS[1]` ที่ลบไปแล้ว
 const _rawRound = _A.round
 const round = (_rawRound === undefined || _rawRound === null || _rawRound === '') ? 1 : Number(_rawRound)
@@ -87,7 +87,7 @@ const ROUND_FOCUS = {
     'tampering':    'ต่อ chain: updater hijack/MITM/downgrade · รัน .exe ที่ไม่ verify · XSS→bridge→API · DLL planting — ยืนยันจาก code path ว่าถึง sink จริง',
     'auth-secrets': 'ต่อ chain: privilege escalation · default/leaked cred · injection (SQL/topic/path/zip) — **ท้า trusted-LAN**: ถ้า LAN "ไม่" trusted ช่องไหนพังทันที + blast radius แต่ละช่อง',
   }},
-  // ⚠️ ชื่อรอบนี้เคยเขียนว่า "(สมมติ Coddy แก้ R1–R2 ไปแล้ว)" — คำว่า "สมมติ" คือบั๊กที่ #4 แก้ไปแล้ว
+  // ⚠ ชื่อรอบนี้เคยเขียนว่า "(สมมติ Coddy แก้ R1–R2 ไปแล้ว)" — คำว่า "สมมติ" คือบั๊กที่ #4 แก้ไปแล้ว
   // แต่ชื่อยังค้างอยู่ และมันเดินทางไปถึง prompt ของ agent (:111) และไปถึงตาของ Nick ในรายงาน (:167/:179)
   // = ป้ายชื่อบอกให้เดา ขณะที่คำสั่งบรรทัดล่างบอกห้ามเดา (reviver #26 บริษัท A · 2026-08-27)
   3: { name:'Remediation-verify + residual risk — ปิดจ็อบ (ใช้รายการที่แก้จริงจาก `scope` ซึ่งสคริปต์บังคับให้ส่งมา)', by:{
@@ -123,7 +123,7 @@ const reviewPrompt = (angle) => [
   `**ก่อนรีวิว**: อ่าน \`log/\` ล่าสุด (20 entry) + \`bug/\` ล่าสุด + ดูการเปลี่ยนแปลงล่าสุด (git ถ้ามี) เพื่อเข้าใจ "สิ่งที่เพิ่งทำ" แล้วโฟกัสบริเวณนั้นก่อน (แต่จับช่องโหว่ร้ายแรงนอกบริเวณได้ด้วย)`,
   round >= 2 ? `รอบนี้ต่อยอด: **สิ่งที่ Nick อนุมัติให้ harden ไปแล้วอยู่ในบรรทัด "ขอบเขต" ข้างบน** (สคริปต์บังคับให้ Coddy ส่งมา) — ตรวจว่าปิดครบจริงไหม · มี variant/พี่น้องของช่องเดิมที่หลุดไหม · การ harden สร้างรูใหม่หรือทำของเดิมพังไหม · แล้วต่อ chain ที่ลึกกว่ารอบก่อน · ❌ อย่าเดาเอาเองว่ารอบก่อนแก้อะไร` : ``,
   ``,
-  `🛡️ กรอบงาน (DEFENSIVE / AUTHORIZED): นี่คือระบบของ Nick เอง — audit เพื่อ "ป้องกัน". หน้าที่คุณ = หา "ช่องโหว่จริง" จากการอ่านโค้ด แล้วรายงาน + เสนอวิธี harden`,
+  `🛡 กรอบงาน (DEFENSIVE / AUTHORIZED): นี่คือระบบของ Nick เอง — audit เพื่อ "ป้องกัน". หน้าที่คุณ = หา "ช่องโหว่จริง" จากการอ่านโค้ด แล้วรายงาน + เสนอวิธี harden`,
   `  • ✅ อธิบาย exploit chain "พอให้เข้าใจและแก้ได้" (precondition + code path)`,
   `  • ❌ ไม่เขียน exploit/PoC ที่พร้อมนำไปใช้โจมตีจริง · ❌ ไม่เขียนสคริปต์โจมตี/มัลแวร์/เครื่องมือหลบเลี่ยงการตรวจจับ`,
   `  • ❌ ไม่ยิง/สแกน/รัน/เชื่อมต่อระบบจริงใดๆ — static code audit อย่างเดียว`,
@@ -169,7 +169,7 @@ const tally = sev => findings.filter(f => f.severity === sev).length
 // ในงาน security อันตรายกว่าที่อื่น: มุมที่ตายไป = พื้นผิวโจมตีที่ไม่มีใครมอง แต่รายงานอ่านเหมือนตรวจครบ 3 มุม
 const degraded = reports.length < ANGLES.length
 
-log(`SuperTester Security รอบ ${round}/3 (${RF.name}) เสร็จ: ${reports.length}/${ANGLES.length} angle${degraded ? ` ⚠️ ตายไป: ${dead.join(', ')}` : ''} · ${findings.length} findings (P0:${tally('P0')} P1:${tally('P1')} P2:${tally('P2')} P3:${tally('P3')})`)
+log(`SuperTester Security รอบ ${round}/3 (${RF.name}) เสร็จ: ${reports.length}/${ANGLES.length} angle${degraded ? ` ⚠ ตายไป: ${dead.join(', ')}` : ''} · ${findings.length} findings (P0:${tally('P0')} P1:${tally('P1')} P2:${tally('P2')} P3:${tally('P3')})`)
 
 if (degraded)
   return {

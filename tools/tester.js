@@ -28,7 +28,7 @@ export const meta = {
 //    → ถ้าวันใดเห็นเกิน 3 จริง ค่อยใส่ (แลกความลึกกับความแน่นอน) — อย่าใส่ไว้ล่วงหน้าโดยไม่มีเหตุ
 // ───────────────────────────────────────────────────────────────────────
 
-// ⚠️ args มาถึงสคริปต์เป็น JSON "string" ในฮาร์เนสนี้ (พิสูจน์ 2026-06-13) → ต้อง parse + กัน throw · ❌ ห้ามลบ guard
+// ⚠ args มาถึงสคริปต์เป็น JSON "string" ในฮาร์เนสนี้ (พิสูจน์ 2026-06-13) → ต้อง parse + กัน throw · ❌ ห้ามลบ guard
 let _A = args
 if (typeof _A === 'string') { try { _A = JSON.parse(_A) } catch { _A = {} } }
 _A = _A || {}
@@ -117,7 +117,7 @@ const tally = sev => findings.filter(f => f.severity === sev).length
 // บนออดิตที่ได้แค่ 2/3 โดยไม่มีอะไรสะดุด · ตอนนี้คืนจำนวน "จริง" + ธง degraded + next ที่สั่งหยุด
 const degraded = reports.length < LENSES.length
 
-log(`Tester ออดิตเสร็จ: ${reports.length}/${LENSES.length} lens${degraded ? ` ⚠️ ตายไป: ${dead.join(', ')}` : ''} · ${findings.length} findings (P0:${tally('P0')} P1:${tally('P1')} P2:${tally('P2')} P3:${tally('P3')})`)
+log(`Tester ออดิตเสร็จ: ${reports.length}/${LENSES.length} lens${degraded ? ` ⚠ ตายไป: ${dead.join(', ')}` : ''} · ${findings.length} findings (P0:${tally('P0')} P1:${tally('P1')} P2:${tally('P2')} P3:${tally('P3')})`)
 
 return {
   agentsExpected: LENSES.length,   // ที่ตั้งใจเปิด = 3 เสมอ (script บังคับ ไม่มีทางเกิน)

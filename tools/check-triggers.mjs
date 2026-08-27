@@ -77,8 +77,28 @@ export function stripComments(src) {
   return out
 }
 
-// ── per-file checks. `has` runs on stripped code · `mutate` removes the guard from the REAL file ──
+// ── per-file checks. `has` runs on stripped code (or on the RAW file when `raw: true`) ·
+//    `mutate` removes the guard from the REAL file so the check can be proven red ──
 const CHECKS = [
+  // ⛔ THE TWO THAT STOP THE TRIGGER FROM FIRING AT ALL. Both must read the RAW file: a stray \r inside a
+  //    comment is erased by stripComments, and that is exactly where it hid.
+  //    2026-08-27: reviver could not be launched at all for six attempts. The Workflow permission handler
+  //    refused the whole file — "script contains control characters that would be hidden in the approval
+  //    dialog" — and the message pointed at `script` while the args were blamed. Cause: `\r`. Python's
+  //    io.open(path,'w') on Windows silently translates \n to \r\n, so the five scripts edited with Python
+  //    that day became CRLF; lucifer.js, the one file only ever touched with the Edit tool, stayed LF and
+  //    was the control that proved it. A trigger that cannot fire is worse than one that fires badly:
+  //    there is no output to read and nothing to debug from.
+  { id: 'LF line endings', files: ALL, raw: true,
+    why: 'a CR makes the Workflow permission handler refuse the whole script - the trigger cannot fire at all',
+    has: s => !/\r/.test(s),
+    mutate: s => s.replace('\n', '\r\n') },
+
+  { id: 'no hidden characters', files: ALL, raw: true,
+    why: 'variation selectors / zero-width / BOM / line-separator are invisible and get the script refused',
+    has: s => !/[\uFE00-\uFE0F\u200B-\u200F\u2060-\u2064\u00AD\uFEFF\u2028\u2029]/.test(s),
+    mutate: s => s.replace('\n', '\uFE0F\n') },
+
   { id: 'args guard', files: ALL,
     why: 'args JSON-string guard (60-agent burn 2026-06-13)',
     has: c => /typeof _A === 'string'/.test(c),
@@ -132,7 +152,7 @@ const CHECKS = [
   { id: 'intent counts firms', files: ['reviver.js'],
     why: 'three silences read as unanimity once intent became optional',
     has: c => /statedIntents/.test(c),
-    // ⚠️ ต้องเป็น /g และเปลี่ยน "ทุกที่": ลบแค่บรรทัดประกาศ ชื่อยังโผล่ที่อื่น การ์ดเลยยังเขียว
+    // ⚠ ต้องเป็น /g และเปลี่ยน "ทุกที่": ลบแค่บรรทัดประกาศ ชื่อยังโผล่ที่อื่น การ์ดเลยยังเขียว
     // (mutation red-proof จับข้อนี้ได้เอง 2026-08-27 — ซึ่งคือเหตุผลที่ v2 ใช้ mutation แทน snippet)
     mutate: s => s.replace(/statedIntents/g, '_gone') },
 
@@ -208,10 +228,11 @@ for (const chk of CHECKS) {
     const p = path.join(DIR, f)
     if (!fs.existsSync(p)) { fail(`${chk.id} · ${f} — FILE MISSING`); continue }
     const raw = fs.readFileSync(p, 'utf8')
-    if (!chk.has(stripComments(raw))) { fail(`${chk.id} · ${f} — ${chk.why}`); continue }
+    const view = src => (chk.raw ? src : stripComments(src))
+    if (!chk.has(view(raw))) { fail(`${chk.id} · ${f} — ${chk.why}`); continue }
     const mutated = chk.mutate(raw)
     if (mutated === raw) { fail(`${chk.id} · ${f} — STALE: the mutation found nothing to remove, so this check is green for an unknown reason`); continue }
-    if (chk.has(stripComments(mutated))) { fail(`${chk.id} · ${f} — GREEN ON THE BROKEN FILE (worse than no check)`); continue }
+    if (chk.has(view(mutated))) { fail(`${chk.id} · ${f} — GREEN ON THE BROKEN FILE (worse than no check)`); continue }
     ok(`${chk.id} · ${f}  [red-proven on the real file]`)
   }
 }

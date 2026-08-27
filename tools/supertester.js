@@ -20,14 +20,14 @@ export const meta = {
 //    (เหตุที่ต้องเป็นสคริปต์ = บังคับ 3/รอบ เหมือน tester.js กัน fan-out 70-agent 2026-06-13)
 // ───────────────────────────────────────────────────────────────────────
 
-// ⚠️ args มาถึงสคริปต์เป็น JSON "string" ในฮาร์เนสนี้ (พิสูจน์ 2026-06-13) → ต้อง parse + กัน throw · ❌ ห้ามลบ guard
+// ⚠ args มาถึงสคริปต์เป็น JSON "string" ในฮาร์เนสนี้ (พิสูจน์ 2026-06-13) → ต้อง parse + กัน throw · ❌ ห้ามลบ guard
 let _A = args
 if (typeof _A === 'string') { try { _A = JSON.parse(_A) } catch { _A = {} } }
 _A = _A || {}
 const workdir = _A.workdir
 if (!workdir)
   return { error:'supertester: ไม่มี workdir ใน args — ส่ง args เป็น object {workdir, round, scope}', findings:[], lenses:[] }
-// ⚠️ ❌ ห้ามเขียน `Number(x) || 1` (reviver #26 บริษัท A · 2026-08-27): มันกลืน 0, '', NaN และทุกค่าที่ไม่ใช่
+// ⚠ ❌ ห้ามเขียน `Number(x) || 1` (reviver #26 บริษัท A · 2026-08-27): มันกลืน 0, '', NaN และทุกค่าที่ไม่ใช่
 // ตัวเลข ให้กลายเป็น "รอบ 1" เงียบๆ — คือบั๊กเดียวกับ `ROUNDS[round] || ROUNDS[1]` ที่เพิ่งลบทิ้งข้างล่าง
 // แค่ซ่อนอยู่บรรทัดบนแทน · ไม่ส่ง round มาเลย = ตั้งใจให้เป็นรอบ 1 (ถูกต้อง) · ส่งค่าเพี้ยนมา = ต้องหยุด ไม่ใช่เดา
 const _rawRound = _A.round
@@ -132,7 +132,7 @@ const tally = sev => findings.filter(f => f.severity === sev).length
 // แม้ตายไป 1-2 ตัว แล้วสายนี้เดินต่อไป "แก้ → รอบถัดไป → build → อัพ Play" บนรีวิวที่ไม่ครบ
 const degraded = reports.length < R.lenses.length
 
-log(`SuperTester รอบ ${round}/3 (${R.name}) เสร็จ: ${reports.length}/${R.lenses.length} lens${degraded ? ` ⚠️ ตายไป: ${dead.join(', ')}` : ''} · ${findings.length} findings (P0:${tally('P0')} P1:${tally('P1')} P2:${tally('P2')} P3:${tally('P3')})`)
+log(`SuperTester รอบ ${round}/3 (${R.name}) เสร็จ: ${reports.length}/${R.lenses.length} lens${degraded ? ` ⚠ ตายไป: ${dead.join(', ')}` : ''} · ${findings.length} findings (P0:${tally('P0')} P1:${tally('P1')} P2:${tally('P2')} P3:${tally('P3')})`)
 
 return {
   round,
