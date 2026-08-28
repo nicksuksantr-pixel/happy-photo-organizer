@@ -76,6 +76,13 @@ const MASTER_ONLY = new Set(['tidy.mjs', 'command_pattern.md', 'nick-master-work
 // know about is a script nothing protects, which is the whole reason this file exists.
 const REVIEW = ['tester.js', 'supertester.js', 'supertester-security.js', 'reviver.js', 'clean.js']
 const ALL = [...REVIEW, 'lucifer.js']
+// ⛔ THE GUARD MUST CHECK ITSELF. The two RAW checks (LF, hidden characters) apply to every file we
+// ship, and this file was the ONE it never looked at — so when git rewrote it as CRLF in
+// SHIP-MONITORING (472 CRs, `git status` clean the whole time, because autocrlf normalises on read),
+// the guard inspected five green scripts and said nothing about the file it was running from.
+// A guard with a blind spot exactly the shape of itself is the oldest joke in this repository.
+// (Found 2026-08-28 with the SHIP-MONITORING session, from a phantom " M" with an empty diff.)
+const RAW_ALL = [...ALL, 'check-triggers.mjs', 'tidy.mjs']
 // tidy.mjs is not a Workflow script (no args/agents), so it is out of the checks above — but it is
 // the ONLY tool in the house that moves and deletes files, so it gets its own guards below.
 const TIDY = ['tidy.mjs']
@@ -123,12 +130,12 @@ const CHECKS = [
   //    that day became CRLF; lucifer.js, the one file only ever touched with the Edit tool, stayed LF and
   //    was the control that proved it. A trigger that cannot fire is worse than one that fires badly:
   //    there is no output to read and nothing to debug from.
-  { id: 'LF line endings', files: ALL, raw: true,
+  { id: 'LF line endings', files: RAW_ALL, raw: true,
     why: 'a CR makes the Workflow permission handler refuse the whole script - the trigger cannot fire at all',
     has: s => !/\r/.test(s),
     mutate: s => s.replace('\n', '\r\n') },
 
-  { id: 'no hidden characters', files: ALL, raw: true,
+  { id: 'no hidden characters', files: RAW_ALL, raw: true,
     why: 'variation selectors / zero-width / BOM / line-separator are invisible and get the script refused',
     has: s => !/[\uFE00-\uFE0F\u200B-\u200F\u2060-\u2064\u00AD\uFEFF\u2028\u2029]/.test(s),
     mutate: s => s.replace('\n', '\uFE0F\n') },

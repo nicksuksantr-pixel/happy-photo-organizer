@@ -1,0 +1,19 @@
+# tools/.gitattributes — synced by sync-rules-to-projects.ps1 (command_pattern #22)
+#
+# WHY THIS FILE EXISTS (2026-08-28, found with the SHIP-MONITORING session):
+# Every repo here has core.autocrlf=true and no root .gitattributes, so git writes CRLF into the
+# working tree on checkout. Proven, not assumed: deleting tools/reviver.js and running
+# `git checkout --` produced 647 CR characters — and the Workflow permission handler REFUSES any
+# script containing a CR ("control characters that would be hidden in the approval dialog").
+#
+#   => a fresh clone of any of these repos has CRLF trigger scripts, and NOT ONE trigger can fire.
+#
+# That is the whole point of #22 (a cloud instance sees only the repo) failing silently, and it
+# hides well: `git status` says clean, because autocrlf normalises CRLF back to LF when git READS
+# the file. The corruption lives on disk while git reports nothing wrong.
+# It is also exactly the bug that cost six failed launches on 2026-08-27 — same CR, different cause
+# (that one was Python's io.open on Windows; SHARED_LESSONS: python-write-on-windows-turns-a-file-crlf).
+#
+# Scoped to tools/ on purpose: it pins the scripts that must stay LF without touching any of the
+# project's own files or its line-ending conventions.
+* text eol=lf
