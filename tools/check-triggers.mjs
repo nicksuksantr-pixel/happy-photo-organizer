@@ -48,9 +48,24 @@ import { execFileSync } from 'child_process'
 const DIR = path.dirname(fileURLToPath(import.meta.url))
 const QUIET = process.argv.includes('--quiet')
 const say = s => { if (!QUIET) console.log(s) }
-let failed = 0, passed = 0
+let failed = 0, passed = 0, skipped = 0
 const fail = m => { console.log('  ✗ ' + m); failed++ }
 const ok = m => { passed++; say('  ✓ ' + m) }
+const skip = m => { skipped++; say('  – ' + m) }
+
+// ⛔ MASTER-ONLY files. This guard travels into every project repo (#22), but these three live only
+// on Nick's machine — a project repo carries `memory/nick-workflow.md`, the synced BRIEF, not the
+// rulebook itself. Reported by ship-monitoring-e3 (2026-08-28) and confirmed by running it there:
+// the copy synced into SHIP-MONITORING was **red 13 of 98**, every one of them for a file that
+// repo is not supposed to have. I never saw it because I only ever ran the master copy, where all
+// four exist and it reads 98/98.
+//   Why that is worth fixing rather than explaining away, in their words: a guard that stays red
+//   for a reason nobody in that repo CAN fix teaches every session to stop looking at it — and the
+//   day it goes red for a real reason, nobody notices. Same damage as green-for-the-wrong-reason,
+//   which this file already fails loudly about; red-for-the-wrong-reason costs exactly as much.
+// ⚠ SKIP is only ever for these four. A trigger script missing from a repo is a REAL failure and
+//    must stay a failure — silently skipping that would be the fail-open bug all over again.
+const MASTER_ONLY = new Set(['tidy.mjs', 'command_pattern.md', 'nick-master-workflow.md'])
 
 // clean.js belongs in REVIEW: it is a 3-firm, read-only, report-only script and carries the same
 // contract (real agent count, notCovered required, read-only Bash + the import warning, a degraded STOP).
@@ -62,7 +77,16 @@ const ALL = [...REVIEW, 'lucifer.js']
 // the ONLY tool in the house that moves and deletes files, so it gets its own guards below.
 const TIDY = ['tidy.mjs']
 const ROUNDS = ['supertester.js', 'supertester-security.js']
-const read = f => fs.readFileSync(path.join(DIR, f), 'utf8')
+// A check target may sit next to this file (tools/) or in the repo's memory/ — #22 syncs the
+// rule documents to memory/ and the scripts to tools/. Resolving only against DIR made
+// CODE_REVIEW_PROCEDURE.md read as MISSING in every project repo while it sat one folder away.
+const resolve = f => {
+  const here = path.join(DIR, f)
+  if (fs.existsSync(here)) return here
+  const mem = path.join(DIR, '..', 'memory', f)
+  return fs.existsSync(mem) ? mem : here
+}
+const read = f => fs.readFileSync(resolve(f), 'utf8')
 
 /** remove real comments, keep string/template contents (that is where the prompts live) */
 export function stripComments(src) {
@@ -284,8 +308,14 @@ const SIBLING_RULES = [
 say('── per-file guards (with mutation red-proof) ──')
 for (const chk of CHECKS) {
   for (const f of chk.files) {
-    const p = path.join(DIR, f)
-    if (!fs.existsSync(p)) { fail(`${chk.id} · ${f} — FILE MISSING`); continue }
+    const p = resolve(f)
+    if (!fs.existsSync(p)) {
+      // master-only file absent = this is a project repo, not a defect · anything else absent IS one
+      MASTER_ONLY.has(f)
+        ? skip(`${chk.id} · ${f} — SKIP (master-only, not present in a project repo)`)
+        : fail(`${chk.id} · ${f} — FILE MISSING`)
+      continue
+    }
     const raw = fs.readFileSync(p, 'utf8')
     const view = src => (chk.raw ? src : stripComments(src))
     if (!chk.has(view(raw))) { fail(`${chk.id} · ${f} — ${chk.why}`); continue }
@@ -342,7 +372,8 @@ for (const [file, re, want, why] of [
   ['command_pattern.md', /`tidy` must stay runnable alone/, true, '#27 omits that tidy must still run on its own'],
   ['nick-master-workflow.md', /tidy\.mjs --project/, true, 'the brief omits the housekeeping step of #27'],
 ]) {
-  const p = path.join(DIR, file)
+  const p = resolve(file)
+  if (!fs.existsSync(p) && MASTER_ONLY.has(file)) { skip(`${file} — SKIP (master-only, not present in a project repo)`); continue }
   const present = fs.existsSync(p) && re.test(fs.readFileSync(p, 'utf8'))
   present === want ? ok(`${file} · ${why}`) : fail(`${file} — ${why}`)
 }
@@ -408,6 +439,12 @@ for (const [n, src, shouldSurvive] of [
   survived === shouldSurvive ? ok(n) : fail(`stripComments · ${n} — survived=${survived}, expected ${shouldSurvive}`)
 }
 
-console.log(`\n${failed ? '❌' : '✅'}  ${passed} passed, ${failed} failed`)
+// ⛔ the skipped count is NOT optional output. A run that quietly reports "83 passed, 0 failed"
+// while 15 checks never executed reads as full coverage — the same silent scope cut this guard
+// exists to catch elsewhere. Say the number, and say where to go for the rest.
+console.log(`\n${failed ? '❌' : '✅'}  ${passed} passed, ${failed} failed` + (skipped ? `, ${skipped} SKIPPED` : ''))
+if (skipped) console.log(`   ⚠ ${skipped} check(s) skipped: their target lives only on the master machine (#22 syncs the ` +
+                         `brief to a repo, not the rulebook). Those are covered by running this file at ` +
+                         `Claude\\Projects\\Nick — not here. Skipped is "not examined", never "examined and clean".`)
 console.log('   Text properties only: green = the decision is still written and reachable, not that the behaviour is right.')
 process.exit(failed ? 1 : 0)
