@@ -125,6 +125,20 @@ const CHECKS = [
   //   the check stayed green over the broken file. The runner caught it and said so out loud.
   //   That is the whole point of red-proving every check: a guard green for the wrong reason
   //   is worse than no guard, because it retires the worry. Now it names the exact expression.
+  { id: 'tidy reports folders it could not remove', files: TIDY,
+    why: 'a bare catch{} left 629 empty folders behind after a 37k-file delete and said nothing — ' +
+         'the swallowed error WAS the report (SHARED_LESSONS: silent-catcherror-hides-failure)',
+    // ⚠ v1 asked only whether `dirsLeft` appeared anywhere — it appears in its own declaration, so
+    //   mutating the increment left the check green. Ask for the branch that actually PRINTS.
+    has: c => /\(dirsLeft \?/.test(c) && /could not be removed \(usually a path over MAX_PATH\)/.test(c),
+    mutate: s => s.replace('(dirsLeft ?', '(false ?') },
+
+  { id: 'tidy keeps the bin\'s own README/MANIFEST', files: TIDY,
+    why: 'the file explaining what a bin holds is the only record of what it held BEFORE an ' +
+         'irreversible empty — it was deleted for real on MyDocs-Marine 2026-08-28 and had to be rewritten',
+    has: c => /const DOCS = new Set/.test(c) && /!isBinDoc\(f\)/.test(c),
+    mutate: s => s.replace('.filter(f => !isBinDoc(f))', '') },
+
   { id: 'tidy leaves .gitkeep alone', files: TIDY,
     why: 'moving .gitkeep makes git drop the empty record folder, so the next session has nowhere to write',
     has: c => /\.filter\(d => !d\.name\.startsWith\('\.'\)\)/.test(c),
