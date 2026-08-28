@@ -58,6 +58,9 @@ const ok = m => { passed++; say('  ✓ ' + m) }
 // know about is a script nothing protects, which is the whole reason this file exists.
 const REVIEW = ['tester.js', 'supertester.js', 'supertester-security.js', 'reviver.js', 'clean.js']
 const ALL = [...REVIEW, 'lucifer.js']
+// tidy.mjs is not a Workflow script (no args/agents), so it is out of the checks above — but it is
+// the ONLY tool in the house that moves and deletes files, so it gets its own guards below.
+const TIDY = ['tidy.mjs']
 const ROUNDS = ['supertester.js', 'supertester-security.js']
 const read = f => fs.readFileSync(path.join(DIR, f), 'utf8')
 
@@ -102,6 +105,30 @@ const CHECKS = [
     why: 'variation selectors / zero-width / BOM / line-separator are invisible and get the script refused',
     has: s => !/[\uFE00-\uFE0F\u200B-\u200F\u2060-\u2064\u00AD\uFEFF\u2028\u2029]/.test(s),
     mutate: s => s.replace('\n', '\uFE0F\n') },
+
+  // ── tidy.mjs: the only tool here that touches the filesystem, so its three safety properties
+  //    are pinned executably. All three were written AFTER the first real run broke something.
+  { id: 'tidy rotates only the #7 series', files: TIDY,
+    why: 'without SERIES it sorts every file in log/ by mtime, so a one-off document displaces the real log ' +
+         '(measured 2026-08-28: it rotated out SHIP-MONITORING\'s three real logs and nearly retired ' +
+         'Happy-Ai-Trading\'s rnd_director_log.md, which is the #25 loop\'s cross-round memory)',
+    has: c => /const SERIES = \{/.test(c) && /\.filter\(r => r\.over\)/.test(c),
+    mutate: s => s.replace('const SERIES = {', 'const SERIESX = {') },
+
+  { id: 'tidy never deletes without --yes', files: TIDY,
+    why: 'emptying a bin is the only irreversible act in the house; the list must print and stop unless Nick confirms',
+    has: c => /if \(!go\) \{/.test(c) && /--yes/.test(c),
+    mutate: s => s.replace('if (!go) {', 'if (false) {') },
+
+  // ⚠ v1 of this check asked whether `startsWith('.')` appeared ANYWHERE — and it appears twice:
+  //   once in the record filter, once in `projects()`. So the mutation hit the first occurrence and
+  //   the check stayed green over the broken file. The runner caught it and said so out loud.
+  //   That is the whole point of red-proving every check: a guard green for the wrong reason
+  //   is worse than no guard, because it retires the worry. Now it names the exact expression.
+  { id: 'tidy leaves .gitkeep alone', files: TIDY,
+    why: 'moving .gitkeep makes git drop the empty record folder, so the next session has nowhere to write',
+    has: c => /\.filter\(d => !d\.name\.startsWith\('\.'\)\)/.test(c),
+    mutate: s => s.replace(".filter(d => !d.name.startsWith('.'))", ".filter(d => true)") },
 
   { id: 'args guard', files: ALL,
     why: 'args JSON-string guard (60-agent burn 2026-06-13)',
