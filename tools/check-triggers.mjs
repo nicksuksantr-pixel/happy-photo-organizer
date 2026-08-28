@@ -58,13 +58,16 @@ const skip = m => { skipped++; say('  – ' + m) }
 // rulebook itself. Reported by ship-monitoring-e3 (2026-08-28) and confirmed by running it there:
 // the copy synced into SHIP-MONITORING was **red 13 of 98**, every one of them for a file that
 // repo is not supposed to have. I never saw it because I only ever ran the master copy, where all
-// four exist and it reads 98/98.
+// three exist and it reads 98/98.
 //   Why that is worth fixing rather than explaining away, in their words: a guard that stays red
 //   for a reason nobody in that repo CAN fix teaches every session to stop looking at it — and the
 //   day it goes red for a real reason, nobody notices. Same damage as green-for-the-wrong-reason,
 //   which this file already fails loudly about; red-for-the-wrong-reason costs exactly as much.
-// ⚠ SKIP is only ever for these four. A trigger script missing from a repo is a REAL failure and
-//    must stay a failure — silently skipping that would be the fail-open bug all over again.
+// ⚠ SKIP is only ever for the THREE names in the Set below — keep this sentence and the Set in
+//    step. (It said "four" for a few hours while the Set held three: the code was narrower than the
+//    comment, so it was safe, but it is still `a-comment-is-not-evidence` in our own guard. Spotted
+//    by ship-monitoring-e3.) A trigger script missing from a repo is a REAL failure and must stay
+//    a failure — silently skipping that would be the fail-open bug all over again.
 const MASTER_ONLY = new Set(['tidy.mjs', 'command_pattern.md', 'nick-master-workflow.md'])
 
 // clean.js belongs in REVIEW: it is a 3-firm, read-only, report-only script and carries the same
@@ -373,8 +376,27 @@ for (const [file, re, want, why] of [
   ['nick-master-workflow.md', /tidy\.mjs --project/, true, 'the brief omits the housekeeping step of #27'],
 ]) {
   const p = resolve(file)
-  if (!fs.existsSync(p) && MASTER_ONLY.has(file)) { skip(`${file} — SKIP (master-only, not present in a project repo)`); continue }
-  const present = fs.existsSync(p) && re.test(fs.readFileSync(p, 'utf8'))
+  // ⛔ MISSING FILE IS ITS OWN OUTCOME — decide it BEFORE comparing present to want.
+  // The line below used to be the whole thing:
+  //     const present = fs.existsSync(p) && re.test(...)   ;   present === want ? ok() : fail()
+  // For a check phrased "this sentence must NOT appear" (`want === false`), a file that does not
+  // exist gives `present === false`, so `false === false` → **ok()**. Three checks were quietly
+  // GREEN in all ten project repos for that reason — and two of them were the guards for #14.7's
+  // fourth digit, the rule whose failure made `1.3481` and `1.348` the same version and stranded
+  // the fleet. The guard against "the rulebook still permits a 4th digit" was reporting clean
+  // because the rulebook was not there to read. That is not "checked and clean"; it is NEVER CHECKED.
+  //   Found by ship-monitoring-e3 (2026-08-28) from arithmetic, not from a failure: 13 red became
+  //   15 skipped where 12 was the only number that could be right, and they went looking for the 3.
+  // ⚠ The trap outlives the three cases: a future "must NOT appear" check aimed at a PROJECT file
+  //    would fail-open the same way if that file went missing. So absence is now decided on its own
+  //    terms — skip only for the named master-only set, fail for anything else, `want` never consulted.
+  if (!fs.existsSync(p)) {
+    MASTER_ONLY.has(file)
+      ? skip(`${file} — SKIP (master-only, not present in a project repo)`)
+      : fail(`${file} — FILE MISSING (cannot check: ${why})`)
+    continue
+  }
+  const present = re.test(fs.readFileSync(p, 'utf8'))
   present === want ? ok(`${file} · ${why}`) : fail(`${file} — ${why}`)
 }
 
