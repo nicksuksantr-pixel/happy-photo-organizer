@@ -12,7 +12,7 @@ export const meta = {
 //      workdir = โฟลเดอร์โปรเจคปัจจุบัน (ออดิต in-place แบบ "อ่านอย่างเดียว" — ไม่ต้องทำ worktree เพราะ agent ไม่แก้อะไร)
 //   2) ผลกลับมา = findings (P0–P3) จาก 3 lens รวมแล้วเรียงตามความรุนแรง
 //   3) Coddy (ตัวหลัก): อ่าน findings → verify กับโค้ดจริง → **แก้เองด้วยมือ 0 agent**
-//      → analyze+test → build → อัพ Play internal (mobile) + Drive → อัปเดต memory → รายงาน findings/fixes/สรุปโทเค้น
+//      → analyze+test → build → อัพ Play internal (mobile · ❌ ไม่ต้องอัพ Drive) → อัปเดต memory → รายงาน findings/fixes/สรุปโทเค้น
 //
 // ⛔ ทำไมต้องเป็น script (เหตุ 2026-06-13): Tester แบบ freeform เคยให้ agent 3 ตัวแตกลูกตัวละ ~30 = ~70 agent.
 //    script นี้บังคับด้วยโครงสร้าง: เรียก agent() แค่ "3 ครั้ง" ครั้งเดียว (parallel) ไม่มี loop fan-out ตาม finding,
@@ -130,6 +130,6 @@ return {
   next: degraded
     ? `🛑 STOP (#16): ออดิตได้แค่ ${reports.length}/${LENSES.length} lens — ขาด ${dead.join(', ')}. ` +
       `❌ ห้ามแก้/build/อัพ Play บนออดิตที่ไม่ครบ · รายงาน Nick ว่าขาด lens ไหนแล้วรอให้เขาสั่งอีกครั้ง (1 trigger = 1 launch)`
-    : 'Coddy: อ่าน findings → verify กับโค้ดจริง → แก้เอง (0 agent) → analyze+test → build → อัพ Play internal + Drive → อัปเดต memory → รายงาน findings/fixes/สรุปโทเค้น ' +
+    : 'Coddy: อ่าน findings → verify กับโค้ดจริง → แก้เอง (0 agent) → analyze+test → build → อัพ Play internal (❌ ไม่ต้องอัพ Drive) → อัปเดต memory → รายงาน findings/fixes/สรุปโทเค้น ' +
       '· อ่าน `lenses[].notCovered` ด้วย — ส่วนที่ไม่ได้ตรวจ ไม่เท่ากับส่วนที่ผ่าน',
 }

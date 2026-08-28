@@ -125,6 +125,20 @@ const CHECKS = [
   //   the check stayed green over the broken file. The runner caught it and said so out loud.
   //   That is the whole point of red-proving every check: a guard green for the wrong reason
   //   is worse than no guard, because it retires the worry. Now it names the exact expression.
+  // Nick, 2026-08-28: mobile builds go to Play and nowhere else. Play Console keeps every bundle
+  // ever uploaded, so a Drive copy is clutter — 75 files (~5 GB) had accumulated. This instruction
+  // sat in 4 scripts and 2 rule files; a fix that reaches only some of them re-grows the pile.
+  // raw: the instruction also lives in each script's header COMMENT, and a comment telling a future
+  // session to upload to Drive is exactly the thing being removed — stripping comments first made
+  // this check vacuous for lucifer.js, whose only mention was in one.
+  { id: 'no mobile build uploads to Drive', files: ['tester.js', 'supertester.js', 'lucifer.js'], raw: true,
+    why: 'Play is the archive; a Drive copy adds nothing and had grown to ~5 GB of stale builds',
+    // ⚠ v1 mutated only the FIRST occurrence, which lives in a header comment — and comments are
+    //   stripped before `has` runs, so the mutation vanished and the check stayed green on the
+    //   broken file. Replace every occurrence so the one inside real code is hit too.
+    has: c => !/Play[^\n]{0,20}[+/][^\n]{0,3}Drive/.test(c),
+    mutate: s => s.replace(/อัพ Play internal/g, 'อัพ Play internal + Drive') },
+
   { id: 'tidy reports folders it could not remove', files: TIDY,
     why: 'a bare catch{} left 629 empty folders behind after a 37k-file delete and said nothing — ' +
          'the swallowed error WAS the report (SHARED_LESSONS: silent-catcherror-hides-failure)',

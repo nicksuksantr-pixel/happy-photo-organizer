@@ -13,7 +13,7 @@ export const meta = {
 //        a) เรียก Workflow: { scriptPath:"<ไฟล์นี้>", args:{ workdir, round, scope } }  → 3 agent รีวิว → findings
 //        b) Coddy (ตัวหลัก): verify + **แก้เองด้วยมือ 0 agent**
 //      รอบ1 broad → รอบ2 verify+ลึก → รอบ3 final/release-ready  (review→fix ×3)
-//   2) จบ 3 รอบ → analyze+test → build → อัพ Play internal (mobile) + Drive → อัปเดต memory + bug/ + SHARED_LESSONS → รายงาน findings/fixes/สรุปโทเค้น
+//   2) จบ 3 รอบ → analyze+test → build → อัพ Play internal (mobile · ❌ ไม่ต้องอัพ Drive) → อัปเดต memory + bug/ + SHARED_LESSONS → รายงาน findings/fixes/สรุปโทเค้น
 //
 // ⛔ AGENT CAP (Nick #16): 3 ตัว/รอบ · ทำ "ทีละรอบ" (Coddy เรียกสคริปต์นี้ทีละครั้ง) → ไม่เกิน 3 ตัวพร้อมกันเลย
 //    รวมทั้งรัน = 9 ตัว แต่ sequential. ❌ ห้ามเรียกสคริปต์นี้ 3 ครั้งพร้อมกัน · ❌ agent ห้ามแตกลูก (review-only)
@@ -149,6 +149,6 @@ return {
       `❌ ห้ามแก้/ขึ้นรอบถัดไป/build บนรีวิวที่ไม่ครบ · รายงาน Nick แล้วรอให้เขาสั่งอีกครั้ง (1 trigger = 1 launch)`
     : (round < 3
         ? `Coddy: verify + แก้เอง (0 agent) → เรียกสคริปต์นี้ "รอบ ${round + 1}" พร้อมส่ง \`scope\` = สรุปว่ารอบนี้แก้อะไรไปบ้าง (บังคับ)`
-        : `Coddy: verify + แก้เอง (0 agent) → จบ 3 รอบ → analyze+test → build → อัพ Play/Drive → อัปเดต memory/bug/SHARED_LESSONS → รายงาน findings/fixes/สรุปโทเค้น`)
+        : `Coddy: verify + แก้เอง (0 agent) → จบ 3 รอบ → analyze+test → build → อัพ Play internal (❌ ไม่ต้องอัพ Drive) → อัปเดต memory/bug/SHARED_LESSONS → รายงาน findings/fixes/สรุปโทเค้น`)
     + ' · อ่าน `lenses[].notCovered` ด้วย — ส่วนที่ไม่ได้ตรวจ ไม่เท่ากับส่วนที่ผ่าน',
 }

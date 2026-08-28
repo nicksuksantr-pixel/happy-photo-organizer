@@ -13,7 +13,7 @@ export const meta = {
 //   1) Coddy สร้าง git worktree แยกจาก main → ส่ง path เข้าทาง args.workdir (ของจริงไม่ถูกแตะ)
 //   2) เรียก Workflow tool: { scriptPath: "<ไฟล์นี้>", args: { task, workdir } }
 //   3) ผลกลับมา:
-//        passed=true  → Coddy: emulator test → build → อัพ (Play/Drive) → merge worktree
+//        passed=true  → Coddy: emulator test → build → อัพ Play internal (❌ ไม่ต้องอัพ Drive) → merge worktree
 //        passed=false → Coddy: ❌ ไม่ build/ไม่อัพ → ทิ้ง worktree → คุยกับนิก
 // ❌ ห้ามจำลอง 3 agent เอง / ห้ามให้คะแนนตัวเอง / ห้าม build ก่อนผ่าน — ตัว script บังคับให้เป๊ะ
 // ───────────────────────────────────────────────────────────────────────
