@@ -20,7 +20,10 @@
 
 - ❌ Don't revert UI from English back to Thai (Nick wants pro)
 - ❌ Don't put mascot in identity slots (camera = identity, robot = helper)
-- ❌ Don't change default model from `gemini-3.1-flash-lite`
+- ❌ Don't change default model from `gemini-3.5-flash-lite` (Nick moved it off
+  3.1 on 2026-09-02 — same free limits; the old "keep 3.1" rule is retired)
+- ❌ Don't print a model name in the header badge from a tier preset label —
+  read `auth.get_model()`, or the badge starts lying again (v1.043 BUG-3)
 - ❌ Don't add bounce animation to mascot (causes render artifacts)
 - ❌ Don't remove uninstaller or registry registration
 - ❌ Don't refactor Phase 2 to sequential (parallel = 4x faster)

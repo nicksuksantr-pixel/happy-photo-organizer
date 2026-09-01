@@ -18,7 +18,7 @@ from google import genai
 CONFIG_DIR = Path.home() / ".happy-photo-organizer"
 CONFIG_FILE = CONFIG_DIR / "auth.json"
 
-DEFAULT_MODEL = "gemini-3.1-flash-lite"
+DEFAULT_MODEL = "gemini-3.5-flash-lite"
 
 # Serialize concurrent writes from multiple threads (window-state debounce vs
 # settings save vs tier change). The OS handles tmp→replace atomicity, but two
@@ -290,6 +290,7 @@ def list_vision_models(client) -> list[str]:
     except Exception:
         # fallback list — ครอบคลุม Gemini 3.x, 2.5, 2.0
         return [
+            "gemini-3.5-flash-lite",
             "gemini-3.1-pro-preview",
             "gemini-3.1-flash-lite",
             "gemini-3-pro-preview",

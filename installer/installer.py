@@ -385,7 +385,7 @@ class Installer:
                         pass
                 existing.update({"api_key": self.api_key.strip()})
                 if "model" not in existing:
-                    existing["model"] = "gemini-3.1-flash-lite"
+                    existing["model"] = "gemini-3.5-flash-lite"
                 # Atomic write + perm-lock (mirrors core.auth.atomic_write_json):
                 # a crash mid-install must not truncate a prior config, and the
                 # key file shouldn't be left world-readable. (Tester 2026-06-04

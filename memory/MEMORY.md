@@ -33,7 +33,7 @@
 
 | Setting | ค่า |
 |---------|-----|
-| Default Model | `gemini-3.1-flash-lite` (ห้ามเปลี่ยนเป็น Vertex / ห้าม hard-code free-only) |
+| Default Model | `gemini-3.5-flash-lite` (Nick ย้ายจาก 3.1 เมื่อ 2026-09-02 · ลิมิตฟรีเท่าเดิม · ห้ามเปลี่ยนเป็น Vertex / ห้าม hard-code free-only) |
 | API Key Type | Google **AI Studio** เท่านั้น |
 | Rate Limit | **RPM 15 / TPM 250,000 / RPD 500** (free tier) — เตือน Nick ก่อน batch ใหญ่ |
 | Key location | `~/.happy-photo-organizer/auth.json` (atomic JSON, ไม่ hard-code ใน code) |
@@ -109,7 +109,14 @@
 - `core/auth.py` — API key (atomic auth.json + quarantine)
 - `scripts/smoke_test.py` — มี smoke test (tests ใช้ stub `google.genai` — **AI จริงเทสได้แค่บนเครื่อง Nick + key จริง**)
 
-**สถานะ:** v1.042 (2026-08-05 layout fix) · **~7,205 LOC / 32 ไฟล์** (core 15 + ui 7 modules, main.py 1,247) · catalog **146 (121 bundled + 25 user)** · 14 formats · ผ่าน audit 8 รอบ (Cos) + **Tester round v1.041** (3-agent, 18 code fixes)
+**สถานะ:** v1.043 (2026-09-02)
+**v1.043 ที่ต้องจำ:**
+- 🖼️ **CTkButton 5.2.2: ถ้าสร้างด้วย `image=None` แล้วค่อย `configure(image=...)` ทีหลัง = รูปไม่ขึ้นตลอดกาล** (`_image_label` สร้างใน `_draw()` เท่านั้น และ key `"image"` ไม่ trigger redraw) → **ต้องสร้างปุ่มพร้อม placeholder image เสมอ**
+- 🧵 **ห้ามเรียก `self.after()` จาก worker thread** — Tkinter รับไว้เงียบๆ แล้วไม่ยิง (แถวแรกที่จบก่อน mainloop จะหายเสมอ) → ให้ worker ใส่ `queue.Queue` แล้วฝั่ง Tk โพลเอง
+- 🏷️ badge หัวบนต้องอ่าน `auth.get_model()` ไม่ใช่ `tier.label` (พรีเซ็ต hard-code ชื่อรุ่นไว้ → โกหกได้)
+- 🗑️ `processor.discard_assignment()` = ลบเฉพาะโฟลเดอร์ `__pending_` ใต้ dest + ไฟล์ที่ resize เท่านั้น · **ปฏิเสธ** ถ้าอยู่นอก dest หรือไม่มี `PENDING_MARKER` · **ต้นฉบับของ Nick ไม่แตะ**
+- 🚫 analyzer มี `irrelevant` แล้ว (สกรีนช็อต/คน/อาหาร/วิว) → ไม่ตั้งชื่องานให้ + ไม่เข้า fuzzy match · คนใส่ PPE ทำงานกับเครื่อง = งานจริง ไม่ใช่ irrelevant
+- **เดิม v1.042** (2026-08-05 layout fix) · **~7,205 LOC / 32 ไฟล์** (core 15 + ui 7 modules, main.py 1,247) · catalog **146 (121 bundled + 25 user)** · 14 formats · ผ่าน audit 8 รอบ (Cos) + **Tester round v1.041** (3-agent, 18 code fixes)
 **Layout v1.042 (จอเล็ก):** แถวบน = 3 คอลัมน์ (Step 1 | Step 2 | Log, ~200px) · **Step 3 = พื้นที่หลัก** — pack `side="bottom"` ก่อน top_row (จอเตี้ย → top_row โดนบีบแทน Step 3) + table_scroll `height=150` ขั้นต่ำ · drop zone 64px · log box 110px · sources list max 3 บรรทัด · wraplength 280
 **Tests (จริง):** `tests/test_core.py` = **27/27 PASS** (pure-Python, ไม่ต้องใช้ key/รูป) · `scripts/smoke_test.py` = live Gemini smoke 6/6 (มี synthetic-image fallback). ⚠️ คำว่า "67/67 tests" ใน docs เก่า = ของปลอม (ไม่เคยมี test suite) — แก้แล้ว
 **Tester v1.041 fixes สำคัญ:** grouper ข้ามเที่ยงคืน · date allocation เดือนเต็มเก็บวัน EXIF เดิม · analyzer JSON raw_decode · tier→model wiring · auth null-safe · settings scale revert on Cancel · installer atomic auth.json · Thai→EN strings

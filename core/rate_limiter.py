@@ -17,6 +17,14 @@ from .usage_log import UsageLog, get_usage_log
 
 # ─── Tier presets (เปลี่ยนได้จาก Settings) ───
 TIER_PRESETS: dict[str, dict] = {
+    "free-3.5-flash-lite": {
+        "label": "Free — Gemini 3.5 Flash Lite",
+        "model": "gemini-3.5-flash-lite",
+        "rpm": 15,
+        "rpd": 500,
+        "tpm": 250_000,
+        "throttle": True,
+    },
     "free-3.1-flash-lite": {
         "label": "Free — Gemini 3.1 Flash Lite",
         "model": "gemini-3.1-flash-lite",
@@ -51,7 +59,7 @@ TIER_PRESETS: dict[str, dict] = {
     },
 }
 
-DEFAULT_TIER = "free-3.1-flash-lite"
+DEFAULT_TIER = "free-3.5-flash-lite"
 
 
 class QuotaExceededError(RuntimeError):

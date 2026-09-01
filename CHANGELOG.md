@@ -9,6 +9,66 @@ Cosmetic / design / V2-scope items that survived round 6 + 7 + 8. All
 catalogued in detail at the bottom of this file under "Round 6
 deferred".
 
+## [1.043] — 2026-09-02 — Thumbnails actually show · Gemini 3.5 default · not-work detection + per-folder Delete
+
+### Fixed — thumbnails (two separate bugs, both silent)
+- **Every review row showed an empty box.** `job_row.py` built the thumbnail
+  button as `CTkButton(image=None)` and assigned the photo later. In
+  CustomTkinter 5.2.2, `configure(image=...)` only calls `_update_image()`,
+  which does nothing while the internal `_image_label` is None — and that label
+  is created solely in `_draw()`, which the `"image"` key never requests
+  (unlike `state`/`compound`/`anchor`). The button is now born with a real
+  placeholder tile. Broken since v1.036, not caused by the v1.042 layout work.
+- **The first row's thumbnail never arrived even after that fix.** The decode
+  worker called `self.after(0, ...)` from its own thread; rows are built as a
+  batch, so row 1 finishes before the main thread enters `mainloop()`, and that
+  call is accepted and then silently never fires. The worker now hands results
+  to a queue that the Tk thread polls (100 ms).
+- A thumbnail that cannot be decoded shows a visible **"no preview"** tile
+  instead of a blank box — a blank tile is what hid both bugs for months.
+
+### Fixed — the header badge reported the wrong model
+- The badge printed the tier preset's hard-coded label, so choosing
+  `gemini-3.5-flash-lite` in Settings still displayed "Gemini 3.1 Flash Lite".
+  The API calls were already correct; only the badge lied. It now reads
+  `auth.get_model()` — the same source the analyzer calls with.
+
+### Changed — Gemini 3.5 Flash Lite is the default
+- `auth.DEFAULT_MODEL`, a new `free-3.5-flash-lite` tier preset (now the default
+  tier; same free limits RPM 15 / RPD 500 / TPM 250k), the Settings dropdown,
+  the API-list fallback and the installer's config seeding all move to 3.5.
+  The 3.1 preset stays available for existing configs.
+
+### Added — "not vessel work" detection
+- The analyzer prompt/schema gained an `irrelevant` verdict for screenshots,
+  photos of people, food, scenery and unrelated documents. Previously the prompt
+  demanded a job title for *every* image, so a shopping-app screenshot became
+  "Browsing online shopping app on mobile". People in PPE working on equipment
+  are explicitly still real work.
+- A flagged group is stripped of any name in both the analyzer and the
+  processor, so a self-contradicting reply cannot smuggle a job title through
+  (or reach the fuzzy catalog matcher), and it always counts as "needs review".
+
+### Added — delete a folder from the review list
+- Every row has a **Delete** button; flagged rows show a red border, a
+  "NOT WORK" marker and a red Delete. A **"🗑 Delete not-work (N)"** bulk button
+  appears in the Step 3 header only while something is flagged.
+- Delete removes **only what Phase 1 created**: the `__pending_` folder under
+  the destination and the resized copies inside it. `discard_assignment` refuses
+  any folder outside the destination or missing the pending marker, so a bad
+  `temp_folder` fails loudly rather than deleting a real folder. The originals
+  are never touched, and the confirmation says so.
+- Phase 4 now asks separately before renaming anything still flagged as not-work.
+
+### Tests
+- `tests/test_core.py` **35/35 PASS** (27 → 35). New: `_as_bool` string-boolean
+  handling, irrelevant-never-named (incl. a self-contradicting payload),
+  flag-cleared-on-normal-result, and four `discard_assignment` guard tests
+  (deletes only the working copy · refuses a folder we did not create · refuses
+  outside the destination · survives an already-deleted folder).
+- Not covered by tests: the AI's real-world accuracy at judging irrelevant
+  photos — that needs a live key and real photos.
+
 ## [1.042] — 2026-08-05 — Small-screen layout: Step 3 becomes the primary area
 
 Nick reported (with screenshot) that on some computers a maximized window still

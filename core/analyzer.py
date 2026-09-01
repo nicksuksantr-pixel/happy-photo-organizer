@@ -70,6 +70,19 @@ def _generate_with_retry(client, *, cancel_event=None, **kwargs):
     raise RuntimeError("generate_content exhausted retries with no exception")
 
 
+def _as_bool(value) -> bool:
+    """Gemini returns JSON booleans, but a stray "true"/"yes"/1 shows up often
+    enough that treating the raw value as truthy would misread the string
+    "false" as True."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in {"true", "yes", "y", "1"}
+    return False
+
+
 def _cancelled_result(n: int = 0) -> dict:
     return {
         "matched_name": None,
@@ -86,14 +99,28 @@ from commercial vessels (ship engineering work).
 Your task: look at the image(s) and identify which "job" from the provided list best matches.
 
 Rules:
-1. If you are confident the image matches a job in the list → set matched_name to the EXACT name from the list
-2. If no job in the list matches → set matched_name = null AND suggested_name = a new SHORT English job title
+1. FIRST decide whether the image shows vessel maintenance/repair work at all.
+   Set irrelevant = true when it does NOT, for example:
+     - a screenshot of a phone or computer screen (chat, shopping, web page, video call, game)
+     - a photo of people: selfies, portraits, group photos, someone posing
+     - food, drinks, pets, scenery, travel or leisure photos
+     - documents, receipts or memes with no connection to the work
+   When irrelevant = true: matched_name = null, suggested_name = null, confidence = 0.0,
+   and reasoning says in one short sentence what the picture actually is.
+   Equipment, tools, machinery, parts, piping, wiring, panels, tanks, decks and
+   work-in-progress on board are NOT irrelevant — people wearing PPE while working
+   on equipment is real work, not a "photo of people".
+2. If you are confident the image matches a job in the list → set matched_name to the EXACT name from the list
+3. If no job in the list matches → set matched_name = null AND suggested_name = a new SHORT English job title
    (use technical verbs like Cleaned/Repaired/Replaced/Inspected/Installed; keep under 60 chars)
-3. confidence = 0.0–1.0 (1.0 = very confident)
-4. reasoning = a brief ENGLISH description of what you see (1 sentence, under 200 chars)
+4. confidence = 0.0–1.0 (1.0 = very confident)
+5. reasoning = a brief ENGLISH description of what you see (1 sentence, under 200 chars)
+
+Never invent a job title for an image you marked irrelevant — say it is not work instead.
 
 Respond ONLY as a single JSON object (NOT an array, NOT wrapped in markdown). Schema:
 {
+  "irrelevant": true | false,
   "matched_name": "..." | null,
   "suggested_name": "..." | null,
   "confidence": 0.0-1.0,
@@ -210,7 +237,15 @@ def analyze_image(
         result.setdefault("suggested_name", None)
         result.setdefault("confidence", 0.0)
         result.setdefault("reasoning", "")
+        result.setdefault("irrelevant", False)
         result["confidence"] = float(result.get("confidence") or 0.0)
+        result["irrelevant"] = _as_bool(result.get("irrelevant"))
+        if result["irrelevant"]:
+            # Never let a "not work" verdict carry a job title through — the
+            # whole point is that this group must not become a folder.
+            result["matched_name"] = None
+            result["suggested_name"] = None
+            result["confidence"] = 0.0
         return result
     except _CancelledError:
         return _cancelled_result()
@@ -300,7 +335,15 @@ def analyze_group(
         result.setdefault("suggested_name", None)
         result.setdefault("confidence", 0.0)
         result.setdefault("reasoning", "")
+        result.setdefault("irrelevant", False)
         result["confidence"] = float(result.get("confidence") or 0.0)
+        result["irrelevant"] = _as_bool(result.get("irrelevant"))
+        if result["irrelevant"]:
+            # Never let a "not work" verdict carry a job title through — the
+            # whole point is that this group must not become a folder.
+            result["matched_name"] = None
+            result["suggested_name"] = None
+            result["confidence"] = 0.0
         result["sample_count"] = len(samples)
         result["total_in_group"] = n
         return result

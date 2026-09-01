@@ -31,6 +31,7 @@ from core.image_io import (
     collect_images, format_summary, is_supported_image, SUPPORTED_EXTS,
 )
 from core.processor import (
+    discard_assignment,
     phase1_resize_and_group,
     phase2_ai_analyze,
     phase4_rename_folders,
@@ -468,6 +469,16 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         )
         self.review_summary.pack(side="left", fill="x", expand=True)
 
+        # Bulk-remove everything the AI flagged as not-work. Hidden until Phase 2
+        # actually flags something, so the normal case stays uncluttered.
+        self.delete_flagged_btn = ctk.CTkButton(
+            header_row, text="🗑 Delete not-work", height=36, width=150,
+            font=("Segoe UI", 11, "bold"),
+            fg_color=COLOR_DANGER, hover_color="#B91C1C",
+            text_color="#FFFFFF",
+            command=self._delete_flagged,
+        )
+
         self.phase4_btn = ctk.CTkButton(
             header_row, text=" Commit Rename", height=36, width=170,
             font=("Segoe UI", 12, "bold"),
@@ -694,15 +705,31 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         cfg = auth.load_config()
         self._log(f"Tier changed: {cfg.get('tier', DEFAULT_TIER)}", "ok")
 
+    def _tier_badge_label(self, tier) -> str:
+        """Tier family + the model actually in use.
+
+        v1.043: the badge used to print `tier.label` verbatim, and every preset
+        label hard-codes a model name ("Free — Gemini 3.1 Flash Lite"). Picking
+        a different model in Settings changed what the app really called but not
+        the badge, so the header claimed 3.1 while 3.5 was running. Read the
+        model back from config instead — the same source analyzer.py calls with.
+        """
+        family = tier.label.split("—")[0].strip() or tier.label
+        try:
+            return f"{family} — {auth.get_model()}"
+        except Exception:
+            return tier.label
+
     def _update_tier_badge(self):
         """Refresh header badge — RPM realtime (RPD/quota ดูเต็มใน AI Health)"""
         try:
             tier = self.rate_limiter.tier
+            tier_label = self._tier_badge_label(tier)
             rpm_now = self.usage_log.current_rpm()
             cap_rpm = tier.rpm
             if not tier.throttle or cap_rpm <= 0:
                 # paid / no cap
-                badge = f"Tier: {tier.label}  •  RPM: {rpm_now} (no cap)  ●"
+                badge = f"Tier: {tier_label}  •  RPM: {rpm_now} (no cap)  ●"
                 color = COLOR_OK
             else:
                 pct = rpm_now / cap_rpm if cap_rpm else 0
@@ -716,7 +743,7 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
                     icon, color = "▸", COLOR_OK      # running
                 else:
                     icon, color = "●", COLOR_OK      # idle
-                badge = f"Tier: {tier.label}  •  RPM: {rpm_now}/{cap_rpm}  {icon}"
+                badge = f"Tier: {tier_label}  •  RPM: {rpm_now}/{cap_rpm}  {icon}"
             self.tier_badge.configure(text=badge, text_color=color)
         except Exception:
             pass
@@ -1228,23 +1255,32 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
 
         if not plan.assignments:
             self.review_summary.configure(text="No photos found in source", text_color=COLOR_WARN)
+            self._sync_flagged_button(0)
             self._refresh_step_states()
             return
 
         need_review = sum(1 for a in plan.assignments if a.needs_review)
+        flagged = sum(1 for a in plan.assignments if self._is_discardable(a))
         summary = (
             f"{len(plan.assignments)} folders  •  "
             f"resized {plan.total_resized}/{plan.total_images}  •  "
             f"{need_review} need review"
         )
+        if flagged:
+            summary += f"  •  {flagged} not work"
         if plan.shifted_count:
             summary += f"  •  {plan.shifted_count} shifted"
         if plan.capped_count:
             summary += f"  •  {plan.capped_count} capped"
         self.review_summary.configure(text=summary, text_color=COLOR_TEXT)
+        self._sync_flagged_button(flagged)
 
         for a in plan.assignments:
-            row = JobRow(self.table_scroll, a, self.catalog, on_change=self._refresh_summary)
+            row = JobRow(
+                self.table_scroll, a, self.catalog,
+                on_change=self._refresh_summary,
+                on_delete=self._delete_assignment,
+            )
             row.pack(fill="x", padx=4, pady=4)
 
         self.phase4_btn.configure(state="normal")
@@ -1253,6 +1289,98 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
             text_color=COLOR_OK,
         )
         self._refresh_step_states()
+
+    # ─── Delete a folder from the plan ───────────
+
+    def _delete_assignment(self, assignment, row=None):
+        """Drop one folder from the review list and delete the working copy.
+
+        Only the `__pending_` folder Phase 1 created under the destination and
+        the resized JPEGs inside it are removed — the originals in the source
+        folder are never touched (discard_assignment enforces that).
+        """
+        if not self.plan:
+            return
+        n_photos = len(assignment.resized_paths) or len(assignment.images)
+        label = assignment.job_name.strip() or assignment.folder_date.strftime("%d-%m-%y")
+        if not messagebox.askyesno(
+            "Delete this folder?",
+            f"Remove '{label}' from the list and delete the {n_photos} resized "
+            f"photo(s) plus its working folder?\n\n"
+            f"Your original photos are NOT touched — only the copies this app "
+            f"made in the destination.",
+            icon="warning",
+        ):
+            return
+
+        ok, err = discard_assignment(self.plan, assignment)
+        if not ok:
+            self._log(f"Delete failed: {err}", "error")
+            messagebox.showwarning("Could not delete", err)
+            return
+
+        if row is not None:
+            try:
+                row.destroy()
+            except Exception:
+                pass
+        self._log(f"Deleted: {label} ({n_photos} photos)", "warn")
+
+        if not self.plan.assignments:
+            self.phase4_btn.configure(state="disabled")
+            self.review_summary.configure(
+                text="All folders removed — nothing left to rename",
+                text_color=COLOR_WARN,
+            )
+            self._sync_flagged_button(0)
+            self._refresh_step_states()
+            return
+        self._refresh_summary()
+
+    @staticmethod
+    def _is_discardable(a) -> bool:
+        """Flagged as not-work AND still unnamed.
+
+        Typing a name into a flagged row is how the user says "actually, keep
+        this one" (the row says exactly that). Bulk delete must not sweep those
+        away, and the counter must show what the button will really delete.
+        """
+        return a.is_irrelevant and not a.job_name.strip()
+
+    def _delete_flagged(self):
+        """Bulk delete of everything the AI flagged as not vessel work."""
+        if not self.plan:
+            return
+        flagged = [a for a in self.plan.assignments if self._is_discardable(a)]
+        if not flagged:
+            messagebox.showinfo("Nothing flagged", "No folder is marked as 'not vessel work'.")
+            return
+        photos = sum(len(a.resized_paths) or len(a.images) for a in flagged)
+        if not messagebox.askyesno(
+            "Delete all flagged folders?",
+            f"Delete {len(flagged)} folder(s) the AI marked as NOT vessel work "
+            f"({photos} resized photo(s))?\n\n"
+            f"Your original photos are NOT touched — only the copies this app "
+            f"made in the destination.",
+            icon="warning",
+        ):
+            return
+        removed, failed = 0, []
+        for a in list(flagged):
+            ok, err = discard_assignment(self.plan, a)
+            if ok:
+                removed += 1
+            else:
+                failed.append(err)
+        self._log(f"Deleted {removed} flagged folder(s)", "warn")
+        for err in failed[:3]:
+            self._log(f"Delete failed: {err}", "error")
+        self._render_plan(self.plan)
+        if failed:
+            messagebox.showwarning(
+                "Some folders could not be deleted",
+                "\n".join(failed[:5]),
+            )
 
     def _refresh_summary(self):
         if not self.plan:
@@ -1274,19 +1402,48 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
                     w.refresh_catalog_values()
 
         need = sum(1 for a in self.plan.assignments if a.needs_review)
-        self.review_summary.configure(
-            text=(
-                f"{len(self.plan.assignments)} folders  •  "
-                f"resized {self.plan.total_resized}/{self.plan.total_images}  •  "
-                f"{need} need review"
-            ),
+        flagged = sum(1 for a in self.plan.assignments if self._is_discardable(a))
+        text = (
+            f"{len(self.plan.assignments)} folders  •  "
+            f"resized {self.plan.total_resized}/{self.plan.total_images}  •  "
+            f"{need} need review"
         )
+        if flagged:
+            text += f"  •  {flagged} not work"
+        self.review_summary.configure(text=text)
+        self._sync_flagged_button(flagged)
+
+    def _sync_flagged_button(self, flagged: int):
+        """Show the bulk-delete button only while something is actually flagged."""
+        try:
+            if flagged:
+                self.delete_flagged_btn.configure(text=f"🗑 Delete not-work ({flagged})")
+                if not self.delete_flagged_btn.winfo_ismapped():
+                    self.delete_flagged_btn.pack(side="right", padx=(0, 8))
+            elif self.delete_flagged_btn.winfo_ismapped():
+                self.delete_flagged_btn.pack_forget()
+        except Exception:
+            pass
 
     # ─── Phase 4 ─────────────────────────────────
 
     def _start_phase4(self):
         if not self.plan:
             return
+        # Flagged-but-unnamed rows would silently become date-prefixed folders,
+        # which is exactly what the flag exists to prevent — ask about those
+        # first, and separately, so "not work" never slips through unnoticed.
+        flagged = [a for a in self.plan.assignments if self._is_discardable(a)]
+        if flagged:
+            if not messagebox.askyesno(
+                "Folders marked 'not vessel work'",
+                f"{len(flagged)} folder(s) are still marked as NOT vessel work.\n\n"
+                f"Continuing will keep them as date-prefixed folders. Use "
+                f"'Delete not-work' to remove them instead.\n\nContinue anyway?",
+                icon="warning",
+            ):
+                return
+
         unassigned = [a for a in self.plan.assignments if not a.job_name.strip()]
         if unassigned:
             ok = messagebox.askyesno(

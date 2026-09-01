@@ -1,10 +1,10 @@
-"""
-test_core.py — pure-Python regression tests (NO API key, NO network, NO photos).
+﻿"""
+test_core.py â€” pure-Python regression tests (NO API key, NO network, NO photos).
 
 Run:  python tests/test_core.py
 
 Created 2026-06-04 (Tester sprint). The project previously claimed "67/67 tests"
-in its docs but had NO test suite — only scripts/smoke_test.py, which needs a live
+in its docs but had NO test suite â€” only scripts/smoke_test.py, which needs a live
 Gemini key + local sample photos. This file is the real, dependency-free suite:
 it exercises the deterministic core logic (grouping, date allocation, JSON parsing,
 catalog, rate-limiter tiers, version compare, auth null-safety) so a refactor that
@@ -15,6 +15,7 @@ exception marks it FAILED. Exit code 0 = all pass, 1 = at least one failed.
 """
 from __future__ import annotations
 
+import shutil
 import sys
 import tempfile
 from datetime import datetime
@@ -30,21 +31,21 @@ from core import analyzer, auth, catalog, grouper, processor, rate_limiter
 from core.version import read_version
 
 
-# ─── helpers ───────────────────────────────────────────────────
+# â”€â”€â”€ helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _make_dated_files(tmp: Path, stamps: list[str]) -> list[Path]:
     """Create empty files named so read_from_filename yields the given times.
     `stamps` = list of 'YYYYMMDD_HHMMSS'. grouper reads the date from the name
-    (the file need not be a real image — read_from_exif fails gracefully)."""
+    (the file need not be a real image â€” read_from_exif fails gracefully)."""
     out = []
     for i, s in enumerate(stamps):
         p = tmp / f"IMG_{s}_{i:03d}.jpg"
-        p.write_bytes(b"")  # not a real image — exif read returns None, filename wins
+        p.write_bytes(b"")  # not a real image â€” exif read returns None, filename wins
         out.append(p)
     return out
 
 
-# ─── grouper ───────────────────────────────────────────────────
+# â”€â”€â”€ grouper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def test_grouper_midnight_burst_is_one_session():
     """C2: a continuous burst crossing midnight (<gap apart) = ONE folder."""
@@ -70,7 +71,7 @@ def test_grouper_empty():
     assert grouper.group_by_session([]) == []
 
 
-# ─── processor: date allocation ────────────────────────────────
+# â”€â”€â”€ processor: date allocation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _assignment(day: int, month: int = 5, year: int = 2026) -> processor.JobAssignment:
     return processor.JobAssignment(folder_date=datetime(year, month, day, 10, 0, 0))
@@ -110,7 +111,7 @@ def test_capped_day_clamped_to_month_length():
 def test_detect_target_month_clamps_implausible_year(tmp_path_factory=None):
     with tempfile.TemporaryDirectory() as d:
         root = Path(d)
-        (root / "01-05-50 Job A").mkdir()  # year 2050 — implausible
+        (root / "01-05-50 Job A").mkdir()  # year 2050 â€” implausible
         ym = processor.detect_target_month(root)
         assert ym is not None
         assert abs(ym[0] - datetime.now().year) <= 5, f"year not clamped: {ym}"
@@ -122,7 +123,7 @@ def test_sanitize_filename_strips_invalid():
         assert bad not in out, f"{bad!r} survived sanitize: {out!r}"
 
 
-# ─── analyzer: JSON parsing (C5) ───────────────────────────────
+# â”€â”€â”€ analyzer: JSON parsing (C5) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def test_parse_plain_json():
     r = analyzer._parse_json_response('{"matched_name":"X","confidence":0.9}')
@@ -135,7 +136,7 @@ def test_parse_code_fenced_json():
 
 
 def test_parse_json_with_trailing_prose():
-    r = analyzer._parse_json_response('Result: {"matched_name":"Z","confidence":0.7} — done.')
+    r = analyzer._parse_json_response('Result: {"matched_name":"Z","confidence":0.7} â€” done.')
     assert r["matched_name"] == "Z", f"got {r}"
 
 
@@ -150,7 +151,7 @@ def test_parse_garbage_returns_error_dict():
     assert "parse error" in r["reasoning"]
 
 
-# ─── analyzer: transient-error classification (BUG-N2) ─────────
+# â”€â”€â”€ analyzer: transient-error classification (BUG-N2) â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def test_transient_5xx_matches():
     assert analyzer._is_transient_error(Exception("503 Service Unavailable"))
@@ -169,7 +170,7 @@ def test_non_transient_does_not_match():
     assert not analyzer._is_transient_error(Exception("received 5031 bytes ok"))
 
 
-# ─── catalog ───────────────────────────────────────────────────
+# â”€â”€â”€ catalog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def test_date_sort_key_chronological():
     dates = ["02-01-25", "01-12-24", "15-06-25"]
@@ -195,7 +196,7 @@ def test_catalog_record_usage_dates_sorted_chronologically():
     assert entry["dates_seen"] == ["01-12-24", "15-06-25"], f"got {entry['dates_seen']}"
 
 
-# ─── rate_limiter (F1) ─────────────────────────────────────────
+# â”€â”€â”€ rate_limiter (F1) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def test_tier_preset_carries_model():
     t = rate_limiter.TierConfig.from_preset("free-2.5-flash")
@@ -219,7 +220,7 @@ def test_min_interval_math():
     assert abs(t.min_interval_sec - 4.0) < 0.01, f"15 rpm should be 4s/call, got {t.min_interval_sec}"
 
 
-# ─── version compare (updater) ─────────────────────────────────
+# â”€â”€â”€ version compare (updater) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def test_version_compare():
     from core.updater import is_newer
@@ -233,7 +234,7 @@ def test_version_file_matches_running():
     assert read_version() != "0.0.0", "VERSION file unreadable"
 
 
-# ─── auth null-safety (C12) ────────────────────────────────────
+# â”€â”€â”€ auth null-safety (C12) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def test_get_api_key_handles_null_value():
     """C12: a JSON `"api_key": null` must not crash with None.strip()."""
@@ -241,7 +242,7 @@ def test_get_api_key_handles_null_value():
     try:
         auth.load_config = lambda: {"api_key": None, "model": None}
         assert auth.get_api_key() is None  # no AttributeError
-        assert auth.get_model() == auth.DEFAULT_MODEL  # null model → default
+        assert auth.get_model() == auth.DEFAULT_MODEL  # null model â†’ default
     finally:
         auth.load_config = orig
 
@@ -255,7 +256,137 @@ def test_get_model_default_when_missing():
         auth.load_config = orig
 
 
-# ─── runner ────────────────────────────────────────────────────
+# â”€â”€â”€ v1.043: "not vessel work" flag + per-folder delete â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+def test_as_bool_reads_json_and_stringy_booleans():
+    assert analyzer._as_bool(True) is True
+    assert analyzer._as_bool(False) is False
+    assert analyzer._as_bool("true") is True
+    assert analyzer._as_bool("yes") is True
+    assert analyzer._as_bool(1) is True
+    # the trap: a truthy non-empty string that means the opposite
+    assert analyzer._as_bool("false") is False
+    assert analyzer._as_bool("no") is False
+    assert analyzer._as_bool(None) is False
+    assert analyzer._as_bool(0) is False
+
+
+def test_irrelevant_result_never_becomes_a_job():
+    """A screenshot/selfie/food photo must not acquire a name â€” not even via
+    the fuzzy catalog match, which would happily latch onto a stray word."""
+    cat = catalog.JobCatalog()
+    a = processor.JobAssignment(folder_date=datetime(2026, 9, 2))
+    real_name = cat.names()[0]
+    processor._apply_result_to_assignment(a, {
+        "irrelevant": True,
+        # hostile payload: the model contradicted itself and still named a job
+        "matched_name": real_name,
+        "suggested_name": real_name,
+        "confidence": 0.97,
+        "reasoning": "screenshot of a shopping app",
+    }, cat)
+    assert a.is_irrelevant is True
+    assert a.job_name == ""
+    assert a.confidence == 0.0
+    assert a.is_new_suggestion is False
+    assert a.needs_review is True     # flagged rows must always surface
+
+
+def test_normal_result_clears_the_irrelevant_flag():
+    cat = catalog.JobCatalog()
+    a = processor.JobAssignment(folder_date=datetime(2026, 9, 2), is_irrelevant=True)
+    processor._apply_result_to_assignment(a, {
+        "irrelevant": False,
+        "matched_name": None,
+        "suggested_name": "Replaced Electrical Plug",
+        "confidence": 0.85,
+        "reasoning": "plug replacement",
+    }, cat)
+    assert a.is_irrelevant is False
+    assert a.job_name == "Replaced Electrical Plug"
+
+
+def _pending_plan(tmp: Path, marker: str = processor.PENDING_MARKER):
+    """A plan with one assignment owning a real on-disk pending folder."""
+    dest = tmp / "dest"
+    dest.mkdir()
+    folder = dest / f"2026-09-02{marker}01"
+    folder.mkdir()
+    resized = []
+    for i in (1, 2):
+        p = folder / f"img_{i:03d}.jpg"
+        p.write_bytes(b"x" * 10)
+        resized.append(p)
+    src = tmp / "source"
+    src.mkdir()
+    originals = [src / "IMG_0001.jpg", src / "IMG_0002.jpg"]
+    for p in originals:
+        p.write_bytes(b"original")
+    a = processor.JobAssignment(
+        folder_date=datetime(2026, 9, 2), images=list(originals),
+        resized_paths=resized, temp_folder=folder,
+    )
+    plan = processor.Plan(assignments=[a], dest_root=dest,
+                          total_images=2, total_resized=2)
+    return plan, a, folder, originals
+
+
+def test_discard_assignment_deletes_only_the_working_copy():
+    with tempfile.TemporaryDirectory() as td:
+        plan, a, folder, originals = _pending_plan(Path(td))
+        ok, err = processor.discard_assignment(plan, a)
+        assert ok is True, err
+        assert not folder.exists()                 # working folder + resized gone
+        assert all(p.exists() for p in originals)  # originals untouched
+        assert plan.assignments == []
+        assert plan.total_resized == 0
+        assert plan.total_images == 0
+
+
+def test_discard_assignment_refuses_a_folder_we_did_not_create():
+    """Guard: without the pending marker this would rmtree a real folder."""
+    with tempfile.TemporaryDirectory() as td:
+        plan, a, folder, _ = _pending_plan(Path(td), marker="__REAL_JOB_")
+        ok, err = processor.discard_assignment(plan, a)
+        assert ok is False
+        assert "did not create" in err
+        assert folder.exists()
+        assert plan.assignments == [a]     # plan left alone on refusal
+
+
+def test_discard_assignment_refuses_outside_the_destination():
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        plan, a, _folder, _ = _pending_plan(tmp)
+        outside = tmp / "elsewhere"
+        outside.mkdir()
+        victim = outside / f"2026-09-02{processor.PENDING_MARKER}01"
+        victim.mkdir()
+        (victim / "keep.txt").write_bytes(b"keep")
+        a.temp_folder = victim
+        ok, err = processor.discard_assignment(plan, a)
+        assert ok is False
+        assert "outside the destination" in err
+        assert victim.exists()
+
+
+def test_discard_assignment_survives_an_already_deleted_folder():
+    """Deleting a row twice (or after a manual cleanup) must not error."""
+    with tempfile.TemporaryDirectory() as td:
+        plan, a, folder, _ = _pending_plan(Path(td))
+        shutil.rmtree(folder)
+        ok, err = processor.discard_assignment(plan, a)
+        assert ok is True, err
+        assert plan.assignments == []
+
+
+def test_default_model_is_3_5_flash_lite():
+    assert auth.DEFAULT_MODEL == "gemini-3.5-flash-lite"
+    preset = rate_limiter.TIER_PRESETS[rate_limiter.DEFAULT_TIER]
+    assert preset["model"] == "gemini-3.5-flash-lite"
+
+
+# â”€â”€â”€ runner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def main() -> int:
     tests = [(n, f) for n, f in sorted(globals().items())
@@ -270,16 +401,17 @@ def main() -> int:
         except Exception as e:
             failed += 1
             failures.append(f"{name}: {type(e).__name__}: {e}")
-            print(f"  FAIL  {name}  →  {type(e).__name__}: {e}")
+            print(f"  FAIL  {name}  â†’  {type(e).__name__}: {e}")
     print("\n" + "=" * 60)
-    print(f"  {passed}/{len(tests)} passed" + (f", {failed} FAILED" if failed else " — ALL GREEN"))
+    print(f"  {passed}/{len(tests)} passed" + (f", {failed} FAILED" if failed else " â€” ALL GREEN"))
     print("=" * 60)
     if failures:
         print("\nFailures:")
         for f in failures:
-            print(f"  • {f}")
+            print(f"  â€¢ {f}")
     return 1 if failed else 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

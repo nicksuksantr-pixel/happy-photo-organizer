@@ -33,6 +33,11 @@ from .exif_reader import format_folder_date
 from .image_io import collect_images, is_supported_image
 from .resizer import resize_to_target
 
+# Marks the working folders Phase 1 creates under dest_root. `discard_assignment`
+# refuses to delete anything whose name lacks it, so a stray temp_folder can
+# never turn a row's Delete button into an rmtree of a real folder.
+PENDING_MARKER = "__pending_"
+
 # ─── safe filename ───
 _INVALID_FN_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
@@ -59,6 +64,7 @@ class JobAssignment:
     confidence: float = 0.0
     reasoning: str = ""
     is_new_suggestion: bool = False
+    is_irrelevant: bool = False                 # AI: not vessel work at all
     source_label: str = ""
 
     @property
@@ -70,7 +76,12 @@ class JobAssignment:
 
     @property
     def needs_review(self) -> bool:
-        return self.confidence < 0.7 or self.is_new_suggestion or self.date_was_capped
+        return (
+            self.confidence < 0.7
+            or self.is_new_suggestion
+            or self.date_was_capped
+            or self.is_irrelevant
+        )
 
     @property
     def date_shifted(self) -> bool:
@@ -376,7 +387,7 @@ def phase1_resize_and_group(
 
         # temp folder name = "YYYY-MM-DD_session-N"
         date_part = g.representative_date.strftime("%Y-%m-%d")
-        temp_name = f"{date_part}__pending_{idx:02d}"
+        temp_name = f"{date_part}{PENDING_MARKER}{idx:02d}"
         temp_folder = dest_root / temp_name
         temp_folder.mkdir(parents=True, exist_ok=True)
 
@@ -459,6 +470,7 @@ def _apply_result_to_assignment(
     """Apply AI result → mutate assignment in place. Safe to call from main thread."""
     matched = result.get("matched_name")
     suggested = result.get("suggested_name")
+    irrelevant = bool(result.get("irrelevant"))
     # Defensive: a future caller / odd model reply could put a non-numeric
     # value here. float("high") would raise and abort the whole phase-2 loop
     # (this runs outside the per-future try). Clamp to 0.0 on bad input.
@@ -466,6 +478,19 @@ def _apply_result_to_assignment(
         confidence = float(result.get("confidence") or 0.0)
     except (TypeError, ValueError):
         confidence = 0.0
+
+    # v1.043: the AI judged this group to be non-work (screenshot, people, food,
+    # scenery...). Do not name it and do not fuzzy-match it into a real job —
+    # it is offered to the user for deletion instead of becoming a folder.
+    if irrelevant:
+        assignment.is_irrelevant = True
+        assignment.job_name = ""
+        assignment.is_new_suggestion = False
+        assignment.confidence = 0.0
+        assignment.reasoning = result.get("reasoning", "")
+        return
+
+    assignment.is_irrelevant = False
 
     # fuzzy fallback เผื่อ AI สะกดต่าง
     resolved = None
@@ -489,6 +514,48 @@ def _apply_result_to_assignment(
 
     assignment.confidence = confidence
     assignment.reasoning = result.get("reasoning", "")
+
+
+def discard_assignment(plan: "Plan", assignment: "JobAssignment") -> tuple[bool, str]:
+    """Drop one assignment from the plan and delete the working copy it owns.
+
+    Deletes ONLY what Phase 1 created: the `dest_root/<date>__pending_NN`
+    folder and the resized JPEGs inside it. The user's original photos
+    (`assignment.images`) live in the source folder and are never touched.
+
+    Refuses anything that does not look like our own pending folder — a bad
+    `temp_folder` must fail loudly, not recursively delete some other tree.
+    """
+    folder = assignment.temp_folder
+    if folder is not None and folder.exists():
+        try:
+            resolved = folder.resolve()
+            root = plan.dest_root.resolve()
+        except Exception as e:
+            return False, f"cannot resolve path: {str(e)[:120]}"
+        if not resolved.is_dir():
+            return False, f"not a directory: {resolved}"
+        if resolved.parent != root:
+            return False, f"refusing to delete outside the destination: {resolved}"
+        if PENDING_MARKER not in resolved.name:
+            return False, f"refusing to delete a folder we did not create: {resolved.name}"
+        try:
+            shutil.rmtree(resolved)
+        except Exception as e:
+            return False, f"{type(e).__name__}: {str(e)[:160]}"
+
+    # Keep the plan's counters honest — the summary line is built from them.
+    plan.total_resized = max(0, plan.total_resized - len(assignment.resized_paths))
+    plan.total_images = max(0, plan.total_images - len(assignment.images))
+    if assignment.date_shifted:
+        plan.shifted_count = max(0, plan.shifted_count - 1)
+    if assignment.date_was_capped:
+        plan.capped_count = max(0, plan.capped_count - 1)
+    try:
+        plan.assignments.remove(assignment)
+    except ValueError:
+        pass
+    return True, ""
 
 
 def phase2_ai_analyze(
