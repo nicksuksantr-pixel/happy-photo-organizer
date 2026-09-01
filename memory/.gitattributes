@@ -1,0 +1,25 @@
+# memory/.gitattributes — synced by sync-rules-to-projects.ps1 (command_pattern #22)
+#
+# WHY THIS FILE EXISTS (2026-09-02):
+# Same mechanism as tools/.gitattributes, closed one directory earlier. Every repo here has
+# core.autocrlf=true and no root .gitattributes, so on checkout git writes CRLF into the working
+# tree and then reports `git status` clean — it normalises CRLF back to LF when it READS the file,
+# so the corruption sits on disk with nothing to show for it.
+# (SHARED_LESSONS: git-itself-writes-crlf-and-then-reports-the-file-clean.)
+#
+# HONEST SCOPE — this is PREVENTIVE, not a fix for something broken:
+# The trigger scripts in tools/ genuinely could not run with CRLF (the Workflow permission handler
+# refuses any script containing a CR). memory/ holds documents, not scripts, so nothing refuses
+# them. Before adding this pin I CHECKED rather than assumed: check-triggers.mjs resolves three
+# rule documents out of memory/ (command_pattern.md, nick-master-workflow.md,
+# CODE_REVIEW_PROCEDURE.md) and **none of its 102 checks anchors a pattern with `$`** — which is
+# the one regex shape a trailing \r breaks. So CRLF here cannot turn a check green or red today.
+#
+# It is pinned anyway because that clean result is a property of the CURRENT checks, not of the
+# directory: the next `$`-anchored pattern anybody writes would fail silently in a fresh clone and
+# pass on this machine, which is the exact failure shape that already cost us a day. Pinning the
+# bytes is one line; remembering this caveat forever is not.
+#
+# Scoped to memory/ on purpose: it pins the synced rule documents without touching the project's
+# own files or its line-ending conventions.
+* text eol=lf
