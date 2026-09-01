@@ -357,6 +357,14 @@ class Installer:
             if not payload or not payload.exists():
                 return False, f"Payload not found: {payload}"
 
+            # v1.044: the catalog is USER DATA that happens to live inside the
+            # install tree, and extraction below overwrites every file. Every
+            # update since v1.025 therefore silently threw away the job names
+            # Nick had taught the app (measured on this machine: 160 jobs
+            # installed vs 146 shipped = 14 lost). Read it before extracting,
+            # merge it back after.
+            previous_catalog = self._read_installed_catalog()
+
             if progress_cb:
                 progress_cb(8, "Reading payload...")
                 time.sleep(0.1)
@@ -370,6 +378,12 @@ class Installer:
                     if progress_cb:
                         pct = 12 + int(74 * (i + 1) / total)
                         progress_cb(pct, f"Extracting {Path(member).name[:40]}")
+
+            if progress_cb:
+                progress_cb(85, "Restoring your saved job names...")
+            kept = self._merge_catalog(previous_catalog)
+            if progress_cb and kept:
+                progress_cb(86, f"Kept {kept} job name(s) you had added")
 
             if progress_cb:
                 progress_cb(86, "Saving API key...")
@@ -513,6 +527,77 @@ exit
                 winreg.SetValueEx(k, "NoRepair", 0, winreg.REG_DWORD, 1)
         except Exception:
             pass
+
+    # ─── job catalog preservation (v1.044) ────────────────────────────
+    # data/job_catalog.json ships with the app but is written to at runtime
+    # whenever the user teaches it a job name, so it is user data sitting in
+    # the install tree. Extraction overwrites it; these two helpers carry the
+    # user's own entries across an upgrade.
+
+    def _catalog_paths(self) -> list[Path]:
+        """Every job_catalog.json under the install dir (frozen builds nest it
+        in _internal/data/, older layouts used data/)."""
+        if not self.install_dir or not self.install_dir.exists():
+            return []
+        try:
+            return sorted(self.install_dir.rglob("job_catalog.json"))
+        except Exception:
+            return []
+
+    def _read_installed_catalog(self) -> dict | None:
+        """Snapshot the catalog already installed, before it is overwritten."""
+        for path in self._catalog_paths():
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if isinstance(data, dict) and isinstance(data.get("jobs"), list):
+                return data
+        return None
+
+    def _merge_catalog(self, previous: dict | None) -> int:
+        """Add jobs from the pre-upgrade catalog that the shipped one lacks.
+
+        Returns how many entries were carried over. Union by `normalized`
+        (falling back to a lowercased name), keeping the shipped entry when
+        both sides have it — the shipped copy is the curated one, and the
+        user's edits live in the entries only they have. Never removes
+        anything, so a failure here can only mean "no names were rescued",
+        never "names were lost".
+        """
+        if not previous:
+            return 0
+        prev_jobs = previous.get("jobs") or []
+        if not prev_jobs:
+            return 0
+
+        def key(job: dict) -> str:
+            return (job.get("normalized") or (job.get("name") or "").lower()).strip()
+
+        carried = 0
+        for path in self._catalog_paths():
+            try:
+                shipped = json.loads(path.read_text(encoding="utf-8"))
+                if not (isinstance(shipped, dict) and isinstance(shipped.get("jobs"), list)):
+                    continue
+                have = {key(j) for j in shipped["jobs"] if isinstance(j, dict)}
+                added = [j for j in prev_jobs
+                         if isinstance(j, dict) and key(j) and key(j) not in have]
+                if not added:
+                    continue
+                shipped["jobs"].extend(added)
+                shipped["unique_job_count"] = len(shipped["jobs"])
+                tmp = path.with_suffix(".json.tmp")
+                tmp.write_text(
+                    json.dumps(shipped, ensure_ascii=False, indent=2), encoding="utf-8",
+                )
+                os.replace(str(tmp), str(path))
+                carried = max(carried, len(added))
+            except Exception:
+                # Never fail an install over this — the shipped catalog is
+                # already on disk and usable; only the rescue is lost.
+                continue
+        return carried
 
     def _find_exe(self) -> Path | None:
         """Locate HappyPhotoOrganizer.exe in install_dir (possibly nested)"""

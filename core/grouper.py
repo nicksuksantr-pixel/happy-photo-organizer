@@ -1,8 +1,8 @@
 """
 grouper.py — จับกลุ่มรูปก่อนส่งให้ AI วิเคราะห์
-Strategy:
-  1. Group by capture date (ปกติงาน 1 งาน = วันเดียวกัน)
-  2. ภายใน 1 วัน group by time gap — รูปที่ถ่ายห่างกัน > THRESHOLD = คนละ session
+Strategy (Nick 2026-09-02):
+  วันที่ถ่าย = ตัวหลักในการจัดโฟลเดอร์ — รูปที่ถ่ายวันเดียวกัน = โฟลเดอร์เดียว
+  time gap ไม่ตัดกลางวันอีกแล้ว ใช้เชื่อมเฉพาะชุดที่ถ่ายคร่อมเที่ยงคืน
 """
 from __future__ import annotations
 
@@ -13,7 +13,8 @@ from pathlib import Path
 from .exif_reader import get_capture_date
 from .image_io import collect_images as _collect
 
-DEFAULT_TIME_GAP_MINUTES = 90  # รูปที่ถ่ายห่างกันเกินนี้ → คนละ session
+# Only bridges a burst that runs past midnight — it no longer splits a day.
+DEFAULT_TIME_GAP_MINUTES = 90
 
 
 @dataclass
@@ -50,7 +51,7 @@ def group_by_session(
     time_gap_minutes: int = DEFAULT_TIME_GAP_MINUTES,
 ) -> list[PhotoGroup]:
     """
-    จับกลุ่มรูปตามวันที่ + time gap
+    จับกลุ่มรูป: 1 วันที่ถ่าย = 1 กลุ่ม (= 1 โฟลเดอร์)
     คืน list ของ PhotoGroup ที่เรียงตามวันที่
     """
     if not images:
@@ -77,18 +78,21 @@ def group_by_session(
             continue
 
         last_dt = current.dates[-1]
-        # Session = continuous shooting activity. Use the time-gap ALONE to
-        # decide session membership — do NOT also require same calendar day.
-        # Bug (Tester 2026-06-04): the old `same_day and within_gap` rule split
-        # a continuous burst that crossed midnight (e.g. 23:59 → 00:01, 2 min
-        # apart) into two folders, because the calendar day flipped. Items are
-        # sorted ascending, so the only case where within_gap is True but the
-        # day differs is exactly a near-midnight burst — which belongs in one
-        # session. A genuine next-day shoot is always > gap apart and still
-        # splits. representative_date = min(dates) keeps the folder dated by
-        # the session's first photo (the pre-midnight day).
-        within_gap = (dt - last_dt) <= gap
-        if within_gap:
+        # v1.044 (Nick 2026-09-02): THE CAPTURE DATE IS THE KEY. A job is shot
+        # within one day, so every photo from the same calendar day belongs in
+        # the same folder — the time gap must not split a day any more. The old
+        # gap-only rule cut one day's work into several groups, and
+        # assign_unique_dates then pushed each of those onto a DIFFERENT day
+        # number, which is what scattered 46 folders across dates that were
+        # never the shooting date (43 of them shifted).
+        #
+        # The gap still does one job: bridging a burst that runs past midnight
+        # (23:59 → 00:01). Items are sorted ascending, so "different day but
+        # within the gap" is exactly that case, and it stays with the earlier
+        # day (representative_date = min(dates)). Keeps the v1.041 midnight fix.
+        same_day = dt.date() == last_dt.date()
+        midnight_burst = (dt - last_dt) <= gap
+        if same_day or midnight_burst:
             current.images.append(img)
             current.dates.append(dt)
             current.date_sources.append(src)

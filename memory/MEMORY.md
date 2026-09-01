@@ -109,8 +109,12 @@
 - `core/auth.py` — API key (atomic auth.json + quarantine)
 - `scripts/smoke_test.py` — มี smoke test (tests ใช้ stub `google.genai` — **AI จริงเทสได้แค่บนเครื่อง Nick + key จริง**)
 
-**สถานะ:** v1.043 (2026-09-02)
-**v1.043 ที่ต้องจำ:**
+**สถานะ:** v1.044 (2026-09-02)
+**v1.044 ที่ต้องจำ:**
+- 📅 **วันที่ถ่าย = ตัวหลัก · 1 วัน = 1 โฟลเดอร์** (Nick ตัดสิน 2026-09-02) — `grouper` ห้ามตัดกลางวันด้วย time gap อีก · gap เหลือหน้าที่เดียว = เชื่อมชุดที่ถ่ายคร่อมเที่ยงคืน · ยังยุบเข้าเดือนเป้าหมายเหมือนเดิม · ผล: 48→12 โฟลเดอร์, shifted 29→0
+- 💾 **`data/job_catalog.json` = ข้อมูลผู้ใช้ที่บังเอิญอยู่ในกองไฟล์ที่ installer ทับ** — ทุกอัพเดทตั้งแต่ v1.025 ลบชื่องานที่ Nick สอนทิ้งเงียบๆ · ตอนนี้ installer snapshot ก่อนแตกไฟล์แล้ว merge คืน (`_read_installed_catalog` / `_merge_catalog`) · catalog ที่ ship = 174 ชื่อ
+- ⚠️ **PowerShell `Set-Content -Encoding utf8` ใส่ BOM เสมอ (PS 5.1)** — `str.strip()` ไม่ลบ U+FEFF → `_parse_version` อ่าน `1.044` เป็น **(0,44)** → updater เด้งอัพเดทวนไม่จบ · `read_version()` ใช้ `utf-8-sig` แล้ว · **เทสที่เทียบไฟล์กับค่าที่อ่านจากไฟล์เดียวกันจับบั๊กนี้ไม่ได้**
+- **เดิม v1.043 ที่ต้องจำ:**
 - 🖼️ **CTkButton 5.2.2: ถ้าสร้างด้วย `image=None` แล้วค่อย `configure(image=...)` ทีหลัง = รูปไม่ขึ้นตลอดกาล** (`_image_label` สร้างใน `_draw()` เท่านั้น และ key `"image"` ไม่ trigger redraw) → **ต้องสร้างปุ่มพร้อม placeholder image เสมอ**
 - 🧵 **ห้ามเรียก `self.after()` จาก worker thread** — Tkinter รับไว้เงียบๆ แล้วไม่ยิง (แถวแรกที่จบก่อน mainloop จะหายเสมอ) → ให้ worker ใส่ `queue.Queue` แล้วฝั่ง Tk โพลเอง
 - 🏷️ badge หัวบนต้องอ่าน `auth.get_model()` ไม่ใช่ `tier.label` (พรีเซ็ต hard-code ชื่อรุ่นไว้ → โกหกได้)

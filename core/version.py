@@ -21,7 +21,13 @@ def read_version() -> str:
     for p in candidates:
         try:
             if p.exists():
-                v = p.read_text(encoding="utf-8").strip()
+                # utf-8-sig, not utf-8: a BOM is NOT stripped by str.strip()
+                # (U+FEFF is not whitespace in Python), so a VERSION file saved
+                # by a Windows tool would yield "﻿1.044" — and
+                # updater._parse_version reads that as (0, 44) instead of
+                # (1, 44), which makes every release look newer than the
+                # installed build and re-offers an update forever.
+                v = p.read_text(encoding="utf-8-sig").strip()
                 if v:
                     return v
         except Exception:

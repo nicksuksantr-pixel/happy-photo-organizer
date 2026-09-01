@@ -9,6 +9,53 @@ Cosmetic / design / V2-scope items that survived round 6 + 7 + 8. All
 catalogued in detail at the bottom of this file under "Round 6
 deferred".
 
+## [1.044] — 2026-09-02 — One folder per shooting day · the installer stops eating your job names
+
+### Fixed — one day's work was scattered across dates it was never shot on
+Two mechanisms compounding: `grouper` started a new group whenever photos were
+more than 90 minutes apart — **including within a single day** — and
+`assign_unique_dates` then gave each of those groups a different day number.
+Nick's run came out as 46 folders with **43 of them dated a day the photos were
+never taken**.
+
+- Grouping is now **by capture date: one shooting day = one folder**. The time
+  gap only bridges a burst that runs past midnight (23:59 → 00:01), so the
+  v1.041 midnight-session fix still holds.
+- Month consolidation is unchanged (kept deliberately — Nick's reports want one
+  target month); with one group per day there is simply nothing left to shift.
+- Measured on a corpus shaped like the real run (241 photos, 12 shooting days):
+  **48 folders → 12 · 29 shifted → 0 · 17 capped → 0**, every folder date equal
+  to its shooting date.
+
+### Fixed — every update since v1.025 deleted the job names you had taught it
+`installer.py` extracts the payload over the install directory unconditionally,
+and `data/job_catalog.json` lives in that tree but is written at runtime. It is
+user data in an overwritten location, and nothing in the installer mentioned it.
+Measured here: 160 installed jobs vs 146 shipped — installing v1.043 would have
+destroyed **14 of Nick's own job names**.
+
+- The installer now snapshots the catalog before extracting and merges it back
+  afterwards (union by `normalized`, shipped entry wins, add-only, failures
+  swallowed so this can never break an install).
+- Verified against the real installed + shipped catalogs: 0 names lost, shipped
+  set intact, no duplicates.
+- The shipped catalog also absorbed every name learned so far: **146 → 174**.
+
+### Fixed — a BOM in VERSION made the app report itself as version 0.x
+Introduced while bumping the version with PowerShell (5.1 always writes a UTF-8
+BOM) and **missed by the test suite**, which compared the file against a value
+read from that same file. `str.strip()` does not remove U+FEFF, so
+`updater._parse_version` read `"1.044"` as **(0, 44)** — the installed build
+would look older than every release and the updater would offer the version
+already installed, forever. VERSION is BOM-free again, `read_version()` reads
+`utf-8-sig`, and two tests now guard both halves.
+
+### Tests
+`tests/test_core.py` **38/38 PASS** (35 → 38). The old
+`test_grouper_large_gap_same_day_splits` asserted the behaviour this release
+removes and was replaced by `test_grouper_same_day_is_one_folder_however_long_the_gap`
+plus a different-days test; two BOM/version guards added.
+
 ## [1.043] — 2026-09-02 — Thumbnails actually show · Gemini 3.5 default · not-work detection + per-folder Delete
 
 ### Fixed — thumbnails (two separate bugs, both silent)

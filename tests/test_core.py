@@ -1,4 +1,4 @@
-﻿"""
+"""
 test_core.py â€” pure-Python regression tests (NO API key, NO network, NO photos).
 
 Run:  python tests/test_core.py
@@ -58,13 +58,32 @@ def test_grouper_midnight_burst_is_one_session():
         assert groups[0].representative_date.day == 15
 
 
-def test_grouper_large_gap_same_day_splits():
-    """A genuine >gap break on the same day still splits into two sessions."""
+def test_grouper_same_day_is_one_folder_however_long_the_gap():
+    """v1.044 (Nick 2026-09-02): the capture DATE is the key — one day is one
+    folder. Previously a >90 min break split the day, and assign_unique_dates
+    then pushed each piece onto a different day number, scattering the work
+    across dates it was never shot on."""
     with tempfile.TemporaryDirectory() as d:
         tmp = Path(d)
-        imgs = _make_dated_files(tmp, ["20260315_120000", "20260315_140000"])  # 2 h apart
+        imgs = _make_dated_files(tmp, [
+            "20260315_080000", "20260315_120000",  # 4 h apart
+            "20260315_173000", "20260315_235000",  # and again in the evening
+        ])
         groups = grouper.group_by_session(imgs, time_gap_minutes=90)
-        assert len(groups) == 2, f"expected 2 sessions, got {len(groups)}"
+        assert len(groups) == 1, f"expected 1 folder for one day, got {len(groups)}"
+        assert len(groups[0].images) == 4
+        assert groups[0].representative_date.day == 15
+
+
+def test_grouper_different_days_stay_separate():
+    """Separate shooting days must still be separate folders."""
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d)
+        imgs = _make_dated_files(tmp, ["20260315_120000", "20260316_120000",
+                                       "20260318_090000"])
+        groups = grouper.group_by_session(imgs, time_gap_minutes=90)
+        assert len(groups) == 3, f"expected 3 folders, got {len(groups)}"
+        assert [g.representative_date.day for g in groups] == [15, 16, 18]
 
 
 def test_grouper_empty():
@@ -378,6 +397,50 @@ def test_discard_assignment_survives_an_already_deleted_folder():
         ok, err = processor.discard_assignment(plan, a)
         assert ok is True, err
         assert plan.assignments == []
+
+
+def test_version_file_has_no_bom_and_parses_to_the_right_tuple():
+    """A BOM in VERSION is invisible everywhere except the version comparator:
+    str.strip() does not remove U+FEFF, so _parse_version reads "﻿1.044"
+    as (0, 44) and every release then looks newer than the installed build."""
+    raw = (ROOT / "VERSION").read_bytes()
+    assert not raw.startswith(b"\xef\xbb\xbf"), "VERSION starts with a UTF-8 BOM"
+    assert b"\r" not in raw, "VERSION contains CR"
+
+    from core import updater
+    parsed = updater._parse_version(read_version())
+    assert parsed[0] != 0, f"major parsed as 0 - {parsed} from {read_version()!r}"
+    assert parsed == updater._parse_version(raw.decode("utf-8").strip())
+
+
+def test_no_source_file_carries_a_bom_or_cr():
+    """Windows tools (PowerShell's `Set-Content -Encoding utf8`, Python text
+    mode) inject a BOM or CRLF that no diff and no editor shows. It bit twice
+    in one session: a BOM in VERSION made the updater read version 0.x, and a
+    BOM in this very file made `ast.parse` refuse it. .gitattributes pins LF in
+    the repo, but the working tree is what runs."""
+    skip = {"dist", "build", ".git", "__pycache__", ".venv", "_trash"}
+    offenders = []
+    for path in ROOT.rglob("*.py"):
+        if skip & set(path.relative_to(ROOT).parts):
+            continue
+        raw = path.read_bytes()
+        if raw.startswith(b"\xef\xbb\xbf"):
+            offenders.append(f"BOM: {path.relative_to(ROOT)}")
+        if b"\r" in raw:
+            offenders.append(f"CR:  {path.relative_to(ROOT)}")
+    assert not offenders, "invisible bytes in source:\n  " + "\n  ".join(offenders)
+
+
+def test_read_version_survives_a_bom():
+    """Hardening: even if a Windows tool re-saves VERSION with a BOM, the
+    reader must still return a clean version string."""
+    import io as _io
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d) / "VERSION"
+        _io.open(p, "w", encoding="utf-8-sig", newline="").write("1.044\n")
+        assert p.read_bytes().startswith(b"\xef\xbb\xbf")   # the trap is present
+        assert p.read_text(encoding="utf-8-sig").strip() == "1.044"
 
 
 def test_default_model_is_3_5_flash_lite():

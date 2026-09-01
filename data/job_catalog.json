@@ -12,7 +12,7 @@
     }
   ],
   "total_job_dirs_scanned": 127,
-  "unique_job_count": 121,
+  "unique_job_count": 174,
   "jobs": [
     {
       "name": "Air condition ER",
@@ -3340,6 +3340,586 @@
         "level",
         "sensor",
         "probe"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Inspected Sludge Transfer Pump Control Panel",
+      "normalized": "inspected sludge transfer pump control panel",
+      "occurrences": 1,
+      "ships": [],
+      "months_seen": [
+        "Aug 26"
+      ],
+      "dates_seen": [
+        "12-08-26"
+      ],
+      "variants": [
+        "Inspected Sludge Transfer Pump Control Panel"
+      ],
+      "keywords": [
+        "inspected",
+        "sludge",
+        "transfer",
+        "pump",
+        "control",
+        "panel"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Replaced light bulbs in forward store room",
+      "normalized": "replaced light bulbs in forward store room",
+      "occurrences": 0,
+      "ships": [],
+      "months_seen": [],
+      "dates_seen": [],
+      "variants": [
+        "Replaced light bulbs in forward store room"
+      ],
+      "keywords": [
+        "replaced",
+        "light",
+        "bulbs",
+        "forward",
+        "store",
+        "room"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Replaced light bulbs Bosan store",
+      "normalized": "replaced light bulbs bosan store",
+      "occurrences": 1,
+      "ships": [],
+      "months_seen": [
+        "Aug 26"
+      ],
+      "dates_seen": [
+        "03-08-26"
+      ],
+      "variants": [
+        "Replaced light bulbs Bosan store"
+      ],
+      "keywords": [
+        "replaced",
+        "light",
+        "bulbs",
+        "bosan",
+        "store"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Installed cigarette lighter socket",
+      "normalized": "installed cigarette lighter socket",
+      "occurrences": 1,
+      "ships": [],
+      "months_seen": [
+        "Aug 26"
+      ],
+      "dates_seen": [
+        "05-08-26"
+      ],
+      "variants": [
+        "Installed cigarette lighter socket"
+      ],
+      "keywords": [
+        "installed",
+        "cigarette",
+        "lighter",
+        "socket"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Installed alarm lights and sirens for Generators 1, 2, and 3",
+      "normalized": "installed alarm lights and sirens for generators 1, 2, and 3",
+      "occurrences": 1,
+      "ships": [],
+      "months_seen": [
+        "Aug 26"
+      ],
+      "dates_seen": [
+        "11-08-26"
+      ],
+      "variants": [
+        "Installed alarm lights and sirens for Generators 1, 2, and 3"
+      ],
+      "keywords": [
+        "installed",
+        "alarm",
+        "lights",
+        "sirens",
+        "generators"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Installed slip brake lining on tow winch",
+      "normalized": "installed slip brake lining on tow winch",
+      "occurrences": 0,
+      "ships": [],
+      "months_seen": [],
+      "dates_seen": [],
+      "variants": [
+        "Installed slip brake lining on tow winch"
+      ],
+      "keywords": [
+        "installed",
+        "slip",
+        "brake",
+        "lining",
+        "tow",
+        "winch"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Installed slip brake tow winch alarm",
+      "normalized": "installed slip brake tow winch alarm",
+      "occurrences": 1,
+      "ships": [],
+      "months_seen": [
+        "Aug 26"
+      ],
+      "dates_seen": [
+        "06-08-26"
+      ],
+      "variants": [
+        "Installed slip brake tow winch alarm"
+      ],
+      "keywords": [
+        "installed",
+        "slip",
+        "brake",
+        "tow",
+        "winch",
+        "alarm"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Cleaned chiller room cooling coil",
+      "normalized": "cleaned chiller room cooling coil",
+      "occurrences": 0,
+      "ships": [],
+      "months_seen": [],
+      "dates_seen": [],
+      "variants": [
+        "Cleaned chiller room cooling coil"
+      ],
+      "keywords": [
+        "cleaned",
+        "chiller",
+        "room",
+        "cooling",
+        "coil"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Cleaned chiller room evaporator",
+      "normalized": "cleaned chiller room evaporator",
+      "occurrences": 1,
+      "ships": [],
+      "months_seen": [
+        "Aug 26"
+      ],
+      "dates_seen": [
+        "14-08-26"
+      ],
+      "variants": [
+        "Cleaned chiller room evaporator"
+      ],
+      "keywords": [
+        "cleaned",
+        "chiller",
+        "room",
+        "evaporator"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Replaced emergency alarm button in chiller room",
+      "normalized": "replaced emergency alarm button in chiller room",
+      "occurrences": 0,
+      "ships": [],
+      "months_seen": [],
+      "dates_seen": [],
+      "variants": [
+        "Replaced emergency alarm button in chiller room"
+      ],
+      "keywords": [
+        "replaced",
+        "emergency",
+        "alarm",
+        "button",
+        "chiller",
+        "room"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Replaced emergency alarm button chiller room",
+      "normalized": "replaced emergency alarm button chiller room",
+      "occurrences": 1,
+      "ships": [],
+      "months_seen": [
+        "Aug 26"
+      ],
+      "dates_seen": [
+        "07-08-26"
+      ],
+      "variants": [
+        "Replaced emergency alarm button chiller room"
+      ],
+      "keywords": [
+        "replaced",
+        "emergency",
+        "alarm",
+        "button",
+        "chiller",
+        "room"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Cleaned freezer room evaporator",
+      "normalized": "cleaned freezer room evaporator",
+      "occurrences": 1,
+      "ships": [],
+      "months_seen": [
+        "Aug 26"
+      ],
+      "dates_seen": [
+        "15-08-26"
+      ],
+      "variants": [
+        "Cleaned freezer room evaporator"
+      ],
+      "keywords": [
+        "cleaned",
+        "freezer",
+        "room",
+        "evaporator"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Inspected Generator Control Panel Wiring",
+      "normalized": "inspected generator control panel wiring",
+      "occurrences": 1,
+      "ships": [],
+      "months_seen": [
+        "Aug 26"
+      ],
+      "dates_seen": [
+        "17-08-26"
+      ],
+      "variants": [
+        "Inspected Generator Control Panel Wiring"
+      ],
+      "keywords": [
+        "inspected",
+        "generator",
+        "control",
+        "panel",
+        "wiring"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Inspected SG Control Panel Wiring",
+      "normalized": "inspected sg control panel wiring",
+      "occurrences": 0,
+      "ships": [],
+      "months_seen": [],
+      "dates_seen": [],
+      "variants": [
+        "Inspected SG Control Panel Wiring"
+      ],
+      "keywords": [
+        "inspected",
+        "sg",
+        "control",
+        "panel",
+        "wiring"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Inspected and maintained electrical terminal blocks and heat exchanger",
+      "normalized": "inspected and maintained electrical terminal blocks and heat exchanger",
+      "occurrences": 0,
+      "ships": [],
+      "months_seen": [],
+      "dates_seen": [],
+      "variants": [
+        "Inspected and maintained electrical terminal blocks and heat exchanger"
+      ],
+      "keywords": [
+        "inspected",
+        "maintained",
+        "electrical",
+        "terminal",
+        "blocks",
+        "heat",
+        "exchanger"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Inspected Woodward Governor Actuator Motor",
+      "normalized": "inspected woodward governor actuator motor",
+      "occurrences": 0,
+      "ships": [],
+      "months_seen": [],
+      "dates_seen": [],
+      "variants": [
+        "Inspected Woodward Governor Actuator Motor"
+      ],
+      "keywords": [
+        "inspected",
+        "woodward",
+        "governor",
+        "actuator",
+        "motor"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Repaired Vingtor marine intercom internal wiring",
+      "normalized": "repaired vingtor marine intercom internal wiring",
+      "occurrences": 0,
+      "ships": [],
+      "months_seen": [],
+      "dates_seen": [],
+      "variants": [
+        "Repaired Vingtor marine intercom internal wiring"
+      ],
+      "keywords": [
+        "repaired",
+        "vingtor",
+        "marine",
+        "intercom",
+        "internal",
+        "wiring"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Inspected and repaired electrical control panel and socket",
+      "normalized": "inspected and repaired electrical control panel and socket",
+      "occurrences": 0,
+      "ships": [],
+      "months_seen": [],
+      "dates_seen": [],
+      "variants": [
+        "Inspected and repaired electrical control panel and socket"
+      ],
+      "keywords": [
+        "inspected",
+        "repaired",
+        "electrical",
+        "control",
+        "panel",
+        "socket"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Inspected and checked electrical control panel wiring",
+      "normalized": "inspected and checked electrical control panel wiring",
+      "occurrences": 0,
+      "ships": [],
+      "months_seen": [],
+      "dates_seen": [],
+      "variants": [
+        "Inspected and checked electrical control panel wiring"
+      ],
+      "keywords": [
+        "inspected",
+        "checked",
+        "electrical",
+        "control",
+        "panel",
+        "wiring"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Inspected FRC battery wiring modification report",
+      "normalized": "inspected frc battery wiring modification report",
+      "occurrences": 0,
+      "ships": [],
+      "months_seen": [],
+      "dates_seen": [],
+      "variants": [
+        "Inspected FRC battery wiring modification report"
+      ],
+      "keywords": [
+        "inspected",
+        "frc",
+        "battery",
+        "wiring",
+        "modification",
+        "report"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Inspected and repaired waterproof electrical socket",
+      "normalized": "inspected and repaired waterproof electrical socket",
+      "occurrences": 0,
+      "ships": [],
+      "months_seen": [],
+      "dates_seen": [],
+      "variants": [
+        "Inspected and repaired waterproof electrical socket"
+      ],
+      "keywords": [
+        "inspected",
+        "repaired",
+        "waterproof",
+        "electrical",
+        "socket"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Inspected steering gear frequency converter",
+      "normalized": "inspected steering gear frequency converter",
+      "occurrences": 0,
+      "ships": [],
+      "months_seen": [],
+      "dates_seen": [],
+      "variants": [
+        "Inspected steering gear frequency converter"
+      ],
+      "keywords": [
+        "inspected",
+        "steering",
+        "gear",
+        "frequency",
+        "converter"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Repaired and rewired electronic component circuit board",
+      "normalized": "repaired and rewired electronic component circuit board",
+      "occurrences": 0,
+      "ships": [],
+      "months_seen": [],
+      "dates_seen": [],
+      "variants": [
+        "Repaired and rewired electronic component circuit board"
+      ],
+      "keywords": [
+        "repaired",
+        "rewired",
+        "electronic",
+        "component",
+        "circuit",
+        "board"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Repaired sound-powered telephone handset and wiring",
+      "normalized": "repaired sound-powered telephone handset and wiring",
+      "occurrences": 0,
+      "ships": [],
+      "months_seen": [],
+      "dates_seen": [],
+      "variants": [
+        "Repaired sound-powered telephone handset and wiring"
+      ],
+      "keywords": [
+        "repaired",
+        "sound",
+        "powered",
+        "telephone",
+        "handset",
+        "wiring"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Overhauled refrigeration compressor cylinder head",
+      "normalized": "overhauled refrigeration compressor cylinder head",
+      "occurrences": 0,
+      "ships": [],
+      "months_seen": [],
+      "dates_seen": [],
+      "variants": [
+        "Overhauled refrigeration compressor cylinder head"
+      ],
+      "keywords": [
+        "overhauled",
+        "refrigeration",
+        "compressor",
+        "cylinder",
+        "head"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Replaced gasket on compressor valve",
+      "normalized": "replaced gasket on compressor valve",
+      "occurrences": 0,
+      "ships": [],
+      "months_seen": [],
+      "dates_seen": [],
+      "variants": [
+        "Replaced gasket on compressor valve"
+      ],
+      "keywords": [
+        "replaced",
+        "gasket",
+        "compressor",
+        "valve"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Inspected refrigeration digital thermostat panel and valve",
+      "normalized": "inspected refrigeration digital thermostat panel and valve",
+      "occurrences": 0,
+      "ships": [],
+      "months_seen": [],
+      "dates_seen": [],
+      "variants": [
+        "Inspected refrigeration digital thermostat panel and valve"
+      ],
+      "keywords": [
+        "inspected",
+        "refrigeration",
+        "digital",
+        "thermostat",
+        "panel",
+        "valve"
+      ],
+      "user_added": true
+    },
+    {
+      "name": "Inspected and Serviced Electrical Control Panel Wiring",
+      "normalized": "inspected and serviced electrical control panel wiring",
+      "occurrences": 0,
+      "ships": [],
+      "months_seen": [],
+      "dates_seen": [],
+      "variants": [
+        "Inspected and Serviced Electrical Control Panel Wiring"
+      ],
+      "keywords": [
+        "inspected",
+        "serviced",
+        "electrical",
+        "control",
+        "panel",
+        "wiring"
       ],
       "user_added": true
     }
