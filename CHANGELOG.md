@@ -9,6 +9,35 @@ Cosmetic / design / V2-scope items that survived round 6 + 7 + 8. All
 catalogued in detail at the bottom of this file under "Round 6
 deferred".
 
+## [1.045] — 2026-09-02 — Photos are named after their folder
+
+### Changed — every folder used to restart at `img_001`, so moving a photo meant renaming it
+Phase 1 numbered each group's resized photos from 1, so `img_001.jpg` existed in
+every job folder. Dragging a photo from one folder into another always hit
+Windows' "a file with this name already exists" and Nick had to rename it by
+hand every time.
+
+- Photos are now named after the folder they belong to:
+  **`DD-MM-YY <Job>_001.jpg`**. Names are unique across folders because a
+  folder is one shooting day (v1.044) and a day number is never issued twice.
+- The rename happens in **Phase 4**, not Phase 1 — the final folder name is not
+  known until the AI has named the job, Nick has reviewed it, and the date has
+  been consolidated into the target month.
+- Merging into a folder that already holds photos **continues the numbering**
+  (003, 004…) instead of falling back to the `..._001_2.jpg` collision suffix.
+- The folder name is repeated inside every file name, so `photo_prefix()` trims
+  it to keep the whole path within Windows' 260-character limit (and to 100
+  characters regardless, for readability).
+- A rename that fails leaves that one file under its old name and is reported
+  through `CommitResult.errors` — a filename can never cost a commit.
+- Photos in folders organised by earlier versions are **left alone** (Nick's
+  call: new runs only).
+
+### Tests
+38 → **44**: named after the folder, no duplicate names across two folders (the
+actual complaint), merge continues the numbering, path-limit trimming, and
+number-order preserved past 999 photos in one day.
+
 ## [1.044] — 2026-09-02 — One folder per shooting day · the installer stops eating your job names
 
 ### Fixed — one day's work was scattered across dates it was never shot on

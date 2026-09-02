@@ -1,6 +1,6 @@
 # 🎨 Happy Photo Organizer — Project Summary
 
-**Status:** v1.044 (2026-09-02 — **1 shooting day = 1 folder** (no more scattering) · **installer merges the job catalog** instead of deleting it · VERSION BOM fix · builds on v1.043: thumbnails fixed, Gemini 3.5 default, non-work detection, per-folder Delete · tests 38/38)
+**Status:** v1.045 (2026-09-02 — **photos named after their folder** (`DD-MM-YY <Job>_001.jpg`) so they no longer collide when moved · builds on v1.044: 1 shooting day = 1 folder, installer merges the job catalog, VERSION BOM fix · tests 43/43)
 **Author:** Nick (with Codey — Claude Code)
 **Family:** Happy AI Family (sibling: HAPPY AI Agent)
 **Last full review:** Tester sprint 2026-06-04 (Codey, 3 parallel audit agents) — see "Audit history" below

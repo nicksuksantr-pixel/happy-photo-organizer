@@ -48,6 +48,93 @@ def sanitize_filename(s: str, max_len: int = 80) -> str:
     return s[:max_len].strip()
 
 
+# ─── photo file names ───
+# Every folder used to restart at `img_001.jpg`, so moving a photo from one job
+# folder into another always collided and Explorer asked Nick to rename it by
+# hand (Nick 2026-09-02). Photos now carry their own folder's name, which is
+# unique because a folder is one shooting day and a day is never used twice.
+_MAX_PATH = 259            # classic Windows MAX_PATH (260) minus the NUL
+_PHOTO_PREFIX_MAX = 100    # keep names readable even on a shallow destination
+_PHOTO_SEQ_RE = re.compile(r"_(\d{3,})$")
+_PHOTO_SEQ_ANY_RE = re.compile(r"_(\d+)$")
+
+
+def photo_prefix(folder_name: str, parent: Path | None = None,
+                 tail_len: int = len("_001.jpg")) -> str:
+    """The `DD-MM-YY <Job>` part of a photo's name, trimmed so the finished
+    path still fits Windows' 260-character limit inside a deep destination."""
+    budget = _PHOTO_PREFIX_MAX
+    if parent is not None:
+        budget = min(budget, _MAX_PATH - len(str(parent)) - 1 - tail_len)
+    prefix = folder_name[:budget].strip().rstrip(". ") if budget > 0 else ""
+    return prefix or "img"
+
+
+def _next_photo_seq(folder: Path, prefix: str) -> int:
+    """Continue numbering after what the folder already holds, so a second run
+    into the same day appends 003, 004… instead of colliding into `_001_2`."""
+    highest = 0
+    try:
+        entries = list(folder.iterdir())
+    except OSError:
+        return 1
+    for f in entries:
+        try:
+            if not f.is_file() or not f.stem.startswith(prefix):
+                continue
+        except OSError:
+            continue
+        m = _PHOTO_SEQ_RE.search(f.stem)
+        if m:
+            highest = max(highest, int(m.group(1)))
+    return highest + 1
+
+
+def rename_photos_for_folder(temp_folder: Path, target: Path,
+                             folder_name: str) -> list[str]:
+    """Rename this run's photos — still inside the temp folder — to
+    `<folder name>_NNN.jpg`, continuing the numbering the target already uses.
+
+    Returns non-fatal problems: a filename must never cost Nick the commit, so
+    any failure leaves that one file under its old name and the folder still
+    goes through.
+    """
+    problems: list[str] = []
+    def _order(f: Path):
+        # Phase 1 writes img_001…img_999 and then img_1000, which plain string
+        # sorting puts *before* img_999 — order by the number when there is one.
+        m = _PHOTO_SEQ_ANY_RE.search(f.stem)
+        return (0, int(m.group(1)), f.name) if m else (1, 0, f.name)
+
+    try:
+        files = sorted((f for f in temp_folder.iterdir() if f.is_file()), key=_order)
+    except OSError as e:
+        return [f"photo rename skipped in {temp_folder.name}: {str(e)[:80]}"]
+    if not files:
+        return problems
+
+    prefix = photo_prefix(folder_name, target)
+    merging = target != temp_folder and target.exists()
+    seq = _next_photo_seq(target, prefix) if merging else 1
+
+    for f in files:
+        suffix = f.suffix.lower()
+        new_name = f"{prefix}_{seq:03d}{suffix}"
+        seq += 1
+        if f.name == new_name:
+            continue
+        dst = temp_folder / new_name
+        if dst.exists():
+            # Only reachable when a previous commit already renamed part of
+            # this folder; keep the file unique rather than overwrite it.
+            dst = temp_folder / f"{prefix}_{seq - 1:03d}_{_uuid.uuid4().hex[:4]}{suffix}"
+        try:
+            f.rename(dst)
+        except OSError as e:
+            problems.append(f"photo rename failed: {f.name} → {dst.name} ({str(e)[:80]})")
+    return problems
+
+
 # ─── dataclasses ───
 
 
@@ -680,6 +767,11 @@ def phase4_rename_folders(
             continue
 
         target = plan.dest_root / a.folder_name
+        # Name every photo after its folder before the folder itself moves, so
+        # files stay unique when Nick drags them between folders later.
+        result.errors.extend(
+            rename_photos_for_folder(a.temp_folder, target, a.folder_name)
+        )
         # ถ้าโฟลเดอร์ปลายทางมีอยู่แล้ว → merge (move files)
         try:
             if target.exists() and target != a.temp_folder:

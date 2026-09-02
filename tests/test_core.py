@@ -449,6 +449,115 @@ def test_default_model_is_3_5_flash_lite():
     assert preset["model"] == "gemini-3.5-flash-lite"
 
 
+# --- photo file names (Nick 2026-09-02: img_001 in every folder) ------------
+
+def _committable_plan(tmp: Path, job: str, n: int = 2):
+    """A pending folder holding `n` resized photos, ready for phase 4."""
+    dest = tmp / "dest"
+    dest.mkdir(exist_ok=True)
+    folder = dest / f"2026-09-20{processor.PENDING_MARKER}01"
+    folder.mkdir()
+    for i in range(1, n + 1):
+        (folder / f"img_{i:03d}.jpg").write_bytes(bytes([i]) * 10)
+    a = processor.JobAssignment(
+        folder_date=datetime(2026, 9, 20), job_name=job, temp_folder=folder,
+    )
+    return processor.Plan(assignments=[a], dest_root=dest), a, dest
+
+
+def test_photos_are_named_after_their_folder():
+    """Moving a photo between folders must not collide: every file carries its
+    folder's `DD-MM-YY <Job>` name instead of restarting at img_001."""
+    with tempfile.TemporaryDirectory() as td:
+        plan, _a, dest = _committable_plan(Path(td), "Repaired Vingtor marine intercom")
+        res = processor.phase4_rename_folders(plan)
+        assert res.errors == [], res.errors
+        out = dest / "20-09-26 Repaired Vingtor marine intercom"
+        names = sorted(f.name for f in out.iterdir())
+        assert names == [
+            "20-09-26 Repaired Vingtor marine intercom_001.jpg",
+            "20-09-26 Repaired Vingtor marine intercom_002.jpg",
+        ], names
+
+
+def test_two_folders_never_produce_the_same_photo_name():
+    """The actual complaint: identical file names in different folders."""
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        plan_a, _a, dest = _committable_plan(tmp, "Repaired Vingtor marine intercom")
+        processor.phase4_rename_folders(plan_a)
+        folder_b = dest / f"2026-09-27{processor.PENDING_MARKER}01"
+        folder_b.mkdir()
+        (folder_b / "img_001.jpg").write_bytes(b"b")
+        b = processor.JobAssignment(
+            folder_date=datetime(2026, 9, 27),
+            job_name="Repaired internal wiring of Vingtor",
+            temp_folder=folder_b,
+        )
+        processor.phase4_rename_folders(
+            processor.Plan(assignments=[b], dest_root=dest))
+        every = [f.name for d in dest.iterdir() if d.is_dir() for f in d.iterdir()]
+        assert len(every) == len(set(every)), every
+
+
+def test_merging_into_an_existing_folder_continues_the_numbering():
+    """A second run into the same day appends 003+, not `..._001_2.jpg`."""
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        plan, _a, dest = _committable_plan(tmp, "Repaired Vingtor marine intercom")
+        processor.phase4_rename_folders(plan)
+        again = dest / f"2026-09-20{processor.PENDING_MARKER}02"
+        again.mkdir()
+        (again / "img_001.jpg").write_bytes(b"new")
+        second = processor.JobAssignment(
+            folder_date=datetime(2026, 9, 20),
+            job_name="Repaired Vingtor marine intercom", temp_folder=again,
+        )
+        res = processor.phase4_rename_folders(
+            processor.Plan(assignments=[second], dest_root=dest))
+        assert res.errors == [], res.errors
+        out = dest / "20-09-26 Repaired Vingtor marine intercom"
+        names = sorted(f.name for f in out.iterdir())
+        assert len(names) == 3, names
+        assert names[-1].endswith("_003.jpg"), names
+        assert not any("_2.jpg" in n for n in names), names
+
+
+def test_photo_order_survives_more_than_999_photos_in_a_day():
+    """`img_1000` sorts before `img_999` as a string — number order must win,
+    or a big day would be renumbered out of shooting order."""
+    with tempfile.TemporaryDirectory() as td:
+        dest = Path(td) / "dest"
+        dest.mkdir()
+        folder = dest / f"2026-09-20{processor.PENDING_MARKER}01"
+        folder.mkdir()
+        for i in (998, 999, 1000, 1001):
+            (folder / f"img_{i:03d}.jpg").write_bytes(bytes([i % 251]) * 4)
+        a = processor.JobAssignment(
+            folder_date=datetime(2026, 9, 20), job_name="Big Day", temp_folder=folder,
+        )
+        processor.phase4_rename_folders(
+            processor.Plan(assignments=[a], dest_root=dest))
+        out = dest / "20-09-26 Big Day"
+        by_new = {f.name: f.read_bytes()[0] for f in out.iterdir()}
+        order = [by_new[n] for n in sorted(by_new, key=lambda n: int(n.split("_")[-1][:-4]))]
+        assert order == [998 % 251, 999 % 251, 1000 % 251, 1001 % 251], order
+
+
+def test_photo_name_is_trimmed_to_fit_the_windows_path_limit():
+    """The folder name is repeated inside every file name, so a long job on a
+    deep destination must be trimmed — not left to fail at 260 characters."""
+    deep = Path("C:/") / ("d" * 60) / ("e" * 60)
+    long_job = "Repaired " + "very long job name " * 10
+    folder = f"20-09-26 {processor.sanitize_filename(long_job)}"
+    name = f"{processor.photo_prefix(folder, deep / folder)}_001.jpg"
+    full = deep / folder / name
+    assert len(str(full)) <= 259, len(str(full))
+    assert name.startswith("20-09-26 Repaired")
+    # a shallow destination keeps the readable, untrimmed name
+    assert processor.photo_prefix(folder, Path("D:/Photos") / folder) == folder
+
+
 # â”€â”€â”€ runner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def main() -> int:
