@@ -41,8 +41,6 @@
   names across two folders — the actual complaint, merge continues numbering,
   path-limit trimming, and the pre-existing suite unchanged).
 - Caught during the work, same family as v1.044's BOM bug: `Path.write_text()`
-  on Windows translates `
-` → `
-`, which put CRLF into `core/processor.py`.
+  on Windows translates every LF into CRLF, which put CRLF into `core/processor.py`.
   `test_no_source_file_carries_a_bom_or_cr` failed and the file was rewritten
   with `newline=""`. The guard added last version paid for itself one day later.
