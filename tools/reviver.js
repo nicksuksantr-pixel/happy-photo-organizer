@@ -45,9 +45,17 @@ const DIMENSION_LIST = 'A ความถูกต้อง · B พฤติก
 // วิธีที่ได้ผลคือ **ผูก maxLength**: เกินแล้วได้ error แบบ "ไม่ตรงสคีมา" ซึ่งโมเดลอ่านรู้เรื่องและแก้ได้
 //   ต่างจาก JSON ที่ถูกตัด ซึ่งมันไม่มีทางรู้ว่าต้องแก้อะไร
 // ❌ ห้ามถอด maxLength ออก · จะเพิ่มช่องใหม่ ต้องผูกความยาวมาด้วยเสมอ
+// [2026-09-08] third round, 2 of 3 firms died the same way, while all 11 copies of reviver.js were
+//   byte-identical (94,242) -- the fix HAD propagated, it was simply at the wrong layer. Computed from
+//   the old bounds: a firm obeying every rule could still emit ~92,000 chars (~104 KB), i.e. ~3.5x the
+//   30 KB the prompt asks for. Prompt said 30, schema permitted 104, reality died at 36-68 -- so the
+//   caps never constrained anything. Now: findings 12->5, cleared 12->6, ARR 12x240 -> 6x150, long
+//   fields roughly halved. New worst case ~28,500 chars (~32 KB): the schema now ENFORCES what the
+//   prompt already asked for instead of contradicting it.
+//   Do NOT raise a cap without recomputing the whole worst case (top + arrays + dims + findings + cleared).
 const STR = { type:'string' }
 const S = n => ({ type:'string', maxLength: n })
-const ARR = { type:'array', items:{ type:'string', maxLength: 240 }, maxItems: 12 }
+const ARR = { type:'array', items:{ type:'string', maxLength: 150 }, maxItems: 6 }
 const REPORT = { type:'object',
   // ⚠ 2026-08-27 (รอบ 2): required เดิม 21 ช่อง → **2 ใน 3 บริษัทตายด้วย "StructuredOutput retry cap (5)
   // exceeded — 5 failed calls with no valid output"** คือทำสคีมาให้ถูกไม่ได้แม้ลอง 5 ครั้ง = เครื่องมือ
@@ -59,16 +67,16 @@ const REPORT = { type:'object',
   required:['verdictSummary','dimensionScores','overallScore','overallScoreFrom','findings','cleared','notCovered','confidence'],
   properties:{
     firm: STR,
-    verdictSummary: S(1200),
+    verdictSummary: S(600),
     target: S(500),
     intent: S(400),
     intentTag: { type:'string', enum:['STATED','INFERRED','ASSUMED'] },
-    scopeNotes: S(700),
+    scopeNotes: S(400),
     entryPoints: ARR,
     layers: ARR,
     callers: ARR,
     siblings: ARR,
-    instances: S(400),
+    instances: S(300),
     trace: ARR,
     questions: ARR,
     questionsResolved: ARR,
@@ -76,12 +84,12 @@ const REPORT = { type:'object',
     // เฉพาะมิติที่กดคะแนน — ซึ่งเป็นมิติเดียวที่ Coddy ต้องอ่านละเอียดอยู่แล้ว
     dimensionScores:{ type:'array', maxItems: 10, items:{ type:'object',
       required:['dimension','score','why','evidence'],
-      properties:{ dimension: S(60), score:{ type:'integer', minimum:1, maximum:5 }, why: S(450), evidence: S(300) } } },
+      properties:{ dimension: S(60), score:{ type:'integer', minimum:1, maximum:5 }, why: S(220), evidence: S(150) } } },
     // ผูกช่วง 1-5 เหมือน lucifer REVIEW (reviver #26 รอบ 3 · บริษัท B · 2026-08-27): เดิมเป็น number เปล่าๆ
     // ตัวรวมผลกรอง `n > 0` ทิ้ง → คะแนน 0 จะถูกอ่านว่า "บริษัทนั้นไม่ได้ให้คะแนน" ทั้งที่ให้มาแล้ว
     // = รายงานว่ารันไม่ครบทั้งที่ครบ ซึ่งเป็นบั๊กตระกูลเดียวกับที่รอบนี้ตามล้างทั้งวัน แค่กลับด้าน
     overallScore:{ type:'integer', minimum:1, maximum:5 },
-    overallScoreFrom: S(600),
+    overallScoreFrom: S(400),
     findings:{ type:'array', items:{ type:'object',
       // เหลือ 5 ช่องที่ทำให้ finding "เป็น finding" ตามรูบริค (ไม่มี failureScenario = ไม่ใช่ finding อย่าทัก)
       // ที่เหลือยังขอครบใน prompt แต่ไม่ hard-fail — reviver #26 รอบ 3 · บริษัท B: F15 ลด required ชั้นบน
@@ -89,17 +97,17 @@ const REPORT = { type:'object',
       // (คือสาเหตุที่ 2 ใน 3 บริษัทตายด้วย StructuredOutput retry cap รอบก่อน)
       required:['severity','title','file','problem','failureScenario'],
       properties:{ severity:{ type:'string', enum:['BLOCKER','MAJOR','MINOR'] },
-        title: S(140), file: S(200), dimension: S(60), problem: S(600), failureScenario: S(800),
-        evidence: S(600), gatesPassed: S(400), suggestedFix: S(500), blastRadius: S(350) } },
+        title: S(120), file: S(160), dimension: S(60), problem: S(300), failureScenario: S(350),
+        evidence: S(300), gatesPassed: S(200), suggestedFix: S(250), blastRadius: S(200) } },
       // ⚠ maxItems ที่นี่ = การตัดของจริงทิ้ง ไม่ใช่แค่ตัดข้อความ → prompt สั่งไว้ว่าถ้าเกิน
       // ให้ยื่นที่ร้ายแรงที่สุดก่อน แล้ว **นับที่เหลือลง notCovered** — ห้ามหายเงียบ
-      maxItems: 12 },
-    cleared:{ type:'array', maxItems: 12, items:{ type:'object',
+      maxItems: 5 },
+    cleared:{ type:'array', maxItems: 6, items:{ type:'object',
       required:['what','file','whyNotAProblem','claim'],
-      properties:{ what: S(160), file: S(200), whyNotAProblem: S(450), claim: S(300) } } },
-    notCovered: S(1500),
-    confidence: S(900),
-    crossProjectLesson: S(700),
+      properties:{ what: S(140), file: S(160), whyNotAProblem: S(250), claim: S(150) } } },
+    notCovered: S(600),
+    confidence: S(400),
+    crossProjectLesson: S(400),
   } }
 
 const scopeLine = target
@@ -305,7 +313,7 @@ const buildPrompt = (firm) => [
   `  • \`dimensionScores[].why\` คือก้อนที่ใหญ่ที่สุด (10 อัน) — **มิติที่ให้ 4-5 เขียน 1 ประโยคพอ**`,
   `    เก็บคำอธิบายยาวไว้ให้ **มิติที่กดคะแนน** เท่านั้น ซึ่งเป็นมิติเดียวที่คนอ่านต้องการรายละเอียด`,
   `  • **ตัดคำ ไม่ใช่ตัดงาน** — เดินให้ครบ 7 พาท 10 มิติเหมือนเดิม แค่รายงานให้กระชับ`,
-  `  • ถ้ามี finding เกิน 12 ข้อ: ยื่นที่ร้ายแรงที่สุด 12 ข้อ แล้ว **นับที่เหลือลง \`notCovered\`**`,
+  `  • ถ้ามี finding เกิน 5 ข้อ: ยื่นที่ร้ายแรงที่สุด 5 ข้อ แล้ว **นับที่เหลือลง \`notCovered\`**`,
   `    ("อีก N ข้อระดับ MINOR ที่ยังไม่ได้ยื่น: <หัวข้อสั้นๆ>") — ห้ามให้หายเงียบ`,
 ].join('\n')
 
@@ -322,6 +330,12 @@ const rawReports = await parallel(FIRMS.map(f => () =>
 // dimensionComparison จะเทียบ A กับ A เอง และ "หายไปบริษัทไหน" จะดูไม่ออก ซึ่งพังทั้งกลไกตรวจทานของ #26
 const reports    = FIRMS.map((f, i) => rawReports[i] ? { ...rawReports[i], firm: f } : null).filter(Boolean)
 const deadFirms  = FIRMS.filter((f, i) => !rawReports[i])
+// [2026-09-08] a real const, NOT just a field on the returned object: `next` interpolates it, and a
+// bare name cannot reach a sibling property of the same object literal -- that throws ReferenceError
+// at runtime while `node --check` still reports the file as fine (syntax is not scope).
+const crossCheckStrength = rawReports.filter(Boolean).length >= 3 ? 'full (3 firms)'
+  : rawReports.filter(Boolean).length === 2 ? 'WEAK (2 firms) -- agreement is a pair, not a majority; a split cannot be broken by vote, only by opening the code'
+  : 'NONE -- single opinion, no review happened'
 
 const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '')
 const sev  = { BLOCKER:0, MAJOR:1, MINOR:2 }
@@ -581,6 +595,7 @@ return {
   degraded: reports.length < FIRMS.length,
   deadFirms,
   crossCheckValid: reports.length >= 2,
+  crossCheckStrength,
   capHit,                 // ชนเพดาน maxItems = อาจมีของที่ไม่ได้ยื่น → ไปอ่าน notCovered ของบริษัทนั้น
   capWarning: capHit.length
     ? `⚠ ${capHit.length} บริษัทยื่นข้อเสนอชนเพดานพอดี (${capHit.join(' · ')}) — ` +
@@ -631,6 +646,11 @@ return {
     '2) findings ของบริษัทที่รอด (ถ้ามี) = **ความเห็นเดี่ยว** ใช้ได้ต่อเมื่อ Coddy เปิดโค้ดยืนยันเองทุกข้อ',
     '3) รายงาน Nick ตรงๆ ว่ารอบนี้ไม่ครบ + สาเหตุ แล้ว**รอให้เขาพิมพ์ trigger ใหม่** ❌ ห้ามยิงซ้ำเอง (1 trigger = 1 launch)',
   ] : [
+    ...(reports.length < FIRMS.length
+      ? [`⚠ อ่านก่อน: ได้ผล ${reports.length}/${FIRMS.length} บริษัท (ขาด ${deadFirms.join(', ')}) — ${crossCheckStrength}`,
+         '   ทุกตัวเลขข้างล่างอ่อนกว่าที่ออกแบบไว้ — ต้องเขียนข้อนี้ลงในรายงานถึง Nick ด้วย',
+         '   สาเหตุที่บริษัทหาย = อ่าน failures + journal.jsonl ก่อนสรุป']
+      : []),
     'Coddy (ตัวหลัก) ทำต่อ 0 agent — นี่คือขั้น "ประเมินผลของแต่ละบริษัท":',
     '1) ดู `scoreAgreement` ก่อน — ต่างกัน ≥2 ระดับ = มีบริษัทตรวจหลุดหรือเห็นอะไรที่คนอื่นไม่เห็น **ต้องสืบว่าใครถูก**',
     '2) ดู `thoroughness` — บริษัทที่มี gaps (ไม่มี TRACE / ไม่หาพี่น้อง / ให้คะแนนไม่ครบ 10 มิติ) = ผลของบริษัทนั้นน้ำหนักน้อยลง **ต้องบอกใน รายงาน**',
