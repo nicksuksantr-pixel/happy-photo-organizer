@@ -128,3 +128,78 @@ name do not merge.
 ### Version
 Still **v1.046** — it was committed but never built or released, so this is the
 same unreleased version rather than a phantom v1.047.
+
+## Entry 3 — the manifest shrinks, and the batch case (same day, v1.046)
+
+Two more messages from the R&D Director, both landing on work that was already
+finished. Taken in order of what they changed.
+
+### The scope cut — `job.json` v1 loses its tags and notes
+Nick: *"don't send before/after — EMR already does it"*, and the same reasoning
+retires the notes and spare parts. JobShot now sends identity plus a file
+manifest, and **EMR is out of the programme entirely**:
+
+    { "jobshot": 1, "job_id", "job_name", "ship", "author", "created_at",
+      "work_date", "photos": ["0001.jpg", "0002.jpg", ...] }
+
+`photos[]` is now a list of plain file names. HPO reads **both shapes** — the
+new list of names and the older `{"file": ...}` objects — and writes each
+manifest back in the shape it arrived in. The phone and the PC ship separately,
+so the reader has to tolerate both for as long as both exist.
+
+What this does to the rename rewrite: its *purpose* changes, not its
+correctness. It is no longer carrying tags for the report, so it is no longer
+load-bearing; it stays because a manifest listing names that are not in the
+folder is a trap for whoever reads it next, and because the receive log (step 4)
+needs to say which sent file became which filed file. **The
+`rename_photos_for_folder` fix that skips non-images is untouched and is not
+optional** — that one protects the completion marker itself, and always did.
+
+### `ship` comes out of the identity key
+The Director's ruling: `dest_root` is per vessel, so two jobs reaching the same
+destination are already on the same ship. Keeping `ship` in the key had a real
+cost — a vessel name typed slightly differently on two phones ("ENA CRYSTAL" vs
+"Ena Crystal AHTS") would split one real job into two folders. Identity is now
+`job_name` + `work_date` only (`job_key()`), and the test that asserted two
+vessels stay apart was **inverted**: it now pins that the ship field is ignored.
+A test that documents a rule has to change when the rule does.
+
+### The batch case — `import_batch()`
+Nick approved arrival-time grouping as a **superset** of what shipped: keep the
+match against already-filed folders, and add grouping for arrivals that land
+*together*. Not theoretical, per the Director: Nick collects several jobs and
+sends them in one sitting, and two engineers paired to one PC can interleave
+their sends.
+
+- `import_batch(folders, dest_root)` parses every arrival, groups them on
+  `job_key`, and files each group as **one job** — one resize pass, one day
+  assignment, one commit — so a pair gets one folder and one day instead of two.
+- One result per input folder, in the input order, so a receive log can say what
+  happened to each. An unreadable or still-arriving folder is reported and
+  skipped; it never costs the rest of the send.
+- Each sender keeps its own manifest (`job.json`, then `job-<job_id>.json`), and
+  both record `grouped_with` so the pairing is visible afterwards.
+- The old-to-new photo map is **per arrival**: two phones both send `0001.jpg`,
+  and a single shared map would have one overwrite the other — a manifest
+  pointing at someone else's photo. Pinned by a test.
+- Group order: oldest `work_date` first, tie-broken by when the job was created
+  on the phone. Jobs sharing a day cannot all keep it, and the one done first
+  has a better claim to it than whichever name happens to sort lower.
+
+`import_job()` is now `_file_group()` with a single arrival, so both paths run
+the same code.
+
+### Also — the suite was getting slow
+The synthetic photos were built by a Python loop over ~2 million pixels each,
+which had pushed the run past two minutes. `Image.frombytes` over `os.urandom`
+does the same job in C: **39 s for the whole suite**. A suite nobody waits for
+is a suite nobody runs.
+
+### Verification
+`tests/test_core.py` **61/61 PASS** (56 + 5, one inverted): plain-file-name
+manifests file and round-trip, the ship field is ignored, a batch groups two
+arrivals of one job into one folder, per-arrival photo names do not collide,
+different jobs keep their own folders with the day rule deciding who keeps the
+day, and a bad arrival does not drop the good one.
+
+Still **v1.046**, still not built or released — no UI entry point.

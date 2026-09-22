@@ -25,6 +25,15 @@ engineer at the machine already decided which photos are one job, and
 day-grouping would merge two different same-day jobs into one folder with one
 name.
 
+### Added — `import_batch()` for arrivals that land together
+Two arrivals with the same `job_name` and `work_date` in one send are grouped
+**before** the day rule runs, so one real job gets one folder and one day
+instead of two. One result per input folder, in order, for a receive log; a
+still-arriving or unreadable folder is reported and skipped without costing the
+rest of the send. Each sender keeps its own manifest and both record
+`grouped_with`. The old-to-new photo map is per arrival — two phones both send
+`0001.jpg`.
+
 ### Fixed — the commit's rename silently orphaned the manifest
 `rename_photos_for_folder` renamed every file it was handed, so a manifest in
 the folder would itself have become `<job>_003.json`, and every
@@ -34,18 +43,26 @@ the Before/After tags collected at the machine, lost with nothing to notice.
 - the rename now skips anything that is not an image
 - it returns its old→new mapping, kept on `JobAssignment.photo_renames` and
   corrected again when a merge has to rename a file a second time
-- the manifest copied into the final folder has `photos[].file` rewritten
+- the manifest copied into the final folder has its `photos[]` rewritten
+
+`photos[]` may be plain file names (v1 as of 2026-09-22, after the Before/After
+tags were cut — EMR owns that) or the older `{"file": ...}` objects; both are
+read, and each manifest is written back in the shape it arrived in. The rewrite
+is no longer load-bearing for the report, but a manifest listing names that are
+not in the folder is a trap for whoever reads it next.
 
 ### Added — a job is matched to its own folder at arrival
 `find_filed_job()` reads the manifests in the filed folders and returns the
-folder a job already lives in, matched on ship + job_name + work_date, whatever
+folder a job already lives in, matched on job_name + work_date, whatever
 day the rule gave that folder. Without it the unique-day rule and
 merge-on-name-collision are in tension: engineer A's job is filed on day 22,
 engineer B sends the same job, `scan_used_days` reports 22 as taken, B is
 shifted to a free day, the names never collide — and one real job owns two
 folders on two dates. The name+date fallback is kept only for folders with no
 manifest (the card-reader path). A folder renamed by hand after filing is
-followed rather than duplicated.
+followed rather than duplicated. `ship` is no part of the key: `dest_root` is
+per vessel, and a vessel name typed differently on two phones must not split one
+job into two folders.
 
 ### Changed — `work_date` vs the archive day-rule (Nick's decision)
 The archive rule wins, unchanged: a job from the phone is consolidated into the
@@ -62,7 +79,7 @@ job would occupy two folders on two dates and spend a second day number.
 config. Nick picks the engine-room folder once per vessel instead of every run.
 
 ### Tests
-44 → **56**: the end-to-end contract test (hand-made arrival folder, no phone),
+44 → **61**: the end-to-end contract test (hand-made arrival folder, no phone),
 manifest follows the rename, manifest is not renamed as a photo, a folder with
 no manifest is refused untouched, a shifted date is recorded, a second job
 merging in keeps the first manifest and continues the numbering, bad manifests

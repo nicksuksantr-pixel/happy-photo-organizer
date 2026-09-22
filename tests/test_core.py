@@ -576,35 +576,42 @@ def _have_pillow() -> bool:
 
 def _noisy_jpeg(path: Path, size=(1600, 1200)) -> None:
     """A real photo-sized JPEG. Noise compresses badly on purpose - a flat
-    image would already be under the 10 KB floor and prove nothing."""
-    import random
+    image would already be under the 10 KB floor and prove nothing.
+
+    frombytes(os.urandom(...)) rather than a Python loop over two million
+    pixels: the loop version made this suite take minutes, and a suite nobody
+    waits for is a suite nobody runs."""
+    import os
     from PIL import Image
-    rnd = random.Random(path.name)
-    img = Image.new("RGB", size)
-    img.putdata([(rnd.randrange(256), rnd.randrange(256), rnd.randrange(256))
-                 for _ in range(size[0] * size[1])])
+    w, h = size
+    img = Image.frombytes("RGB", size, os.urandom(w * h * 3))
     img.save(path, "JPEG", quality=95)
 
 
 def _arrival(tmp: Path, *, photos: int = 2, job="DG3 Turbo Inspection",
-             work_date="2026-09-22", write_manifest: bool = True) -> Path:
-    """One job in the shape JobShot pushes: originals + job.json written LAST."""
-    folder = tmp / "incoming" / "20260922-094312-ab12cd"
+             work_date="2026-09-22", write_manifest: bool = True,
+             job_id="20260922-094312-ab12cd", ship="ENA CRYSTAL",
+             author="Nick", created_at="2026-09-22T09:43:12+07:00",
+             plain: bool = False) -> Path:
+    """One job in the shape JobShot pushes: originals + job.json written LAST.
+
+    `plain=True` is v1 as of 2026-09-22 (photos[] is a list of file names);
+    the default keeps the older object shape, which must still be read."""
+    folder = tmp / "incoming" / job_id
     folder.mkdir(parents=True)
     entries = []
     for n in range(1, photos + 1):
         name = f"{n:04d}.jpg"
         _noisy_jpeg(folder / name)
-        entries.append({"file": name, "tag": "P" if n == 1 else "A",
+        entries.append(name if plain else
+                       {"file": name, "tag": "P" if n == 1 else "A",
                         "taken_at": f"2026-09-22T09:5{n}:03+07:00"})
     if write_manifest:
         manifest = {
-            "jobshot": 1, "job_id": "20260922-094312-ab12cd",
-            "created_at": "2026-09-22T09:43:12+07:00", "work_date": work_date,
-            "ship": "ENA CRYSTAL", "job_name": job, "from_catalog": True,
-            "author": "Nick", "device": "pixel9-nick", "photos": entries,
-            "notes": {"problem": [], "cause": [], "action": [], "test": []},
-            "spare_parts": [],
+            "jobshot": 1, "job_id": job_id, "created_at": created_at,
+            "work_date": work_date, "ship": ship, "job_name": job,
+            "from_catalog": True, "author": author, "device": "pixel9-nick",
+            "photos": entries,
         }
         with (folder / "job.json").open("w", encoding="utf-8", newline="") as f:
             json.dump(manifest, f, ensure_ascii=False, indent=2)
@@ -869,31 +876,159 @@ def test_jobshot_follows_a_folder_that_was_renamed_after_filing():
         assert len([f for f in renamed.iterdir() if f.suffix == ".jpg"]) == 4
 
 
-def test_jobshot_does_not_merge_two_vessels_that_share_a_job_name():
-    """Job names repeat across the fleet. Identity includes the ship, and a
-    manifest that says otherwise is an answer — the name must not override it."""
+def test_jobshot_identity_ignores_the_ship_field():
+    """dest_root is per vessel, so two jobs reaching one destination are on the
+    same ship. Keeping `ship` in the key would let a vessel name typed
+    differently on two phones split one real job into two folders."""
     if not _have_pillow():
         return
     from core import jobshot
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
         dest = tmp / "dest"
-        first = jobshot.import_job(_arrival(tmp), dest)     # ENA CRYSTAL
+        first = jobshot.import_job(_arrival(tmp), dest)          # ENA CRYSTAL
         assert first.ok, first.error
-        shutil.rmtree(tmp / "incoming")
-
-        other = _arrival(tmp)
-        manifest = json.loads((other / "job.json").read_text(encoding="utf-8"))
-        manifest["ship"] = "ENA CHALLENGER"
-        manifest["job_id"] = "20260922-101500-ff99aa"
-        with (other / "job.json").open("w", encoding="utf-8", newline="") as f:
-            json.dump(manifest, f, ensure_ascii=False, indent=2)
-
-        second = jobshot.import_job(other, dest)
+        second = jobshot.import_job(
+            _arrival(tmp, job_id="20260922-101500-ff99aa", ship="Ena Crystal AHTS"),
+            dest)
         assert second.ok, second.error
-        assert second.merged_into_existing is False, second.final_folder
-        assert second.final_folder != first.final_folder
-        assert len([f for f in dest.iterdir() if f.is_dir()]) == 2
+        assert second.final_folder == first.final_folder, second.final_folder
+        assert len([f for f in dest.iterdir() if f.is_dir()]) == 1
+
+
+def test_jobshot_reads_a_manifest_with_plain_file_names():
+    """v1 as of 2026-09-22: photos[] is a list of names, not objects (the
+    Before/After tags were cut — EMR owns that). Both shapes must file, and
+    each manifest is written back in the shape it arrived in."""
+    if not _have_pillow():
+        return
+    from core import jobshot
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        res = jobshot.import_job(_arrival(tmp, plain=True), tmp / "dest")
+        assert res.ok, f"{res.error} / {res.warnings}"
+        manifest = json.loads(
+            (res.final_folder / "job.json").read_text(encoding="utf-8"))
+        assert manifest["photos"] == [
+            "22-09-26 DG3 Turbo Inspection_001.jpg",
+            "22-09-26 DG3 Turbo Inspection_002.jpg",
+        ], manifest["photos"]
+        for name in manifest["photos"]:
+            assert (res.final_folder / name).is_file(), name
+
+
+# --- the batch case: two arrivals of one job in a single send ---------------
+
+
+def test_jobshot_batch_groups_two_arrivals_of_the_same_job():
+    """Nick sends several jobs in one sitting and two engineers can pair to one
+    PC, so two arrivals with the same job_name and work_date is a normal day.
+    Filed separately they would take two days and two folders for one job."""
+    if not _have_pillow():
+        return
+    from core import jobshot
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        dest = tmp / "dest"
+        a = _arrival(tmp, job_id="20260922-094312-ab12cd",
+                     created_at="2026-09-22T09:43:12+07:00")
+        b = _arrival(tmp, job_id="20260922-101500-ff99aa", author="Somchai",
+                     created_at="2026-09-22T10:15:00+07:00")
+
+        results = jobshot.import_batch([a, b], dest)
+        assert [r.ok for r in results] == [True, True], [r.error for r in results]
+
+        folders = [f for f in dest.iterdir() if f.is_dir()]
+        assert len(folders) == 1, sorted(f.name for f in folders)
+        assert folders[0].name == "22-09-26 DG3 Turbo Inspection"
+        assert results[0].final_folder == results[1].final_folder
+
+        photos = sorted(f.name for f in folders[0].iterdir() if f.suffix == ".jpg")
+        assert len(photos) == 4 and photos[-1].endswith("_004.jpg"), photos
+
+        # each sender's own manifest survives, and says who it was filed with
+        assert results[0].manifest_name == "job.json"
+        assert results[1].manifest_name == "job-20260922-101500-ff99aa.json"
+        assert results[0].grouped_with == ["20260922-101500-ff99aa"]
+        assert results[1].grouped_with == ["20260922-094312-ab12cd"]
+
+
+def test_jobshot_batch_photo_names_do_not_collide_between_arrivals():
+    """Both phones send 0001.jpg. A single shared old->new map would have one
+    arrival's entry overwrite the other's, and a manifest would point at
+    someone else's photo."""
+    if not _have_pillow():
+        return
+    from core import jobshot
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        dest = tmp / "dest"
+        results = jobshot.import_batch([
+            _arrival(tmp, job_id="20260922-094312-ab12cd",
+                     created_at="2026-09-22T09:43:12+07:00"),
+            _arrival(tmp, job_id="20260922-101500-ff99aa",
+                     created_at="2026-09-22T10:15:00+07:00"),
+        ], dest)
+        assert all(r.ok for r in results), [r.error for r in results]
+
+        first, second = results
+        assert set(first.photo_renames) == {"0001.jpg", "0002.jpg"}
+        assert set(second.photo_renames) == {"0001.jpg", "0002.jpg"}
+        # the same sent name maps to different filed photos
+        assert first.photo_renames["0001.jpg"] != second.photo_renames["0001.jpg"]
+        filed = set(first.photo_renames.values()) | set(second.photo_renames.values())
+        assert len(filed) == 4, filed
+        for name in filed:
+            assert (first.final_folder / name).is_file(), name
+
+
+def test_jobshot_batch_keeps_different_jobs_in_their_own_folders():
+    if not _have_pillow():
+        return
+    from core import jobshot
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        dest = tmp / "dest"
+        results = jobshot.import_batch([
+            _arrival(tmp, job_id="20260922-094312-ab12cd",
+                     created_at="2026-09-22T09:43:12+07:00"),
+            _arrival(tmp, job_id="20260922-101500-ff99aa",
+                     job="Bow Thruster Overhaul",
+                     created_at="2026-09-22T13:20:00+07:00"),
+        ], dest)
+        assert all(r.ok for r in results), [r.error for r in results]
+        assert results[0].final_folder != results[1].final_folder
+        # both were done on the 22nd and only one folder can hold that day: the
+        # job created first on the phone keeps it, the later one is shifted by
+        # the archive rule exactly as any other job would be
+        assert sorted(f.name for f in dest.iterdir() if f.is_dir()) == [
+            "01-09-26 Bow Thruster Overhaul",
+            "22-09-26 DG3 Turbo Inspection",
+        ], sorted(f.name for f in dest.iterdir())
+        assert results[0].date_shifted is False
+        assert results[1].date_shifted is True
+        assert results[0].grouped_with == [] and results[1].grouped_with == []
+
+
+def test_jobshot_batch_reports_a_bad_arrival_without_dropping_the_good_one():
+    """One folder still in flight must not cost the rest of the send."""
+    if not _have_pillow():
+        return
+    from core import jobshot
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        dest = tmp / "dest"
+        good = _arrival(tmp, job_id="20260922-094312-ab12cd")
+        in_flight = _arrival(tmp, job_id="20260922-999999-zzzzzz",
+                             write_manifest=False)
+
+        results = jobshot.import_batch([in_flight, good], dest)
+        assert len(results) == 2
+        assert results[0].ok is False and "flight" in results[0].error
+        assert results[1].ok is True, results[1].error
+        assert results[1].final_folder.is_dir()
+        # the unfinished transfer is left exactly where it was
+        assert (in_flight / "0001.jpg").is_file()
 
 
 # â”€â”€â”€ runner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
