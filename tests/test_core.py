@@ -15,6 +15,7 @@ exception marks it FAILED. Exit code 0 = all pass, 1 = at least one failed.
 """
 from __future__ import annotations
 
+import json
 import shutil
 import sys
 import tempfile
@@ -556,6 +557,235 @@ def test_photo_name_is_trimmed_to_fit_the_windows_path_limit():
     assert name.startswith("20-09-26 Repaired")
     # a shallow destination keeps the readable, untrimmed name
     assert processor.photo_prefix(folder, Path("D:/Photos") / folder) == folder
+
+
+# --- JobShot arrivals (phone -> HPO, R&D Director brief 2026-09-22) ---------
+#
+# The contract test for the arrival shape. Written before the receiver exists:
+# a hand-made folder is the whole specification, so this is testable with no
+# phone and no network.
+
+def _have_pillow() -> bool:
+    try:
+        import PIL  # noqa: F401
+        return True
+    except ImportError:
+        print("     (skipped - Pillow not installed)")
+        return False
+
+
+def _noisy_jpeg(path: Path, size=(1600, 1200)) -> None:
+    """A real photo-sized JPEG. Noise compresses badly on purpose - a flat
+    image would already be under the 10 KB floor and prove nothing."""
+    import random
+    from PIL import Image
+    rnd = random.Random(path.name)
+    img = Image.new("RGB", size)
+    img.putdata([(rnd.randrange(256), rnd.randrange(256), rnd.randrange(256))
+                 for _ in range(size[0] * size[1])])
+    img.save(path, "JPEG", quality=95)
+
+
+def _arrival(tmp: Path, *, photos: int = 2, job="DG3 Turbo Inspection",
+             work_date="2026-09-22", write_manifest: bool = True) -> Path:
+    """One job in the shape JobShot pushes: originals + job.json written LAST."""
+    folder = tmp / "incoming" / "20260922-094312-ab12cd"
+    folder.mkdir(parents=True)
+    entries = []
+    for n in range(1, photos + 1):
+        name = f"{n:04d}.jpg"
+        _noisy_jpeg(folder / name)
+        entries.append({"file": name, "tag": "P" if n == 1 else "A",
+                        "taken_at": f"2026-09-22T09:5{n}:03+07:00"})
+    if write_manifest:
+        manifest = {
+            "jobshot": 1, "job_id": "20260922-094312-ab12cd",
+            "created_at": "2026-09-22T09:43:12+07:00", "work_date": work_date,
+            "ship": "ENA CRYSTAL", "job_name": job, "from_catalog": True,
+            "author": "Nick", "device": "pixel9-nick", "photos": entries,
+            "notes": {"problem": [], "cause": [], "action": [], "test": []},
+            "spare_parts": [],
+        }
+        with (folder / "job.json").open("w", encoding="utf-8", newline="") as f:
+            json.dump(manifest, f, ensure_ascii=False, indent=2)
+    return folder
+
+
+def test_jobshot_arrival_is_filed_end_to_end():
+    """THE contract test: an arrived folder lands as `DD-MM-YY <Job Name>`,
+    resized into the band, renamed, with the manifest carried along."""
+    if not _have_pillow():
+        return
+    from core import jobshot
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        arrival = _arrival(tmp)
+        dest = tmp / "dest"
+        res = jobshot.import_job(arrival, dest)
+        assert res.ok, f"{res.error} / {res.warnings}"
+
+        out = dest / "22-09-26 DG3 Turbo Inspection"
+        assert res.final_folder == out, res.final_folder
+        assert out.is_dir(), sorted(p.name for p in dest.iterdir())
+
+        photos = sorted(f for f in out.iterdir() if f.suffix == ".jpg")
+        assert [f.name for f in photos] == [
+            "22-09-26 DG3 Turbo Inspection_001.jpg",
+            "22-09-26 DG3 Turbo Inspection_002.jpg",
+        ], [f.name for f in photos]
+        for f in photos:
+            kb = f.stat().st_size / 1024
+            assert 10 <= kb <= 25, f"{f.name} is {kb:.1f} KB, outside the band"
+
+        # originals are not consumed - the phone's copy is the backup
+        assert (arrival / "0001.jpg").is_file()
+
+
+def test_jobshot_manifest_follows_the_photo_rename():
+    """The silent-loss case the Director flagged: the commit renames every
+    photo, so a tag pointing at `0001.jpg` would be orphaned."""
+    if not _have_pillow():
+        return
+    from core import jobshot
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        res = jobshot.import_job(_arrival(tmp), tmp / "dest")
+        assert res.ok, res.error
+        out = res.final_folder
+
+        manifest = json.loads((out / "job.json").read_text(encoding="utf-8"))
+        names = [e["file"] for e in manifest["photos"]]
+        assert names == [
+            "22-09-26 DG3 Turbo Inspection_001.jpg",
+            "22-09-26 DG3 Turbo Inspection_002.jpg",
+        ], names
+        # every tag still points at a photo that is really there
+        for entry in manifest["photos"]:
+            assert (out / entry["file"]).is_file(), entry
+        assert [e["tag"] for e in manifest["photos"]] == ["P", "A"]
+        # and the job's own identity survived the trip
+        assert manifest["job_name"] == "DG3 Turbo Inspection"
+        assert manifest["work_date"] == "2026-09-22"
+
+
+def test_jobshot_manifest_is_not_renamed_as_if_it_were_a_photo():
+    """`rename_photos_for_folder` renames every file it is given. A manifest
+    turned into `<job>_003.json` would destroy the marker itself."""
+    with tempfile.TemporaryDirectory() as td:
+        folder = Path(td) / "pending"
+        folder.mkdir()
+        (folder / "img_001.jpg").write_bytes(b"x" * 10)
+        (folder / "job.json").write_text("{}", encoding="utf-8")
+        problems, renames = processor.rename_photos_for_folder(
+            folder, Path(td) / "22-09-26 Job", "22-09-26 Job")
+        assert problems == [], problems
+        assert (folder / "job.json").is_file()
+        assert renames == {"img_001.jpg": "22-09-26 Job_001.jpg"}, renames
+
+
+def test_jobshot_folder_without_a_manifest_is_still_arriving():
+    """job.json lands LAST. No manifest = a transfer in flight: do not touch."""
+    if not _have_pillow():
+        return
+    from core import jobshot
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        arrival = _arrival(tmp, write_manifest=False)
+        dest = tmp / "dest"
+        assert jobshot.is_complete(arrival) is False
+        res = jobshot.import_job(arrival, dest)
+        assert res.ok is False
+        assert "flight" in res.error, res.error
+        assert not dest.exists() or list(dest.iterdir()) == []
+        assert (arrival / "0001.jpg").is_file()    # never deleted
+
+
+def test_jobshot_obeys_the_archive_day_rule_and_records_the_shift():
+    """Nick 2026-09-22: the unique-day rule wins over the phone's work_date.
+    The date may therefore move - but work_date stays in the manifest and the
+    move is written down, so it is adjusted, never silently."""
+    if not _have_pillow():
+        return
+    from core import jobshot
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        dest = tmp / "dest"
+        (dest / "22-09-26 Bow Thruster Overhaul").mkdir(parents=True)  # day 22 taken
+        res = jobshot.import_job(_arrival(tmp), dest)
+        assert res.ok, res.error
+        assert res.date_shifted is True
+        assert res.folder_date.day == 1, res.folder_date     # earliest free day
+        assert res.final_folder.name == "01-09-26 DG3 Turbo Inspection"
+
+        manifest = json.loads((res.final_folder / "job.json").read_text(encoding="utf-8"))
+        assert manifest["work_date"] == "2026-09-22"          # truth untouched
+        assert manifest["filed"]["date_shifted"] is True
+        assert manifest["filed"]["folder_date"] == "01-09-26"
+
+
+def test_jobshot_second_job_merging_in_keeps_the_first_manifest():
+    """Two jobs can land in one folder (the merge is deliberate). The second
+    manifest must not overwrite the first - that would erase a job's tags."""
+    if not _have_pillow():
+        return
+    from core import jobshot
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        dest = tmp / "dest"
+        first = jobshot.import_job(_arrival(tmp), dest)
+        assert first.ok, first.error
+        shutil.rmtree(tmp / "incoming")
+        second = jobshot.import_job(_arrival(tmp), dest)   # same job, same day
+        assert second.ok, second.error
+        assert second.merged_into_existing is True
+        assert second.manifest_name != "job.json", second.manifest_name
+        out = first.final_folder
+        assert (out / "job.json").is_file()
+        assert (out / second.manifest_name).is_file()
+        # 4 photos now, numbering continued rather than collided
+        photos = sorted(f.name for f in out.iterdir() if f.suffix == ".jpg")
+        assert len(photos) == 4 and photos[-1].endswith("_004.jpg"), photos
+        # the second job's manifest points at the numbers it actually got
+        manifest = json.loads((out / second.manifest_name).read_text(encoding="utf-8"))
+        assert [e["file"] for e in manifest["photos"]] == photos[2:], manifest["photos"]
+
+
+def test_jobshot_rejects_a_manifest_it_does_not_understand():
+    from core import jobshot
+    with tempfile.TemporaryDirectory() as td:
+        folder = Path(td) / "incoming"
+        folder.mkdir()
+        for payload, expect in (
+            ('{"jobshot": 2, "job_name": "x", "photos": [{"file": "a.jpg"}]}', "version"),
+            ('{"jobshot": 1, "job_name": "", "photos": [{"file": "a.jpg"}]}', "job_name"),
+            ('{"jobshot": 1, "job_name": "x", "photos": []}', "no photos"),
+            ('not json at all', "not valid JSON"),
+        ):
+            (folder / "job.json").write_text(payload, encoding="utf-8")
+            data, err = jobshot.read_manifest(folder)
+            assert data is None and expect in err, (payload, err)
+
+
+def test_jobshot_remembers_the_photo_folder_per_vessel():
+    """Step 3: Nick picks the engine-room folder once per vessel, not per run."""
+    from core import auth, jobshot
+    store: dict = {}
+    real_load, real_update = auth.load_config, auth.update_config
+    try:
+        auth.load_config = lambda: dict(store)
+
+        def _update(updates):
+            store.update(updates)
+            return True
+
+        auth.update_config = _update
+        assert jobshot.get_dest_root("ENA CRYSTAL") is None
+        assert jobshot.remember_dest_root("ENA CRYSTAL", Path("D:/Photos/ENA")) is True
+        assert jobshot.get_dest_root("ena crystal") == Path("D:/Photos/ENA")  # case-free
+        assert jobshot.get_dest_root("OTHER SHIP") is None
+        assert jobshot.remember_dest_root("", Path("D:/x")) is False
+    finally:
+        auth.load_config, auth.update_config = real_load, real_update
 
 
 # â”€â”€â”€ runner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

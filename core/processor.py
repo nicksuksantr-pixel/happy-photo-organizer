@@ -91,15 +91,20 @@ def _next_photo_seq(folder: Path, prefix: str) -> int:
 
 
 def rename_photos_for_folder(temp_folder: Path, target: Path,
-                             folder_name: str) -> list[str]:
+                             folder_name: str) -> tuple[list[str], dict[str, str]]:
     """Rename this run's photos — still inside the temp folder — to
     `<folder name>_NNN.jpg`, continuing the numbering the target already uses.
 
-    Returns non-fatal problems: a filename must never cost Nick the commit, so
-    any failure leaves that one file under its old name and the folder still
-    goes through.
+    Returns (problems, mapping old name -> new name). Problems are non-fatal: a
+    filename must never cost Nick the commit, so any failure leaves that one
+    file under its old name and the folder still goes through.
+
+    Only images are renamed. A side-car file a caller put in the folder (e.g.
+    JobShot's `job.json`) keeps its name — renaming the manifest to
+    `<job>_003.json` would destroy the very thing that identifies the job.
     """
     problems: list[str] = []
+    renames: dict[str, str] = {}
     def _order(f: Path):
         # Phase 1 writes img_001…img_999 and then img_1000, which plain string
         # sorting puts *before* img_999 — order by the number when there is one.
@@ -109,9 +114,10 @@ def rename_photos_for_folder(temp_folder: Path, target: Path,
     try:
         files = sorted((f for f in temp_folder.iterdir() if f.is_file()), key=_order)
     except OSError as e:
-        return [f"photo rename skipped in {temp_folder.name}: {str(e)[:80]}"]
+        return [f"photo rename skipped in {temp_folder.name}: {str(e)[:80]}"], renames
+    files = [f for f in files if is_supported_image(f)]
     if not files:
-        return problems
+        return problems, renames
 
     prefix = photo_prefix(folder_name, target)
     merging = target != temp_folder and target.exists()
@@ -122,6 +128,7 @@ def rename_photos_for_folder(temp_folder: Path, target: Path,
         new_name = f"{prefix}_{seq:03d}{suffix}"
         seq += 1
         if f.name == new_name:
+            renames[f.name] = new_name
             continue
         dst = temp_folder / new_name
         if dst.exists():
@@ -130,9 +137,10 @@ def rename_photos_for_folder(temp_folder: Path, target: Path,
             dst = temp_folder / f"{prefix}_{seq - 1:03d}_{_uuid.uuid4().hex[:4]}{suffix}"
         try:
             f.rename(dst)
+            renames[f.name] = dst.name
         except OSError as e:
             problems.append(f"photo rename failed: {f.name} → {dst.name} ({str(e)[:80]})")
-    return problems
+    return problems, renames
 
 
 # ─── dataclasses ───
@@ -153,6 +161,10 @@ class JobAssignment:
     is_new_suggestion: bool = False
     is_irrelevant: bool = False                 # AI: not vessel work at all
     source_label: str = ""
+    # filled by the commit: name a photo had in the temp folder -> its final
+    # name. A caller that carries a side-car file listing the photos (JobShot's
+    # job.json) has no other way to follow the rename.
+    photo_renames: dict[str, str] = field(default_factory=dict)
 
     @property
     def folder_name(self) -> str:
@@ -769,9 +781,10 @@ def phase4_rename_folders(
         target = plan.dest_root / a.folder_name
         # Name every photo after its folder before the folder itself moves, so
         # files stay unique when Nick drags them between folders later.
-        result.errors.extend(
-            rename_photos_for_folder(a.temp_folder, target, a.folder_name)
-        )
+        _problems, _renames = rename_photos_for_folder(
+            a.temp_folder, target, a.folder_name)
+        result.errors.extend(_problems)
+        a.photo_renames = _renames
         # ถ้าโฟลเดอร์ปลายทางมีอยู่แล้ว → merge (move files)
         try:
             if target.exists() and target != a.temp_folder:
@@ -787,6 +800,11 @@ def phase4_rename_folders(
                         # Cap hit — fall back to a unique suffix.
                         # uuid imported at module top (round-6 BUG-L6).
                         dst_file = target / f"{f.stem}_{_uuid.uuid4().hex[:8]}{f.suffix}"
+                    if dst_file.name != f.name:
+                        # the move had to rename it again — keep the map honest
+                        for _orig, _new in list(a.photo_renames.items()):
+                            if _new == f.name:
+                                a.photo_renames[_orig] = dst_file.name
                     shutil.move(str(f), str(dst_file))
                 try:
                     a.temp_folder.rmdir()

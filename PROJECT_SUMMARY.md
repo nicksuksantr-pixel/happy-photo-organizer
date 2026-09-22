@@ -1,6 +1,6 @@
 # 🎨 Happy Photo Organizer — Project Summary
 
-**Status:** v1.045 (2026-09-02 — **photos named after their folder** (`DD-MM-YY <Job>_001.jpg`) so they no longer collide when moved · builds on v1.044: 1 shooting day = 1 folder, installer merges the job catalog, VERSION BOM fix · tests 43/43)
+**Status:** v1.046 (2026-09-22 — **JobShot receiver, steps 1–3**: headless `core/jobshot.py` files a job pushed from the phone, manifest follows the photo rename, archive day-rule wins over `work_date` (Nick's call) · builds on v1.045: photos named after their folder · tests 52/52 · last released build = v1.045)
 **Author:** Nick (with Codey — Claude Code)
 **Family:** Happy AI Family (sibling: HAPPY AI Agent)
 **Last full review:** Tester sprint 2026-06-04 (Codey, 3 parallel audit agents) — see "Audit history" below

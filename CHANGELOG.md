@@ -9,6 +9,54 @@ Cosmetic / design / V2-scope items that survived round 6 + 7 + 8. All
 catalogued in detail at the bottom of this file under "Round 6
 deferred".
 
+## [1.046] — 2026-09-22 — HPO receives jobs from the phone (JobShot steps 1–3)
+
+Not released as a build — there is no UI entry point yet, so an installer would
+look identical to the user. The code is on `main` for the JobShot app to build
+against.
+
+### Added — a headless path for a job that arrives already grouped and named
+`core/jobshot.py`. The phone sends originals plus a `job.json` manifest written
+LAST; a folder without the manifest is a transfer still in flight and is left
+completely alone. `import_job()` resizes into the 10–25 KB band, applies the
+archive date rule, commits through the existing Phase 4, and writes the manifest
+into the final folder. No UI, no AI naming pass, and **no re-grouping** — the
+engineer at the machine already decided which photos are one job, and
+day-grouping would merge two different same-day jobs into one folder with one
+name.
+
+### Fixed — the commit's rename silently orphaned the manifest
+`rename_photos_for_folder` renamed every file it was handed, so a manifest in
+the folder would itself have become `<job>_003.json`, and every
+`photos[].file` reference would have pointed at a name that no longer existed —
+the Before/After tags collected at the machine, lost with nothing to notice.
+
+- the rename now skips anything that is not an image
+- it returns its old→new mapping, kept on `JobAssignment.photo_renames` and
+  corrected again when a merge has to rename a file a second time
+- the manifest copied into the final folder has `photos[].file` rewritten
+
+### Changed — `work_date` vs the archive day-rule (Nick's decision)
+The archive rule wins, unchanged: a job from the phone is consolidated into the
+destination's dominant month and given a unique day number like any other
+folder. Because that can move a job off the day it was really done, `work_date`
+stays untouched in the manifest and a new `filed` block records `folder`,
+`folder_date`, `date_shifted`, `merged_into_existing_folder` and `hpo_version`.
+One exception, from the rule's own logic: a folder for the same job on the same
+day is **merged into**, not pushed to the earliest free day — otherwise one real
+job would occupy two folders on two dates and spend a second day number.
+
+### Added — the destination folder is remembered per vessel
+`get_dest_root(ship)` / `remember_dest_root(ship, path)`, stored in the existing
+config. Nick picks the engine-room folder once per vessel instead of every run.
+
+### Tests
+44 → **52**: the end-to-end contract test (hand-made arrival folder, no phone),
+manifest follows the rename, manifest is not renamed as a photo, a folder with
+no manifest is refused untouched, a shifted date is recorded, a second job
+merging in keeps the first manifest and continues the numbering, bad manifests
+are refused with a reason, per-vessel folder memory round-trips.
+
 ## [1.045] — 2026-09-02 — Photos are named after their folder
 
 ### Changed — every folder used to restart at `img_001`, so moving a photo meant renaming it
