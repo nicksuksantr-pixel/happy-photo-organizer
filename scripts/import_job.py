@@ -54,6 +54,12 @@ def main(argv: list[str] | None = None) -> int:
                                    "remembered for this ship)")
     ap.add_argument("--remember", action="store_true",
                     help="remember --dest for this ship")
+    # Filing a job teaches the catalog the job's name, which is right for real
+    # work and wrong for a test run — a trial import once wrote two invented
+    # job names into the shipped catalog (2026-09-22). Point this somewhere
+    # else when you are only trying it out.
+    ap.add_argument("--catalog", help="job catalog file to record into "
+                                      "(default: the app's own)")
     args = ap.parse_args(argv)
 
     folders = [Path(f) for f in args.folders]
@@ -84,7 +90,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  remembered {dest} for {ship}")
 
     print(f"Filing {len(jobs)} job(s) into {dest}")
-    catalog = JobCatalog()
+    catalog = JobCatalog(Path(args.catalog)) if args.catalog else JobCatalog()
     results = jobshot.import_batch(
         jobs, dest, catalog=catalog,
         progress_cb=lambda done, total, msg: print(f"  [{done}/{total}] {msg}"),

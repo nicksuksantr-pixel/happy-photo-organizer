@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_at": "2026-09-22T22:21:42",
+  "generated_at": "2026-05-23T11:08:53",
   "sources": [
     {
       "ship": "Conquest",
@@ -3920,48 +3920,6 @@
         "control",
         "panel",
         "wiring"
-      ],
-      "user_added": true
-    },
-    {
-      "name": "DG3 Turbo Inspection",
-      "normalized": "dg3 turbo inspection",
-      "occurrences": 2,
-      "ships": [],
-      "months_seen": [
-        "Sep 26"
-      ],
-      "dates_seen": [
-        "22-09-26"
-      ],
-      "variants": [
-        "DG3 Turbo Inspection"
-      ],
-      "keywords": [
-        "dg",
-        "turbo",
-        "inspection"
-      ],
-      "user_added": true
-    },
-    {
-      "name": "Bow Thruster Overhaul",
-      "normalized": "bow thruster overhaul",
-      "occurrences": 1,
-      "ships": [],
-      "months_seen": [
-        "Sep 26"
-      ],
-      "dates_seen": [
-        "01-09-26"
-      ],
-      "variants": [
-        "Bow Thruster Overhaul"
-      ],
-      "keywords": [
-        "bow",
-        "thruster",
-        "overhaul"
       ],
       "user_added": true
     }
