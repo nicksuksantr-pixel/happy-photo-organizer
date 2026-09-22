@@ -9,6 +9,47 @@ Cosmetic / design / V2-scope items that survived round 6 + 7 + 8. All
 catalogued in detail at the bottom of this file under "Round 6
 deferred".
 
+## [1.047] — 2026-09-22 — A job from the phone can actually be filed
+
+v1.046 finished the JobShot import and left it unreachable: `import_job()`
+existed in `core/`, in the tests and in the docs, and in no UI file. Nick uses
+this for real tomorrow, so it needed a way in.
+
+### Added — three ways to file a job that came off the phone
+- **Drop it on the drop zone.** A folder with a `job.json` is a job; a folder
+  whose immediate children have one is the whole JobShot directory copied off
+  the phone, and each child is filed. Photos dropped in the same gesture still
+  go to Step 1 exactly as before.
+- **The "From phone" button** next to Clear opens a folder picker for the same
+  path.
+- **`python scripts/import_job.py <folder> [--dest <folder>] [--remember]`** —
+  the path that still works when the app will not start or the PC has no
+  installed build.
+
+A folder with no `job.json` is a transfer that was still running when it was
+copied: reported as *not ready yet*, never processed and never deleted.
+
+The destination is `dest_root` if one is set, otherwise the folder remembered
+for that vessel, otherwise asked once and remembered. The import runs off the
+UI thread with the progress bar and log wired up, and says what was filed, what
+merged into an existing folder, what had its date moved by the archive rule,
+and what was skipped. A worker exception is logged with its traceback and
+leaves the app running.
+
+### Fixed — the manifest version gate accepted `true` and `1.0`
+`"jobshot": true` passed `version != SUPPORTED_MANIFEST_VERSION`, because
+`True == 1` in Python; probing the gate rather than reading it turned up `1.0`
+as well. Both are exactly the sender bug the gate exists to catch, and either
+would have filed a job on a manifest nobody validated. The gate now demands a
+real `int`. The test sweeps `true`, `false`, `[1]`, `"1"`, `null`, `1.0`, `2`
+and `0` — a gate tested only with `1` and `2` proves nothing.
+
+### Tests
+61 → **64**, plus an end-to-end run on a synthetic arrival through the real
+script: two jobs filed, one moved to a free day by the archive rule and said
+so, photos renamed and resized into the band, manifests rewritten, and a
+half-copied folder left untouched.
+
 ## [1.046] — 2026-09-22 — HPO receives jobs from the phone (JobShot steps 1–3)
 
 Not released as a build — there is no UI entry point yet, so an installer would

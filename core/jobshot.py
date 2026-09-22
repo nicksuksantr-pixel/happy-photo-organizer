@@ -120,8 +120,12 @@ def read_manifest(job_folder: Path) -> tuple[dict | None, str]:
     if not isinstance(data, dict):
         return None, f"{MANIFEST_NAME} is not an object"
 
+    # `True == 1` and `1.0 == 1` in Python, so a bare `!=` lets a manifest
+    # written as `"jobshot": true` (or `1.0`) through the gate that exists to
+    # catch exactly that kind of sender bug. Demand a real int.
     version = data.get("jobshot")
-    if version != SUPPORTED_MANIFEST_VERSION:
+    if (not isinstance(version, int) or isinstance(version, bool)
+            or version != SUPPORTED_MANIFEST_VERSION):
         return None, (f"unsupported manifest version {version!r} "
                       f"(this build reads {SUPPORTED_MANIFEST_VERSION})")
     if not str(data.get("job_name", "")).strip():
@@ -292,6 +296,40 @@ def find_filed_job(dest_root: Path, job_name: str,
             if job_key(str(data.get("job_name", "")), filed_date) == want:
                 return folder
     return None
+
+
+def split_arrivals(
+    paths: list[Path],
+) -> tuple[list[Path], list[Path], list[Path]]:
+    """Sort dropped/browsed paths into (jobs, still-arriving, everything else).
+
+    A folder counts as a JobShot parent only when one of its immediate children
+    holds a job.json — otherwise an ordinary folder of photos would be pulled
+    away from the card-reader path it belongs to. Siblings without a manifest
+    are a transfer that was still running when the folder was copied: reported
+    as not-ready, never processed, never deleted.
+    """
+    jobs: list[Path] = []
+    in_flight: list[Path] = []
+    rest: list[Path] = []
+    for p in paths:
+        if not p.is_dir():
+            rest.append(p)
+            continue
+        if is_complete(p):
+            jobs.append(p)
+            continue
+        try:
+            children = sorted(c for c in p.iterdir() if c.is_dir())
+        except OSError:
+            children = []
+        complete = [c for c in children if is_complete(c)]
+        if complete:
+            jobs.extend(complete)
+            in_flight.extend(c for c in children if c not in complete)
+        else:
+            rest.append(p)
+    return jobs, in_flight, rest
 
 
 # ─── the headless import (steps 1 + 2) ───

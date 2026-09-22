@@ -1031,6 +1031,86 @@ def test_jobshot_batch_reports_a_bad_arrival_without_dropping_the_good_one():
         assert (in_flight / "0001.jpg").is_file()
 
 
+# --- the way in: what the drop zone and the "From phone" button do ---------
+
+
+def test_jobshot_version_gate_rejects_every_wrong_shape():
+    """A gate tested only with 1 and 2 proves nothing about true, [1] or 1.0.
+    `True == 1` and `1.0 == 1` in Python, so a bare `!=` would pass a manifest
+    written as `"jobshot": true` — precisely the sender bug the gate exists to
+    catch (found by EMR in its own gate, 2026-09-22)."""
+    from core import jobshot
+    with tempfile.TemporaryDirectory() as td:
+        folder = Path(td)
+        for payload in ("true", "false", "[1]", '"1"', "null", "1.0", "2", "0"):
+            (folder / "job.json").write_text(
+                '{"jobshot": %s, "job_name": "x", "photos": ["a.jpg"]}' % payload,
+                encoding="utf-8")
+            data, err = jobshot.read_manifest(folder)
+            assert data is None, f'"jobshot": {payload} was accepted'
+            assert "version" in err, (payload, err)
+        # and the one real version still works
+        (folder / "job.json").write_text(
+            '{"jobshot": 1, "job_name": "x", "photos": ["a.jpg"]}', encoding="utf-8")
+        data, err = jobshot.read_manifest(folder)
+        assert data is not None, err
+
+
+def test_jobshot_split_arrivals_sorts_what_was_dropped():
+    """A job folder, a parent holding several, a half-copied one, and an
+    ordinary folder of photos all get dropped on the same zone."""
+    if not _have_pillow():
+        return
+    from core import jobshot
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        one = _arrival(tmp, job_id="job-A")
+
+        # a parent holding two jobs, one of which is still being copied
+        parent = tmp / "from phone"
+        parent.mkdir()
+        (parent / "job-B").mkdir()
+        (parent / "job-B" / "job.json").write_text(
+            '{"jobshot": 1, "job_name": "B", "photos": ["0001.jpg"]}',
+            encoding="utf-8")
+        (parent / "job-C-still-copying").mkdir()
+        (parent / "job-C-still-copying" / "0001.jpg").write_bytes(b"partial")
+
+        photos_folder = tmp / "card reader dump"
+        photos_folder.mkdir()
+        (photos_folder / "IMG_0001.jpg").write_bytes(b"x")
+        loose_file = tmp / "loose.jpg"
+        loose_file.write_bytes(b"x")
+
+        jobs, in_flight, rest = jobshot.split_arrivals(
+            [one, parent, photos_folder, loose_file])
+
+        assert jobs == [one, parent / "job-B"], jobs
+        assert in_flight == [parent / "job-C-still-copying"], in_flight
+        # an ordinary folder of photos still belongs to the card-reader path
+        assert rest == [photos_folder, loose_file], rest
+
+
+def test_jobshot_an_unfinished_transfer_is_never_touched():
+    """The folder Nick copied while the phone was still sending: reported as
+    not ready, left exactly as it was."""
+    if not _have_pillow():
+        return
+    from core import jobshot
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        arriving = _arrival(tmp, write_manifest=False)
+        before = sorted(p.name for p in arriving.iterdir())
+
+        jobs, in_flight, rest = jobshot.split_arrivals([arriving])
+        assert jobs == [] and rest == [arriving]      # no manifest anywhere below
+        assert in_flight == []
+
+        res = jobshot.import_job(arriving, tmp / "dest")
+        assert res.ok is False and "flight" in res.error
+        assert sorted(p.name for p in arriving.iterdir()) == before
+
+
 # â”€â”€â”€ runner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def main() -> int:

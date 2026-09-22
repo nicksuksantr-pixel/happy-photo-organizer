@@ -14,6 +14,7 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
+import traceback
 from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
@@ -26,6 +27,7 @@ sys.path.insert(0, str(ROOT))
 
 # ─── core ──────────────────────────────────────────────────────
 from core import auth
+from core import jobshot
 from core.catalog import JobCatalog
 from core.image_io import (
     collect_images, format_summary, is_supported_image, SUPPORTED_EXTS,
@@ -311,7 +313,7 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         # Mascot label on left of hint text
         self.drop_hint = ctk.CTkLabel(
             self.drop_zone,
-            text="  Drop photos or folders here\n  (or click to browse)",
+            text="  Drop photos, folders, or a job from the phone\n  (or click to browse)",
             image=self._mascot_drop_zone,
             compound="left",
             font=("Segoe UI", 12),
@@ -337,6 +339,17 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
             text_color=COLOR_TEXT,
             command=self._clear_sources,
         ).pack(side="left")
+
+        # A job photographed on the phone arrives as a folder with a job.json
+        # in it. Dropping it works too — this is for when browsing is easier
+        # than dragging (a job copied off the phone by cable, say).
+        ctk.CTkButton(
+            ctrl, text="From phone", height=28, width=92,
+            font=("Segoe UI", 11),
+            fg_color=COLOR_BG_INPUT, hover_color="#475569",
+            text_color=COLOR_TEXT,
+            command=self._pick_jobshot_folder,
+        ).pack(side="left", padx=(6, 0))
 
         self.dest_btn = ctk.CTkButton(
             ctrl, text="Choose Destination", height=28, width=140,
@@ -948,23 +961,152 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
     def _on_drag_leave(self, _event):
         self.drop_zone.configure(border_color=COLOR_BG_INPUT, fg_color="#1A2538")
         self.drop_hint.configure(
-            text="  Drop photos or folders here\n  (or click to browse)",
+            text="  Drop photos, folders, or a job from the phone\n  (or click to browse)",
             text_color=COLOR_MUTED,
         )
 
     def _on_drop(self, event):
         raw_paths = self.tk.splitlist(event.data)
-        added = 0
-        for raw in raw_paths:
-            p = Path(raw)
-            if p.exists():
-                self.source_paths.append(p)
-                added += 1
+        dropped = [Path(raw) for raw in raw_paths if Path(raw).exists()]
         self._on_drag_leave(None)
+
+        # A job from the phone is a folder with a job.json in it (or a folder
+        # holding several such folders — what Nick gets when he copies the
+        # whole JobShot directory off the phone). Those go to the importer;
+        # everything else is photos, exactly as before.
+        jobs, in_flight, rest = jobshot.split_arrivals(dropped)
+        if jobs or in_flight:
+            self._import_jobshot(jobs, in_flight)
+
+        added = 0
+        for p in rest:
+            self.source_paths.append(p)
+            added += 1
         if added:
             self._log(f"Added {added} item(s) via drag-drop", "ok")
             self._refresh_sources()
             self._refresh_step_states()
+
+    # ─── jobs photographed on the phone (JobShot) ───
+
+    def _pick_jobshot_folder(self):
+        folder = filedialog.askdirectory(
+            title="Select the job folder copied from the phone")
+        if not folder:
+            return
+        jobs, in_flight, _rest = jobshot.split_arrivals([Path(folder)])
+        if not jobs and not in_flight:
+            messagebox.showwarning(
+                "Not a job from the phone",
+                "That folder has no job.json in it, and neither does any "
+                "folder inside it.\n\nDrop it on the drop zone instead to "
+                "treat it as a folder of photos.")
+            return
+        self._import_jobshot(jobs, in_flight)
+
+    def _jobshot_dest(self, jobs: list[Path]) -> Path | None:
+        """Where this ship's photos live. Asked once per vessel, then
+        remembered — an arriving job should file itself."""
+        if self.dest_root:
+            return self.dest_root
+        ship = ""
+        for folder in jobs:
+            manifest, _err = jobshot.read_manifest(folder)
+            if manifest is not None:
+                ship = str(manifest.get("ship", "") or "")
+                if ship:
+                    break
+        remembered = jobshot.get_dest_root(ship)
+        if remembered is not None:
+            self.dest_root = remembered
+            self.dest_label.configure(text=f"Destination: {remembered}",
+                                      text_color=COLOR_TEXT)
+            self._log(f"Destination for {ship or 'this ship'}: {remembered}", "ok")
+            self._refresh_step_states()
+            return remembered
+
+        chosen = filedialog.askdirectory(
+            title=f"Where do {ship or 'this ship'}'s photos go?")
+        if not chosen:
+            return None
+        dest = Path(chosen)
+        self.dest_root = dest
+        self.dest_label.configure(text=f"Destination: {dest}", text_color=COLOR_TEXT)
+        if ship and jobshot.remember_dest_root(ship, dest):
+            self._log(f"Remembered {dest} for {ship}", "ok")
+        self._refresh_step_states()
+        return dest
+
+    def _import_jobshot(self, jobs: list[Path], in_flight: list[Path]):
+        for folder in in_flight:
+            self._log(f"{folder.name}: still arriving (no job.json yet) — skipped",
+                      "warn")
+        if not jobs:
+            messagebox.showinfo(
+                "Still arriving",
+                "Those folders have no job.json yet, which means the phone had "
+                "not finished sending them.\n\nNothing was changed. Try "
+                "again once the transfer is done.")
+            return
+        if self._batch_running or (self.worker and self.worker.is_alive()):
+            messagebox.showwarning("Busy", "Wait for the current batch to finish")
+            return
+        dest = self._jobshot_dest(jobs)
+        if dest is None:
+            self._log("Import cancelled — no destination chosen", "warn")
+            return
+
+        self._log(f"Filing {len(jobs)} job(s) from the phone into {dest}", "ok")
+        self._batch_running = True
+        self.phase12_btn.configure(state="disabled")
+        self.worker = threading.Thread(
+            target=self._jobshot_worker, args=(jobs, dest), daemon=True)
+        self.worker.start()
+
+    def _jobshot_worker(self, jobs: list[Path], dest: Path):
+        def progress(done: int, total: int, msg: str):
+            self.after(0, lambda: self._set_progress(
+                done / total if total else 0, msg))
+
+        try:
+            results = jobshot.import_batch(
+                jobs, dest, catalog=self.catalog, progress_cb=progress)
+        except Exception as e:                     # never take the app down
+            tb = traceback.format_exc()
+            self.after(0, lambda: self._log(f"Import failed: {str(e)[:200]}", "err"))
+            self.after(0, lambda: self._log(f"[debug] {tb}", "info"))
+            self.after(0, self._jobshot_done, [], dest)
+            return
+        self.after(0, self._jobshot_done, results, dest)
+
+    def _jobshot_done(self, results: list, dest: Path):
+        self._batch_running = False
+        self.phase12_btn.configure(state="normal")
+        self._set_progress(0, "Ready")
+
+        filed = 0
+        for r in results:
+            if not r.ok:
+                self._log(f"{r.job_name or 'job'}: NOT filed — {r.error}", "err")
+                continue
+            filed += 1
+            where = "merged into" if r.merged_into_existing else "filed as"
+            self._log(f"{where} {r.final_folder.name}  "
+                      f"({r.photos_filed} photo(s))", "ok")
+            if r.date_shifted:
+                self._log(f"   work date {r.work_date:%d-%m-%y} — the day rule "
+                          f"filed it on {r.folder_date:%d-%m-%y}", "info")
+            for w in r.warnings:
+                self._log(f"   {w}", "warn")
+
+        self._refresh_step_states()
+        if results:
+            folders = sorted({r.final_folder.name for r in results if r.ok})
+            messagebox.showinfo(
+                "Jobs filed",
+                f"{filed} of {len(results)} job(s) filed into:\n\n"
+                + "\n".join(folders[:8])
+                + ("\n..." if len(folders) > 8 else ""))
 
     # ─── Round-6 UI-03 (Cos review 2026-05-24): keyboard shortcuts ───
     # Each handler is a no-op when the action is invalid (no source, batch
