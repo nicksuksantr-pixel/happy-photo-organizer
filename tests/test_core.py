@@ -788,6 +788,114 @@ def test_jobshot_remembers_the_photo_folder_per_vessel():
         auth.load_config, auth.update_config = real_load, real_update
 
 
+# --- one real job = one folder (Nick 2026-09-22, arrival-time grouping) -----
+
+
+def test_jobshot_finds_its_own_job_even_after_the_day_rule_moved_it():
+    """The case the first cut got wrong. Engineer A's job is filed on day 1
+    because day 22 was taken; engineer B sends the same job. Matching on the
+    folder name alone would miss (B expects 22-09-26), the day rule would give
+    B yet another day, and one real job would own two folders on two dates."""
+    if not _have_pillow():
+        return
+    from core import jobshot
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        dest = tmp / "dest"
+        (dest / "22-09-26 Bow Thruster Overhaul").mkdir(parents=True)   # day 22 gone
+
+        first = jobshot.import_job(_arrival(tmp), dest)
+        assert first.ok, first.error
+        assert first.final_folder.name == "01-09-26 DG3 Turbo Inspection"
+        assert first.date_shifted is True
+
+        shutil.rmtree(tmp / "incoming")
+        second = jobshot.import_job(_arrival(tmp), dest)
+        assert second.ok, second.error
+        assert second.merged_into_existing is True
+        assert second.final_folder == first.final_folder, second.final_folder
+
+        job_folders = sorted(f.name for f in dest.iterdir() if f.is_dir())
+        assert job_folders == ["01-09-26 DG3 Turbo Inspection",
+                               "22-09-26 Bow Thruster Overhaul"], job_folders
+        photos = sorted(f.name for f in first.final_folder.iterdir()
+                        if f.suffix == ".jpg")
+        assert len(photos) == 4 and photos[-1].endswith("_004.jpg"), photos
+
+
+def test_jobshot_different_job_on_the_same_day_keeps_its_own_folder():
+    """Grouping is by the job's identity, not by the day — two different jobs
+    on one day must not be swept into one folder."""
+    if not _have_pillow():
+        return
+    from core import jobshot
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        dest = tmp / "dest"
+        first = jobshot.import_job(_arrival(tmp), dest)
+        assert first.ok, first.error
+        shutil.rmtree(tmp / "incoming")
+        other = jobshot.import_job(
+            _arrival(tmp, job="Bow Thruster Overhaul"), dest)
+        assert other.ok, other.error
+        assert other.merged_into_existing is False
+        assert other.final_folder != first.final_folder
+        assert sorted(f.name for f in dest.iterdir() if f.is_dir()) == [
+            "01-09-26 Bow Thruster Overhaul",
+            "22-09-26 DG3 Turbo Inspection",
+        ], sorted(f.name for f in dest.iterdir())
+
+
+def test_jobshot_follows_a_folder_that_was_renamed_after_filing():
+    """Nick renames folders by hand. The job still lives in that folder, so a
+    later arrival belongs there too — not in a fresh one under the old name."""
+    if not _have_pillow():
+        return
+    from core import jobshot
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        dest = tmp / "dest"
+        first = jobshot.import_job(_arrival(tmp), dest)
+        assert first.ok, first.error
+        renamed = dest / "22-09-26 DG3 Turbo Inspection and gasket renewal"
+        first.final_folder.rename(renamed)
+
+        shutil.rmtree(tmp / "incoming")
+        second = jobshot.import_job(_arrival(tmp), dest)
+        assert second.ok, second.error
+        assert second.final_folder == renamed, second.final_folder
+        assert any("renamed after filing" in w for w in second.warnings), second.warnings
+        assert sorted(f.name for f in dest.iterdir() if f.is_dir()) == [renamed.name]
+        assert len([f for f in renamed.iterdir() if f.suffix == ".jpg"]) == 4
+
+
+def test_jobshot_does_not_merge_two_vessels_that_share_a_job_name():
+    """Job names repeat across the fleet. Identity includes the ship, and a
+    manifest that says otherwise is an answer — the name must not override it."""
+    if not _have_pillow():
+        return
+    from core import jobshot
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        dest = tmp / "dest"
+        first = jobshot.import_job(_arrival(tmp), dest)     # ENA CRYSTAL
+        assert first.ok, first.error
+        shutil.rmtree(tmp / "incoming")
+
+        other = _arrival(tmp)
+        manifest = json.loads((other / "job.json").read_text(encoding="utf-8"))
+        manifest["ship"] = "ENA CHALLENGER"
+        manifest["job_id"] = "20260922-101500-ff99aa"
+        with (other / "job.json").open("w", encoding="utf-8", newline="") as f:
+            json.dump(manifest, f, ensure_ascii=False, indent=2)
+
+        second = jobshot.import_job(other, dest)
+        assert second.ok, second.error
+        assert second.merged_into_existing is False, second.final_folder
+        assert second.final_folder != first.final_folder
+        assert len([f for f in dest.iterdir() if f.is_dir()]) == 2
+
+
 # â”€â”€â”€ runner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def main() -> int:

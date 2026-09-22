@@ -49,8 +49,10 @@ instead of being pushed to the earliest free day. Shifting would produce two
 folders, two dates and one real job — and spend a second day number on the
 duplicate. Merging keeps one folder and one day, which is what "one day = one
 folder" asks for. It is also the two-engineers-on-one-job case, and it is
-reported (`merged_into_existing`), never silent. **One line to reverse if Nick
-disagrees** — `core/jobshot.py`, the `same_job_today` branch.
+reported (`merged_into_existing`), never silent. **Superseded the same day by
+Entry 2** — that narrow check only held while the first arrival kept its own
+day, so the `same_job_today` branch no longer exists; matching now runs on the
+job's identity.
 
 ### Built
 - `core/jobshot.py` — manifest read/validate (`job.json` is the completion
@@ -83,3 +85,46 @@ of failing if it is ever absent.
 - No UI entry point yet, so **no build and no GitHub Release**: an installer
   that looks identical to the user is not worth pushing through the
   auto-updater. The code is on `main` for the JobShot session to build against.
+
+## Entry 2 — one real job = one folder, matched at arrival (same day, v1.046)
+
+Nick's ruling on the date rule (Entry 1) has a consequence the R&D Director
+spotted after sending the brief, and spotted correctly: **the unique-day rule
+and merge-on-name-collision are in tension by construction.** If engineer A's
+job is filed on day 22 and engineer B sends the same job, `scan_used_days`
+reports 22 as taken, B is shifted to the earliest free day, the names never
+collide — and one real job ends up owning two folders on two dates.
+
+Entry 1's narrow fix (merge when `dest_root/<work_date> <job name>` exists)
+closed that only while the first arrival kept its own day. The moment the rule
+shifted the FIRST job as well — A filed on day 1 because day 22 was already
+gone — B looked for `22-09-26 …`, found nothing, and got a third folder.
+
+**Nick's call: go further — group at arrival on the job's own identity.**
+
+- `find_filed_job(dest_root, ship, job_name, work_date)` reads the manifests HPO
+  leaves in the filed folders and returns the folder this job already lives in,
+  **whatever day the rule gave it**. Identity = ship + job_name + work_date,
+  with job names normalised through the catalog's own `_normalize` (so
+  "No. 3" and "No.3" are one job). A missing ship on either side does not block
+  a match — it is metadata, not identity; only a genuine disagreement does.
+- This is the second reason `job.json` is carried into the final folder: it is
+  what lets a job arriving days later find its own folder.
+- The name+date fallback is kept **only for folders that hold no manifest** —
+  i.e. filed by the card-reader path, where there is nothing to match on. If a
+  folder has a manifest and it did not match, that is an answer (a different
+  vessel, a different work date), not a gap to paper over with the name.
+- A folder renamed by hand after filing is followed, not duplicated: the job
+  lives there now, so the arrival merges into it and says so in the warnings.
+- The date rule itself is untouched. It still assigns the day for every job
+  that is not already filed, and `work_date` never steers it.
+
+### Verification
+`tests/test_core.py` **56/56 PASS** (52 + 4): a job whose own folder was moved
+by the day rule is still found; two different jobs on one day keep separate
+folders; a folder renamed after filing is followed; two vessels sharing a job
+name do not merge.
+
+### Version
+Still **v1.046** — it was committed but never built or released, so this is the
+same unreleased version rather than a phantom v1.047.

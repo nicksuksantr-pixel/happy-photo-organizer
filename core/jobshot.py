@@ -38,6 +38,7 @@ from pathlib import Path
 from typing import Callable
 
 from .catalog import JobCatalog
+from .catalog import _normalize as _normalize_name
 from .exif_reader import format_folder_date
 from .processor import (
     PENDING_MARKER,
@@ -46,6 +47,7 @@ from .processor import (
     assign_unique_dates,
     detect_target_month,
     phase4_rename_folders,
+    sanitize_filename,
     scan_used_days,
 )
 from .resizer import resize_to_target
@@ -176,6 +178,90 @@ def remember_dest_root(ship: str, dest_root: Path) -> bool:
     return auth.update_config({"dest_roots": roots})
 
 
+# ─── one real job = one folder ───
+
+# A filed folder is "DD-MM-YY <job name>".
+_FILED_FOLDER_RE = re.compile(r"^(\d{2})-(\d{2})-(\d{2})\s+(.+)$")
+
+
+def _folder_identity(folder_name: str) -> tuple[datetime | None, str]:
+    """Split a filed folder's name back into (date, job name)."""
+    m = _FILED_FOLDER_RE.match(folder_name)
+    if not m:
+        return None, ""
+    dd, mm, yy, job = m.groups()
+    try:
+        return datetime(2000 + int(yy), int(mm), int(dd)), job.strip()
+    except ValueError:
+        return None, ""
+
+
+def _manifests_in(folder: Path) -> list[dict]:
+    """Every JobShot manifest a folder holds — `job.json`, plus the
+    `job-<id>.json` copies written when more than one job landed there."""
+    found: list[dict] = []
+    try:
+        entries = list(folder.iterdir())
+    except OSError:
+        return found
+    for f in entries:
+        if f.suffix.lower() != ".json":
+            continue
+        if f.name != MANIFEST_NAME and not f.name.startswith("job-"):
+            continue
+        try:
+            data = json.loads(f.read_text(encoding="utf-8-sig"))
+        except (OSError, json.JSONDecodeError, ValueError):
+            continue
+        if isinstance(data, dict) and data.get("jobshot"):
+            found.append(data)
+    return found
+
+
+def find_filed_job(dest_root: Path, ship: str, job_name: str,
+                   work_date: datetime) -> Path | None:
+    """The folder this job already lives in, if it has been filed before.
+
+    Nick 2026-09-22: one real job = one folder, even when the archive's day
+    rule filed the first arrival on a day that is not its `work_date`. Two
+    engineers photographing the same job would otherwise produce two folders on
+    two different dates and spend two day numbers on a single job — the day
+    rule and merge-on-name-collision are in tension, and matching on the job's
+    own identity is what resolves it.
+
+    Identity = ship + job_name + work_date, read back out of the manifests HPO
+    leaves in the folders. That is the second reason `job.json` is carried into
+    the final folder: it is what lets a job arriving days later find its own
+    folder, whatever day the rule gave it.
+    """
+    want_job = _normalize_name(job_name)
+    want_ship = _normalize_name(ship or "")
+    want_day = work_date.date()
+    if not want_job:
+        return None
+    try:
+        folders = sorted(f for f in dest_root.iterdir() if f.is_dir())
+    except OSError:
+        return None
+
+    for folder in folders:
+        if PENDING_MARKER in folder.name:
+            continue
+        for data in _manifests_in(folder):
+            if _normalize_name(str(data.get("job_name", ""))) != want_job:
+                continue
+            # A missing ship on either side must not block the match — it is
+            # metadata, not identity. Only a genuine disagreement does.
+            filed_ship = _normalize_name(str(data.get("ship", "")))
+            if want_ship and filed_ship and filed_ship != want_ship:
+                continue
+            filed_date = _parse_date(data.get("work_date"))
+            if filed_date is None or filed_date.date() != want_day:
+                continue
+            return folder
+    return None
+
+
 # ─── the headless import (steps 1 + 2) ───
 
 
@@ -286,26 +372,41 @@ def import_job(
     plan = Plan(assignments=[assignment], dest_root=dest_root,
                 total_images=len(entries), total_resized=len(resized))
 
-    # The archive rule — unchanged, and it wins (Nick 2026-09-22).
-    #
-    # One exception, and it is the rule's own logic rather than a hole in it:
-    # if a folder for THIS job on THIS day already exists, this job belongs in
-    # it. Running the assigner instead would move the second arrival to the
-    # earliest free day — two folders, two different dates, one real job, and a
-    # day number spent on the duplicate. Merging keeps exactly one folder and
-    # one day, which is what "one day = one folder" asks for. This is also the
-    # two-engineers-on-one-job case, and the merge is reported, never silent.
-    same_job_today = dest_root / assignment.folder_name
-    if same_job_today.is_dir():
+    # Does this job already have a folder? If it does, this arrival belongs in
+    # it — whatever day the rule gave that folder (Nick 2026-09-22).
+    existing = find_filed_job(dest_root, result.ship, result.job_name, work_date)
+    if existing is None:
+        # No manifest matched. A folder filed by the card-reader path has none
+        # to match, so fall back to its name: same job, same day, same folder.
+        # Only when it really has no manifest — if it has one and it did not
+        # match, that is an answer (a different vessel, a different work date),
+        # not a gap to paper over with the name.
+        by_name = dest_root / assignment.folder_name
+        if by_name.is_dir() and not _manifests_in(by_name):
+            existing = by_name
+
+    filed_date, filed_job = _folder_identity(existing.name) if existing else (None, "")
+    if existing is not None and filed_date is not None:
+        assignment.folder_date = filed_date
+        if filed_job and filed_job != sanitize_filename(result.job_name):
+            # the folder was renamed by hand after it was filed — the job lives
+            # there now, so follow it rather than starting a second folder
+            result.warnings.append(
+                f"merged into '{existing.name}', which was renamed after filing")
+            assignment.job_name = filed_job
         result.merged_into_existing = True
-        result.folder_date = work_date
-        final_folder = same_job_today
     else:
+        # The archive rule — unchanged, and it wins. It may file the job on a
+        # day that is not its work_date; that is the rule working, not a
+        # conflict, so work_date is left alone and the `filed` block records
+        # where the job actually landed.
         target_ym = detect_target_month(dest_root) or (work_date.year, work_date.month)
         assign_unique_dates(plan, scan_used_days(dest_root), target_year_month=target_ym)
-        result.folder_date = assignment.folder_date
-        result.date_shifted = assignment.folder_date.date() != work_date.date()
-        final_folder = dest_root / assignment.folder_name
+
+    final_folder = dest_root / assignment.folder_name
+    result.folder_date = assignment.folder_date
+    result.date_shifted = assignment.folder_date.date() != work_date.date()
+    if not result.merged_into_existing:
         result.merged_into_existing = final_folder.exists()
 
     commit = phase4_rename_folders(plan, catalog=catalog)
