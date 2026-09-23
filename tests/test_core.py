@@ -1587,6 +1587,57 @@ def _receipt(rx, job_id: str):
     return rx.get(recv.JOB_PATH_PREFIX + job_id)
 
 
+def test_receiver_falls_back_to_a_free_port_and_the_qr_follows():
+    """A QR carrying the port we wanted rather than the one we got would pair
+    the phone to nothing, and the failure would look like a network fault."""
+    import socket as _s
+
+    from core import auth, jobshot_receive as recv
+    from core import jobshot_server as srv
+
+    store = {}
+    real_load, real_update = auth.load_config, auth.update_config
+    blocker = _s.socket()
+    try:
+        auth.load_config = lambda: dict(store)
+
+        def _update(updates):
+            store.update(updates)
+            return True
+
+        auth.update_config = _update
+
+        blocker.bind(("127.0.0.1", 0))
+        blocker.listen(1)
+        taken = blocker.getsockname()[1]
+
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            receiver = srv.JobShotReceiver(
+                dest_root=lambda: tmp / "dest", ship=lambda: "ENA CRYSTAL",
+                quarantine_root=tmp / "q", port=taken, host="127.0.0.1")
+            ok, err = receiver.start()
+            try:
+                assert ok, err
+                assert receiver.port != taken, "bound the port that was in use"
+                assert receiver.port > 0
+                payload = recv.qr_payload("ENA CRYSTAL", port=receiver.port,
+                                          host="127.0.0.1")
+                assert payload["port"] == receiver.port
+                # and the port it reports is really the one it is serving on
+                import urllib.request
+                req = urllib.request.Request(
+                    f"http://127.0.0.1:{receiver.port}{recv.PING_PATH}")
+                req.add_header(recv.TOKEN_HEADER, recv.get_token(create=True))
+                with urllib.request.urlopen(req, timeout=10) as r:
+                    assert r.status == 200
+            finally:
+                receiver.stop()
+    finally:
+        blocker.close()
+        auth.load_config, auth.update_config = real_load, real_update
+
+
 def test_receipt_answers_for_a_job_that_was_filed():
     if not _have_pillow():
         return

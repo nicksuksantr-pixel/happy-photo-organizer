@@ -28,6 +28,8 @@ sys.path.insert(0, str(ROOT))
 # ─── core ──────────────────────────────────────────────────────
 from core import auth
 from core import jobshot
+from core import jobshot_receive
+from core import jobshot_server
 from core.catalog import JobCatalog
 from core.image_io import (
     collect_images, format_summary, is_supported_image, SUPPORTED_EXTS,
@@ -52,6 +54,7 @@ from core.version import APP_TITLE, APP_VERSION
 
 # ─── ui ────────────────────────────────────────────────────────
 from ui.dialogs.ai_health import AIHealthDialog
+from ui.dialogs.pairing import PairingDialog, current_ship
 from ui.dialogs.settings import SettingsDialog
 from ui.job_row import JobRow
 from ui.paste_helper import enable_paste
@@ -161,6 +164,7 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         # 2026-06-04 to stop implying protection that didn't exist.)
         self.cancel_event = threading.Event()
         self.worker: threading.Thread | None = None
+        self.receiver: jobshot_server.JobShotReceiver | None = None
 
         # Apply tier from config → rate limiter
         cfg = auth.load_config()
@@ -268,6 +272,15 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
             text_color=COLOR_TEXT,
             command=self._open_settings,
         ).pack(side="top")
+        # The only visible part of the LAN feature: scan once, then the phone
+        # sends straight into whatever folder is chosen here.
+        self.pair_btn = ctk.CTkButton(
+            btn_frame, text="Phone", width=100, height=30,
+            fg_color=COLOR_BG_INPUT, hover_color="#475569",
+            text_color=COLOR_TEXT,
+            command=self._open_pairing,
+        )
+        self.pair_btn.pack(side="top", pady=(4, 0))
 
         # Tier badge initial + start 2s poll loop (track id for cleanup)
         self._update_tier_badge()
@@ -579,6 +592,10 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
     def _check_auth_on_start(self):
         if not auth.get_api_key():
             self.after(300, self._open_settings)
+        # Paired already? Then start listening without being asked — Nick's
+        # flow is "open HPO, scan, send", and after the first scan the scan is
+        # not part of it any more.
+        self.after(600, self._start_receiver_if_paired)
 
     # ─── UpdateWorker host contract ──────────────
 
@@ -783,6 +800,9 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         """Override to cancel pending after() callbacks + stop tray cleanly."""
         # Mark destroyed so any late <Unmap> / debounced after() callbacks bail
         self._destroyed = True
+        # HPO closed = not receiving. The phone queues the job and sends it the
+        # next time the app is open, which is the behaviour it already has.
+        self._stop_receiver()
         # Round-6 BUG-M8 (Cos review 2026-05-24): explicitly cancel the
         # deferred-withdraw after-id. Already guarded by _destroyed check
         # in _safe_withdraw, but cancelling avoids a wasted Tk dispatch.
@@ -986,6 +1006,68 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
             self._log(f"Added {added} item(s) via drag-drop", "ok")
             self._refresh_sources()
             self._refresh_step_states()
+
+    # ─── the phone over Wi-Fi: pairing + the receiver ───
+
+    def _get_receiver(self) -> jobshot_server.JobShotReceiver:
+        """Built once, lazily. dest_root and ship are passed as callables so
+        changing either in the app takes effect on the next upload without
+        restarting the socket."""
+        if self.receiver is None:
+            self.receiver = jobshot_server.JobShotReceiver(
+                dest_root=lambda: self.dest_root,
+                ship=current_ship,
+                quarantine_root=auth.CONFIG_DIR / "incoming",
+                catalog=self.catalog,
+                on_result=self._on_wifi_job,
+                on_log=lambda msg: self.after(
+                    0, lambda m=msg: self._log(f"[phone] {m}", "info")),
+            )
+        return self.receiver
+
+    def _open_pairing(self):
+        PairingDialog(self, receiver=self._get_receiver(),
+                      on_ship_change=lambda _s: self._refresh_step_states())
+
+    def _start_receiver_if_paired(self):
+        """Nick's flow is "open HPO, scan, send", so on every later start the
+        receiver comes up on its own. Not before the first pairing though: a PC
+        that has never shown a QR has no token, so it could accept nothing
+        anyway, and opening a port it cannot use is pure exposure."""
+        if not jobshot_receive.get_token():
+            return
+        ok, err = self._get_receiver().start()
+        if ok:
+            self._log(f"Phone receiver listening on {self.receiver.address}", "ok")
+        else:
+            self._log(f"Phone receiver could not start: {err}", "warn")
+
+    def _stop_receiver(self):
+        if self.receiver is not None:
+            try:
+                self.receiver.stop()
+            except Exception:
+                pass
+
+    def _on_wifi_job(self, result):
+        """Called from a request thread — hand it to Tk before touching the UI."""
+        self.after(0, lambda: self._report_wifi_job(result))
+
+    def _report_wifi_job(self, result):
+        for job in result.filed:
+            where = "merged into" if job.get("merged") else "filed as"
+            self._log(f"From the phone: {where} {job.get('folder')} "
+                      f"({job.get('photos')} photo(s))", "ok")
+            if job.get("date_shifted"):
+                self._log("   the day rule filed it on a different date", "info")
+        for job in result.skipped:
+            self._log(f"From the phone: skipped {job.get('folder', job.get('job_name', ''))}"
+                      f" — {job.get('reason', '')}", "warn")
+        if not result.ok and result.error:
+            self._log(f"From the phone: {result.error}", "err")
+        for w in result.warnings:
+            self._log(f"   {w}", "warn")
+        self._refresh_step_states()
 
     # ─── jobs photographed on the phone (JobShot) ───
 

@@ -245,9 +245,23 @@ class JobShotReceiver:
         host = self.host or receive.local_ip()
         try:
             self.quarantine_root.mkdir(parents=True, exist_ok=True)
-            server = ThreadingHTTPServer((host, self.port), _Handler)
         except OSError as e:
-            return False, f"cannot listen on {host}:{self.port} — {str(e)[:100]}"
+            return False, f"cannot prepare the quarantine folder — {str(e)[:100]}"
+
+        try:
+            server = ThreadingHTTPServer((host, self.port), _Handler)
+        except OSError:
+            # The usual cause is a second copy of HPO, or something else that
+            # wanted 8765. Falling back to a port the OS picks keeps the feature
+            # working — and because the QR is built from `self.port` AFTER this,
+            # the phone is told the port we actually got. A QR carrying the
+            # number we wanted would pair a phone to nothing, and the failure
+            # would look like a network fault.
+            try:
+                server = ThreadingHTTPServer((host, 0), _Handler)
+            except OSError as e:
+                return False, f"cannot listen on {host} — {str(e)[:100]}"
+        self.port = server.server_address[1]
         server.daemon_threads = True
         server.receiver = self                  # type: ignore[attr-defined]
         self._server = server
@@ -258,6 +272,13 @@ class JobShotReceiver:
         self._thread.start()
         self._log(f"listening on http://{host}:{self.port}")
         return True, ""
+
+    def ensure_started(self) -> tuple[bool, str]:
+        """Start if it is not already listening. The pairing dialog calls this:
+        a QR is only worth showing if there is something behind it."""
+        if self.running:
+            return True, ""
+        return self.start()
 
     def stop(self) -> None:
         server, self._server = self._server, None
