@@ -612,6 +612,16 @@ def _file_group(
         r.photos_filed = len(r.photo_renames)
         _write_manifest(arrival)
         r.ok = True
+        # The receipt, written for every route — LAN, drop zone or script. A
+        # phone that missed the reply asks for this later instead of re-sending
+        # twenty megabytes over a vessel link (JobShot protocol §4).
+        try:
+            from . import jobshot_index
+            jobshot_index.record(r.job_id, final_folder, r.photos_filed)
+        except Exception:
+            # A receipt that could not be written must never cost the filing
+            # that already happened; the archive can still answer by scan.
+            pass
 
 
 def _write_manifest(arrival: _Arrival) -> None:

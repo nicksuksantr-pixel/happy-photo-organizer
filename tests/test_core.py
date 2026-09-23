@@ -29,6 +29,13 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from core import analyzer, auth, catalog, grouper, processor, rate_limiter
+from core import jobshot_index as _jobshot_index
+
+# Never the real one: filing a job writes a receipt, and a test run must not
+# leave receipts in Nick's config directory (the job-catalog lesson, v1.047).
+_jobshot_index.INDEX_PATH = (
+    Path(tempfile.gettempdir()) / "hpo_test_jobshot_filed.json")
+
 from core.version import read_version
 
 
@@ -1566,6 +1573,185 @@ def test_receiver_server_survives_a_hostile_upload():
             assert status == 200 and reply["ok"] is True, reply
         finally:
             rx.close()
+
+
+# --- the receipt book: "did you already file this?" (protocol §4) -----------
+#
+# The reply to an upload is what makes a job safe to delete from the phone, so
+# a lost reply is the single point of failure in the whole design. These are
+# the tests for the answer that outlives the request.
+
+
+def _receipt(rx, job_id: str):
+    from core import jobshot_receive as recv
+    return rx.get(recv.JOB_PATH_PREFIX + job_id)
+
+
+def test_receipt_answers_for_a_job_that_was_filed():
+    if not _have_pillow():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        rx = _Receiver(tmp)
+        try:
+            status, reply = rx.post(_job_zip(tmp))
+            assert status == 200, reply
+            job_id = reply["filed"][0]["job_id"]
+
+            status, receipt = _receipt(rx, job_id)
+            assert status == 200, receipt
+            assert receipt["filed"] is True
+            assert receipt["folder"] == "23-09-26 DG3 Turbo Inspection"
+            assert receipt["photos"] == 2
+            assert receipt["filed_at"]
+        finally:
+            rx.close()
+
+
+def test_receipt_says_no_for_a_job_this_pc_has_never_seen():
+    """404 means "not filed here", so the phone keeps its copy — the safe
+    direction to be wrong in."""
+    if not _have_pillow():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        rx = _Receiver(Path(td))
+        try:
+            status, receipt = _receipt(rx, "20260923-999999-nothere")
+            assert status == 404, receipt
+            assert receipt["filed"] is False
+        finally:
+            rx.close()
+
+
+def test_receipt_counts_a_merged_job_as_filed():
+    """A second phone's copy of one job did not create the folder, but its
+    photos are on disk. Answering 404 would make it re-send work already safe."""
+    if not _have_pillow():
+        return
+    from core import jobshot_index
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        rx = _Receiver(tmp)
+        try:
+            rx.post(_job_zip(tmp))
+            second = _job_zip(tmp, photos=1)
+            # same job name and work_date, a different sender
+            import io
+            import zipfile
+            rebuilt = io.BytesIO()
+            with zipfile.ZipFile(io.BytesIO(second)) as src, \
+                    zipfile.ZipFile(rebuilt, "w") as dst:
+                for info in src.infolist():
+                    data = src.read(info.filename)
+                    if info.filename.endswith("job.json"):
+                        m = json.loads(data.decode("utf-8"))
+                        m["job_id"] = "20260923-141500-second"
+                        data = json.dumps(m).encode("utf-8")
+                    dst.writestr(info.filename, data)
+            status, reply = rx.post(rebuilt.getvalue())
+            assert status == 200, reply
+            assert reply["filed"][0]["merged"] is True, reply
+
+            status, receipt = _receipt(rx, "20260923-141500-second")
+            assert status == 200, receipt
+            assert receipt["filed"] is True
+            assert receipt["folder"] == "23-09-26 DG3 Turbo Inspection"
+        finally:
+            rx.close()
+            jobshot_index.forget_all()
+
+
+def test_receipt_survives_losing_the_index_because_the_archive_is_the_truth():
+    """The index is a cache. Manifests travel with the folders, so a lost or
+    corrupt receipt book still answers — which also covers a reinstall."""
+    if not _have_pillow():
+        return
+    from core import jobshot_index
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        rx = _Receiver(tmp)
+        try:
+            status, reply = rx.post(_job_zip(tmp))
+            job_id = reply["filed"][0]["job_id"]
+
+            jobshot_index.INDEX_PATH.write_text("{ not json", encoding="utf-8")
+            status, receipt = _receipt(rx, job_id)
+            assert status == 200, receipt
+            assert receipt["folder"] == "23-09-26 DG3 Turbo Inspection"
+
+            jobshot_index.INDEX_PATH.unlink()
+            status, receipt = _receipt(rx, job_id)
+            assert status == 200, receipt
+            assert receipt["photos"] == 2, receipt
+        finally:
+            rx.close()
+            jobshot_index.forget_all()
+
+
+def test_receipt_follows_a_folder_nick_renamed_and_forgets_one_he_deleted():
+    if not _have_pillow():
+        return
+    from core import jobshot_index
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        rx = _Receiver(tmp)
+        try:
+            status, reply = rx.post(_job_zip(tmp))
+            job_id = reply["filed"][0]["job_id"]
+            folder = rx.dest / reply["filed"][0]["folder"]
+
+            renamed = rx.dest / "23-09-26 DG3 Turbo Inspection and gasket"
+            folder.rename(renamed)
+            status, receipt = _receipt(rx, job_id)
+            assert status == 200, receipt
+            assert receipt["folder"] == renamed.name, receipt
+
+            shutil.rmtree(renamed)
+            status, receipt = _receipt(rx, job_id)
+            assert status == 404, receipt      # gone means gone: keep your copy
+            assert receipt["filed"] is False
+        finally:
+            rx.close()
+            jobshot_index.forget_all()
+
+
+def test_receipt_needs_the_token_and_refuses_a_hostile_job_id():
+    if not _have_pillow():
+        return
+    from core import jobshot_receive as recv
+    with tempfile.TemporaryDirectory() as td:
+        rx = _Receiver(Path(td))
+        try:
+            status, _r = rx.get(recv.JOB_PATH_PREFIX + "anything", token=False)
+            assert status == 401
+
+            for job_id in ("../../../auth.json", "..%2F..%2Fauth.json",
+                           "a" * 400, "", "x/y"):
+                status, receipt = rx.get(recv.JOB_PATH_PREFIX + job_id)
+                assert status == 404, (job_id, status)
+                assert receipt.get("filed") is False, (job_id, receipt)
+        finally:
+            rx.close()
+
+
+def test_receipt_is_written_by_the_manual_routes_too():
+    """A job imported by cable this morning must answer just as well as one
+    that arrived over Wi-Fi — the phone cannot tell how it got there."""
+    if not _have_pillow():
+        return
+    from core import jobshot, jobshot_index
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        try:
+            res = jobshot.import_job(_arrival(tmp, job_id="cable-import-1"),
+                                     tmp / "dest")
+            assert res.ok, res.error
+            entry = jobshot_index.lookup("cable-import-1", tmp / "dest")
+            assert entry is not None, "the drop-zone route wrote no receipt"
+            assert entry["folder"] == res.final_folder.name
+            assert entry["photos"] == 2
+        finally:
+            jobshot_index.forget_all()
 
 
 # â”€â”€â”€ runner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

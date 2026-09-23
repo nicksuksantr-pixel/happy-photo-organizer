@@ -59,6 +59,9 @@ UPLOAD_PATH = "/jobshot/v1/upload"
 PING_PATH = "/jobshot/v1/ping"
 HELLO_PATH = "/jobshot/v1/hello"
 PING_PATHS = (PING_PATH, HELLO_PATH)
+# GET /jobshot/v1/job/<job_id> — "did you already file this?", so a lost reply
+# costs a question instead of a re-upload, and a resend can be skipped entirely.
+JOB_PATH_PREFIX = "/jobshot/v1/job/"
 TOKEN_HEADER = "X-JobShot-Token"
 DEFAULT_PORT = 8765
 

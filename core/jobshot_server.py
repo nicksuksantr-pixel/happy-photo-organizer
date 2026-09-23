@@ -28,6 +28,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Callable
 
+from . import jobshot_index as index
 from . import jobshot_receive as receive
 from .catalog import JobCatalog
 from .version import read_version
@@ -104,6 +105,9 @@ class _Handler(BaseHTTPRequestHandler):
         })
 
     def do_GET(self):                          # noqa: N802
+        if self.path.startswith(receive.JOB_PATH_PREFIX):
+            self._job_receipt()
+            return
         if self.path not in receive.PING_PATHS:
             self._not_found()
             return
@@ -117,6 +121,32 @@ class _Handler(BaseHTTPRequestHandler):
             "version": read_version(),
             "ship": r.ship(),
             "ready": r.dest_root() is not None,
+        })
+
+    def _job_receipt(self):
+        """`GET /jobshot/v1/job/<job_id>` — the answer that makes a lost reply
+        survivable, and lets the phone skip an upload it already completed."""
+        if not self._authorised():
+            self._send(401, {"jobshot": receive.PROTOCOL, "error": "pair first"})
+            return
+        from urllib.parse import unquote
+
+        job_id = unquote(self.path[len(receive.JOB_PATH_PREFIX):]).strip("/")
+        r = self.server.receiver                # type: ignore[attr-defined]
+        entry = index.lookup(job_id, r.dest_root())
+        if entry is None:
+            # 404 means "not filed here" — the phone keeps its copy, which is
+            # the safe direction to be wrong in.
+            self._send(404, {"jobshot": receive.PROTOCOL, "filed": False,
+                             "job_id": job_id})
+            return
+        self._send(200, {
+            "jobshot": receive.PROTOCOL,
+            "filed": True,
+            "job_id": job_id,
+            "folder": entry.get("folder", ""),
+            "photos": entry.get("photos", 0),
+            "filed_at": entry.get("filed_at", ""),
         })
 
     def do_POST(self):                         # noqa: N802
