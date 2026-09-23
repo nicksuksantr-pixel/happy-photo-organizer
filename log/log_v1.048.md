@@ -119,3 +119,68 @@ the updater.
 mDNS discovery. The QR is the path that has to work: the Director's own Tuya
 evidence (a UDP announce found 1 of 3 devices where a TCP sweep found 3 of 3)
 is reason enough not to depend on broadcast on a vessel's managed switches.
+
+## Entry 2 — the reply shape was mine to agree, not to announce (v1.049)
+
+The Director ran my receiver against a JobShot-shaped zip and found that my
+upload reply does not match `docs/LAN_PROTOCOL.md` §3 — the document both halves
+are built from, in the JobShot repo:
+
+    document:  {"filed": true, "jobs": [ … ]}        filed = boolean, list = jobs
+    mine:      {"ok": true, "filed": [ … ], …}       filed = LIST, no `jobs`
+
+JobShot implemented the document, so its reader evaluated `body['filed'] != true`
+against a List, threw, and reported **a completely successful upload as a
+refusal** — the folder correctly on disk, the receipt sitting unread in the
+reply, and the phone telling Nick the PC had refused the job. He would re-send,
+it would merge harmlessly, and "safe to delete from the phone" would never
+unlock.
+
+The ruling went my way on substance — `ok` with parallel `filed`/`skipped`/
+`warnings` says *partially* more cleanly than a boolean plus a `failed` array,
+so the document was amended to describe what HPO sends — and against me on
+process, correctly:
+
+**I took the paths from that document and then announced a reply shape of my
+own from the same page.** The document is the contract, not a description of
+one. A deviation nobody writes down is a defect even when the code is better,
+and this one was invisible to reading because both sides use the word `filed`
+and only the *type* differs.
+
+### What I did about it, beyond agreeing
+Read the whole document instead of the part I had been quoted, and found two
+more divergences the Director had not reached:
+
+- **`app` was a display name.** §2 specifies `"app": "happy-photo-organizer"`;
+  I was sending `"Happy Photo Organizer"`. If the phone compares that string,
+  pairing fails for a reason no one would look for. Now matches.
+- **`ready: false` carried no reason.** §2 says the phone shows the reason and
+  does not send. Now it says "no destination folder chosen on the PC yet", so
+  Nick learns what to fix before waiting on an upload rather than after.
+
+And one thing the document offered that I was ignoring: the sender declares
+`X-JobShot-Jobs`. §3's rule is that *a job in neither list is unconfirmed* —
+which is only detectable if the declared count is checked, so a mismatch is now
+a warning on the reply rather than a job quietly vanishing between two lists.
+
+### The freeze, made mechanical
+Four tests now pin the **shape** of what goes on the wire: the exact key set and
+types of the upload reply, of `ping`, and of the receipt — including the detail
+that `filed` is a **list** in §3 and a **bool** in §4. That is not a rule anyone
+will remember; it is the precise trap that already cost one false failure.
+
+If one of those tests fails, the question is never "fix the test". It is "has
+the other half moved yet".
+
+### Version
+**v1.049** — v1.048 was built and handed to Nick for testing, so anything that
+changes after it has to be a new number, or a published v1.048 would never be
+offered to the machine already running one.
+
+### Verification
+`tests/test_core.py` **92/92** (88 + 4). The Director's independent run of the
+live receiver passed twelve checks — wrong token, no token, unknown route, a
+zip-slip attempt that escaped nowhere, a double upload creating no second
+folder, §4 answering correctly, and the bind being narrow enough that
+`127.0.0.1` was refused. The three that failed were his test reading `jobs`,
+which is how this was found at all.

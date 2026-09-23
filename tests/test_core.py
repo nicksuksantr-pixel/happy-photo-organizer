@@ -1486,7 +1486,9 @@ def test_receiver_server_answers_ping_so_the_phone_can_confirm_pairing():
                 assert status == 200, (path, reply)
                 assert reply["jobshot"] == 1
                 assert reply["ship"] == "ENA CRYSTAL"
-                assert reply["app"] == "Happy Photo Organizer"
+                # the identifier from LAN_PROTOCOL §2, not a display name —
+                # the phone may compare this string
+                assert reply["app"] == "happy-photo-organizer"
                 assert reply["ready"] is True
         finally:
             rx.close()
@@ -1803,6 +1805,119 @@ def test_receipt_is_written_by_the_manual_routes_too():
             assert entry["photos"] == 2
         finally:
             jobshot_index.forget_all()
+
+
+# --- the wire contract, pinned ----------------------------------------------
+#
+# These do not test behaviour. They pin the SHAPE of what goes on the wire,
+# because the one defect that reached JobShot was invisible to both sides
+# reading: `filed` is a list here and a bool in the receipt, and a client that
+# read the word without the type reported a perfect upload as a refusal.
+#
+# If one of these fails, the question is not "fix the test" — it is "has the
+# other half of the contract moved yet". LAN_PROTOCOL.md in the JobShot repo is
+# the shared document; this is its enforcement on the HPO side.
+
+
+def test_contract_upload_reply_shape_is_frozen():
+    if not _have_pillow():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        rx = _Receiver(tmp)
+        try:
+            status, reply = rx.post(_job_zip(tmp))
+            assert status == 200, reply
+
+            assert set(reply) == {"jobshot", "ok", "error", "filed",
+                                  "skipped", "warnings"}, sorted(reply)
+            assert isinstance(reply["jobshot"], int)
+            assert isinstance(reply["ok"], bool)      # the outcome
+            assert isinstance(reply["error"], str)
+            assert isinstance(reply["filed"], list)   # NOT a bool — §3
+            assert isinstance(reply["skipped"], list)
+            assert isinstance(reply["warnings"], list)
+
+            job = reply["filed"][0]
+            assert set(job) == {"job_id", "job_name", "folder", "photos",
+                                "merged", "manifest", "date_shifted"}, sorted(job)
+            assert isinstance(job["job_id"], str)
+            assert isinstance(job["folder"], str) and job["folder"]
+            assert isinstance(job["photos"], int)
+            assert isinstance(job["merged"], bool)
+            assert isinstance(job["date_shifted"], bool)
+        finally:
+            rx.close()
+
+
+def test_contract_ping_and_receipt_shapes_are_frozen():
+    if not _have_pillow():
+        return
+    from core import jobshot_receive as recv
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        rx = _Receiver(tmp)
+        try:
+            status, hello = rx.get(recv.PING_PATH)
+            assert status == 200, hello
+            assert set(hello) == {"jobshot", "app", "version", "ship",
+                                  "ready"}, sorted(hello)
+            # an identifier the phone may compare, not a display name (§2)
+            assert hello["app"] == "happy-photo-organizer", hello["app"]
+            assert isinstance(hello["ready"], bool)
+
+            status, reply = rx.post(_job_zip(tmp))
+            job_id = reply["filed"][0]["job_id"]
+            status, receipt = rx.get(recv.JOB_PATH_PREFIX + job_id)
+            assert status == 200, receipt
+            # here `filed` is a BOOL — the same word, the other type, which is
+            # exactly the trap that bit the client once already
+            assert isinstance(receipt["filed"], bool) and receipt["filed"] is True
+            assert isinstance(receipt["folder"], str) and receipt["folder"]
+            assert isinstance(receipt["photos"], int)
+        finally:
+            rx.close()
+
+
+def test_contract_not_ready_says_why():
+    """§2: `ready: false` carries a reason, so the phone can tell Nick what to
+    fix instead of just refusing to send."""
+    if not _have_pillow():
+        return
+    from core import jobshot_receive as recv
+    with tempfile.TemporaryDirectory() as td:
+        rx = _Receiver(Path(td), dest=False)
+        try:
+            status, hello = rx.get(recv.PING_PATH)
+            assert status == 200, hello
+            assert hello["ready"] is False
+            assert "destination" in hello.get("reason", ""), hello
+        finally:
+            rx.close()
+
+
+def test_contract_counts_the_jobs_the_sender_claimed():
+    """§3: a job that appears in neither list is unconfirmed — which is only
+    detectable if the count the sender declared is checked."""
+    if not _have_pillow():
+        return
+    import urllib.request
+    from core import jobshot_receive as recv
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        rx = _Receiver(tmp)
+        try:
+            body = _job_zip(tmp)
+            req = urllib.request.Request(rx.base + recv.UPLOAD_PATH,
+                                         data=body, method="POST")
+            req.add_header(recv.TOKEN_HEADER, rx.token)
+            req.add_header("X-JobShot-Jobs", "3")      # zip really holds 1
+            with urllib.request.urlopen(req, timeout=60) as r:
+                reply = json.loads(r.read().decode("utf-8"))
+            assert reply["ok"] is True
+            assert any("3 job(s)" in w for w in reply["warnings"]), reply["warnings"]
+        finally:
+            rx.close()
 
 
 # â”€â”€â”€ runner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

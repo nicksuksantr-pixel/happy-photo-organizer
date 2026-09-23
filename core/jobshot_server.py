@@ -115,13 +115,23 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(401, {"jobshot": receive.PROTOCOL, "error": "pair first"})
             return
         r = self.server.receiver                # type: ignore[attr-defined]
-        self._send(200, {
+        ready = r.dest_root() is not None
+        body = {
             "jobshot": receive.PROTOCOL,
-            "app": "Happy Photo Organizer",
+            # The identifier from LAN_PROTOCOL §2, not a display name: the
+            # phone may compare it. A prose title here would be a difference
+            # nobody notices until pairing quietly refuses.
+            "app": "happy-photo-organizer",
             "version": read_version(),
             "ship": r.ship(),
-            "ready": r.dest_root() is not None,
-        })
+            "ready": ready,
+        }
+        if not ready:
+            # §2: the phone shows the reason and does not send. Saying it here
+            # means Nick learns "choose a destination folder" before he waits
+            # for an upload, rather than after.
+            body["reason"] = "no destination folder chosen on the PC yet"
+        self._send(200, body)
 
     def _job_receipt(self):
         """`GET /jobshot/v1/job/<job_id>` — the answer that makes a lost reply
@@ -199,6 +209,19 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(500, {"jobshot": receive.PROTOCOL,
                              "error": "the PC could not process the upload"})
             return
+
+        # §3 sends X-JobShot-Jobs. Silence is not success: if the zip claimed
+        # more jobs than we accounted for, say so rather than let one vanish
+        # between the two lists.
+        try:
+            claimed = int(self.headers.get("X-JobShot-Jobs", "0"))
+        except ValueError:
+            claimed = 0
+        accounted = len(result.filed) + len(result.skipped)
+        if claimed and accounted < claimed:
+            result.warnings.append(
+                f"the upload said it held {claimed} job(s) and {accounted} "
+                f"were accounted for")
 
         r._notify(result)
         self._send(200 if result.ok else 422, result.to_reply())
