@@ -1111,6 +1111,439 @@ def test_jobshot_an_unfinished_transfer_is_never_touched():
         assert sorted(p.name for p in arriving.iterdir()) == before
 
 
+# --- the LAN receiver: hostile zips (item 6) --------------------------------
+#
+# A socket that writes files to disk, on a shared vessel Wi-Fi. Every test here
+# is a zip nobody should be able to send twice.
+
+
+def _zip_bytes(entries: list[tuple[str, bytes]]) -> bytes:
+    import io
+    import zipfile
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for name, payload in entries:
+            zf.writestr(name, payload)
+    return buf.getvalue()
+
+
+def _job_zip(tmp: Path, *, photos: int = 2, job="DG3 Turbo Inspection",
+             ship="ENA CRYSTAL", nested: bool = True, manifest: bool = True,
+             extra: list[tuple[str, bytes]] | None = None) -> bytes:
+    """What the phone sends: the job folder, zipped."""
+    staging = tmp / f"staging-{job}-{nested}"
+    staging.mkdir(parents=True, exist_ok=True)
+    entries = []
+    names = []
+    for n in range(1, photos + 1):
+        name = f"{n:04d}.jpg"
+        _noisy_jpeg(staging / name, size=(800, 600))
+        prefix = "20260923-094312-ab12cd/" if nested else ""
+        entries.append((prefix + name, (staging / name).read_bytes()))
+        names.append(name)
+    if manifest:
+        payload = json.dumps({
+            "jobshot": 1, "job_id": "20260923-094312-ab12cd", "job_name": job,
+            "ship": ship, "author": "Nick",
+            "created_at": "2026-09-23T09:43:12+07:00", "work_date": "2026-09-23",
+            "photos": names,
+        }).encode("utf-8")
+        entries.append((("20260923-094312-ab12cd/" if nested else "") + "job.json",
+                        payload))
+    if extra:
+        entries.extend(extra)
+    return _zip_bytes(entries)
+
+
+def test_receiver_refuses_zip_slip():
+    """The highest-severity item in the whole feature: an entry named
+    `..\\..\\Windows\\...` must never be written. Names inside an archive that
+    arrived over a network are attacker-controlled strings, not paths."""
+    from core import jobshot_receive as recv
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        outside = tmp / "OUTSIDE.jpg"
+        outside_txt = tmp / "OUTSIDE.txt"
+        quarantine = tmp / "q"
+        payload = b"pwned"
+        # .jpg on purpose for half of these: a name the file-type rule would
+        # otherwise welcome, so the path check is what has to catch it
+        for name in ("../../OUTSIDE.jpg", r"..\..\OUTSIDE.jpg",
+                     "a/../../OUTSIDE.jpg", "/OUTSIDE.jpg", "C:/OUTSIDE.jpg",
+                     "../../OUTSIDE.txt", r"C:\Windows\System32\OUTSIDE.txt"):
+            ok, err, warnings = recv.safe_extract(
+                _zip_bytes([(name, payload)]), quarantine)
+            assert ok is False, f"{name} was accepted"
+            assert not outside.exists(), f"{name} escaped quarantine"
+            assert not outside_txt.exists(), f"{name} escaped quarantine"
+            assert any("refused entry" in w for w in warnings), (name, warnings)
+        # nothing at all was left lying around outside the quarantine folder
+        assert sorted(p.name for p in tmp.iterdir()) == ["q"]
+
+
+def test_receiver_refuses_what_a_job_is_not_made_of():
+    """A job is photos and a JSON manifest. Anything else does not belong in
+    the archive, whatever it claims to be."""
+    from core import jobshot_receive as recv
+    with tempfile.TemporaryDirectory() as td:
+        quarantine = Path(td) / "q"
+        for name in ("evil.exe", "setup.bat", "notes.txt", "payload.dll",
+                     "photo.jpg.lnk", "CON.jpg", "deep/a/b/c/0001.jpg",
+                     "0001.jpg:ads"):
+            ok, err, warnings = recv.safe_extract(
+                _zip_bytes([(name, b"x")]), quarantine)
+            assert ok is False, f"{name} was accepted"
+
+
+def test_receiver_refuses_a_zip_bomb_and_a_truncated_upload():
+    from core import jobshot_receive as recv
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        bomb = _zip_bytes([("0001.jpg", b"\0" * (12 * 1024 * 1024))])
+        ok, err, _w = recv.safe_extract(bomb, tmp / "q1")
+        assert ok is False and "zip bomb" in err, err
+
+        good = _job_zip(tmp)
+        ok, err, _w = recv.safe_extract(good[: len(good) // 2], tmp / "q2")
+        assert ok is False and "zip" in err.lower(), err
+
+
+def test_receiver_files_a_job_that_arrived_over_the_wire():
+    """End to end from bytes: unpack, validate, and file through the same
+    import_batch the drop zone uses."""
+    if not _have_pillow():
+        return
+    from core import jobshot_receive as recv
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        dest = tmp / "dest"
+        res = recv.receive_zip(_job_zip(tmp), dest,
+                               quarantine_root=tmp / "quarantine")
+        assert res.ok, f"{res.error} / {res.warnings}"
+        assert len(res.filed) == 1, res.filed
+        filed = res.filed[0]
+        assert filed["folder"] == "23-09-26 DG3 Turbo Inspection", filed
+        assert filed["photos"] == 2 and filed["merged"] is False
+
+        out = dest / filed["folder"]
+        photos = sorted(f.name for f in out.iterdir() if f.suffix == ".jpg")
+        assert photos == ["23-09-26 DG3 Turbo Inspection_001.jpg",
+                          "23-09-26 DG3 Turbo Inspection_002.jpg"], photos
+        assert (out / "job.json").is_file()
+
+        reply = res.to_reply()
+        assert reply["jobshot"] == 1 and reply["ok"] is True
+        assert reply["filed"][0]["folder"] == filed["folder"]
+        # quarantine is scratch space and does not survive
+        assert list((tmp / "quarantine").iterdir()) == []
+
+
+def test_receiver_handles_a_zip_with_the_photos_at_the_top_level():
+    """JobShot may zip the folder's contents rather than the folder."""
+    if not _have_pillow():
+        return
+    from core import jobshot_receive as recv
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        res = recv.receive_zip(_job_zip(tmp, nested=False), tmp / "dest",
+                               quarantine_root=tmp / "q")
+        assert res.ok, f"{res.error} / {res.warnings}"
+        assert res.filed[0]["folder"] == "23-09-26 DG3 Turbo Inspection"
+
+
+def test_receiver_refuses_an_upload_with_no_manifest():
+    """Same rule as the drop zone: no job.json, nothing is filed."""
+    if not _have_pillow():
+        return
+    from core import jobshot_receive as recv
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        dest = tmp / "dest"
+        res = recv.receive_zip(_job_zip(tmp, manifest=False), dest,
+                               quarantine_root=tmp / "q")
+        assert res.ok is False
+        assert "job.json" in res.error, res.error
+        assert not dest.exists() or list(dest.iterdir()) == []
+
+
+def test_receiver_refuses_a_job_from_another_vessel():
+    """The guard that predates the LAN work: the QR says which ship this PC
+    files for, and a job from another one is not filed here."""
+    if not _have_pillow():
+        return
+    from core import jobshot_receive as recv
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        dest = tmp / "dest"
+        res = recv.receive_zip(_job_zip(tmp, ship="ENA BOURBON"), dest,
+                               quarantine_root=tmp / "q",
+                               expected_ship="ENA CRYSTAL")
+        assert res.ok is False, res.filed
+        assert "vessel" in res.error, res.error
+        assert res.skipped and "ship" in res.skipped[0]["reason"]
+        assert not dest.exists() or list(dest.iterdir()) == []
+
+        # the same ship, spelled with different spacing/case, is still this ship
+        res = recv.receive_zip(_job_zip(tmp, ship="ena  crystal"), dest,
+                               quarantine_root=tmp / "q",
+                               expected_ship="ENA CRYSTAL")
+        assert res.ok, f"{res.error} / {res.warnings}"
+
+
+def test_receiver_requires_the_paired_token():
+    """No token on the PC means nothing is accepted — never 'allow when
+    unset', which is how a listening socket becomes everyone's."""
+    from core import auth, jobshot_receive as recv
+    store: dict = {}
+    real_load, real_update = auth.load_config, auth.update_config
+    try:
+        auth.load_config = lambda: dict(store)
+
+        def _update(updates):
+            store.update(updates)
+            return True
+
+        auth.update_config = _update
+
+        assert recv.get_token() == ""            # never paired
+        assert recv.verify_token("") is False
+        assert recv.verify_token("anything") is False
+
+        token = recv.get_token(create=True)
+        assert len(token) >= 32
+        assert recv.get_token(create=True) == token      # stable once minted
+        assert recv.verify_token(token) is True
+        assert recv.verify_token(token[:-1] + "0") is False
+        assert recv.verify_token("") is False
+
+        payload = recv.qr_payload("ENA CRYSTAL", port=8765, host="192.168.1.20")
+        assert payload["jobshot"] == 1 and payload["token"] == token
+        assert payload["ship"] == "ENA CRYSTAL" and payload["port"] == 8765
+        assert payload["host"] == "192.168.1.20"
+    finally:
+        auth.load_config, auth.update_config = real_load, real_update
+
+
+# --- the listening socket ---------------------------------------------------
+#
+# Real requests over a real socket on 127.0.0.1 — a mocked handler would prove
+# nothing about the part that is actually exposed.
+
+
+class _Receiver:
+    """Start a receiver on a free loopback port with a stubbed token store."""
+
+    def __init__(self, tmp: Path, *, ship="ENA CRYSTAL", dest=True):
+        import socket as _s
+        from core import auth, jobshot_receive as recv
+        from core import jobshot_server as srv
+
+        self.tmp = tmp
+        self.dest = tmp / "dest" if dest else None
+        self._store = {}
+        self._auth = auth
+        self._real = (auth.load_config, auth.update_config)
+        auth.load_config = lambda: dict(self._store)
+
+        def _update(updates):
+            self._store.update(updates)
+            return True
+
+        auth.update_config = _update
+        self.token = recv.get_token(create=True)
+
+        probe = _s.socket()
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+        probe.close()
+
+        self.logs: list[str] = []
+        self.results: list = []
+        self.server = srv.JobShotReceiver(
+            dest_root=lambda: self.dest,
+            ship=lambda: ship,
+            quarantine_root=tmp / "quarantine",
+            on_result=self.results.append,
+            on_log=self.logs.append,
+            port=port, host="127.0.0.1",
+        )
+        ok, err = self.server.start()
+        assert ok, err
+        self.base = f"http://127.0.0.1:{port}"
+
+    def close(self):
+        self.server.stop()
+        self._auth.load_config, self._auth.update_config = self._real
+
+    def post(self, body: bytes, *, token=None, path=None):
+        import urllib.error
+        import urllib.request
+        from core import jobshot_receive as recv
+        req = urllib.request.Request(
+            self.base + (path or recv.UPLOAD_PATH), data=body, method="POST")
+        if token is not False:
+            # None = use the paired token; "" = send an empty one on purpose
+            req.add_header(recv.TOKEN_HEADER,
+                           self.token if token is None else token)
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                return r.status, json.loads(r.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            raw = e.read().decode("utf-8")
+            return e.code, (json.loads(raw) if raw else {})
+
+    def get(self, path, *, token=None):
+        import urllib.error
+        import urllib.request
+        from core import jobshot_receive as recv
+        req = urllib.request.Request(self.base + path)
+        if token is not False:
+            req.add_header(recv.TOKEN_HEADER,
+                           self.token if token is None else token)
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                return r.status, json.loads(r.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            raw = e.read().decode("utf-8")
+            return e.code, (json.loads(raw) if raw else {})
+
+
+def test_receiver_server_files_an_upload_and_replies_with_the_folder():
+    """The reply is the feature: until the PC names the folder it filed, the
+    phone cannot know the job is safe to let go."""
+    if not _have_pillow():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        rx = _Receiver(tmp)
+        try:
+            status, reply = rx.post(_job_zip(tmp))
+            assert status == 200, reply
+            assert reply["ok"] is True, reply
+            assert reply["filed"][0]["folder"] == "23-09-26 DG3 Turbo Inspection"
+            assert reply["filed"][0]["photos"] == 2
+            assert (rx.dest / "23-09-26 DG3 Turbo Inspection").is_dir()
+            assert rx.results and rx.results[0].ok      # the UI is told
+        finally:
+            rx.close()
+
+
+def test_receiver_server_refuses_everything_without_the_token():
+    """A listening socket on a shared vessel Wi-Fi. No token, no anything."""
+    if not _have_pillow():
+        return
+    from core import jobshot_receive as recv
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        rx = _Receiver(tmp)
+        try:
+            for token in (False, "", "not-the-token", rx.token[:-1] + "0"):
+                status, _reply = rx.post(_job_zip(tmp), token=token)
+                assert status == 401, (token, status)
+            status, _reply = rx.get(recv.HELLO_PATH, token=False)
+            assert status == 401
+            # nothing was filed by any of those attempts
+            assert not rx.dest.exists() or list(rx.dest.iterdir()) == []
+        finally:
+            rx.close()
+
+
+def test_receiver_server_serves_nothing_but_its_two_routes():
+    if not _have_pillow():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        rx = _Receiver(Path(td))
+        try:
+            for path in ("/", "/index.html", "/../core/auth.py",
+                         "/jobshot/v1/", "/jobshot/v1/upload/x"):
+                status, _r = rx.get(path)
+                assert status == 404, (path, status)
+            status, _r = rx.post(b"x", path="/jobshot/v1/other")
+            assert status == 404
+        finally:
+            rx.close()
+
+
+def test_receiver_server_answers_hello_so_the_phone_can_confirm_pairing():
+    if not _have_pillow():
+        return
+    from core import jobshot_receive as recv
+    with tempfile.TemporaryDirectory() as td:
+        rx = _Receiver(Path(td))
+        try:
+            status, reply = rx.get(recv.HELLO_PATH)
+            assert status == 200, reply
+            assert reply["jobshot"] == 1
+            assert reply["ship"] == "ENA CRYSTAL"
+            assert reply["app"] == "Happy Photo Organizer"
+            assert reply["ready"] is True
+        finally:
+            rx.close()
+
+
+def test_receiver_server_says_so_when_the_pc_has_no_destination_yet():
+    """Better than filing into a guess: the phone keeps the job and Nick is
+    told what to fix."""
+    if not _have_pillow():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        rx = _Receiver(tmp, dest=False)
+        try:
+            status, reply = rx.post(_job_zip(tmp))
+            assert status == 409, (status, reply)
+            assert "destination" in reply["error"], reply
+        finally:
+            rx.close()
+
+
+def test_receiver_server_refuses_an_oversize_upload_on_the_header():
+    """Refused before the body is read — claiming a huge size must not make the
+    PC hold it."""
+    if not _have_pillow():
+        return
+    import urllib.error
+    import urllib.request
+    from core import jobshot_receive as recv
+    with tempfile.TemporaryDirectory() as td:
+        rx = _Receiver(Path(td))
+        try:
+            req = urllib.request.Request(
+                rx.base + recv.UPLOAD_PATH, data=b"x", method="POST")
+            req.add_header(recv.TOKEN_HEADER, rx.token)
+            req.add_header("Content-Length", str(recv.MAX_ZIP_BYTES + 1))
+            try:
+                with urllib.request.urlopen(req, timeout=30) as r:
+                    status = r.status
+            except urllib.error.HTTPError as e:
+                status = e.code
+            assert status == 413, status
+        finally:
+            rx.close()
+
+
+def test_receiver_server_survives_a_hostile_upload():
+    """A zip-slip attempt over the wire is answered, not crashed on, and the
+    server keeps serving afterwards."""
+    if not _have_pillow():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        rx = _Receiver(tmp)
+        try:
+            status, reply = rx.post(_zip_bytes([("../../OUTSIDE.jpg", b"pwned")]))
+            assert status == 422, (status, reply)
+            assert reply["ok"] is False
+            assert not (tmp / "OUTSIDE.jpg").exists()
+            assert not (Path(td).parent / "OUTSIDE.jpg").exists()
+
+            # still alive and still working
+            status, reply = rx.post(_job_zip(tmp))
+            assert status == 200 and reply["ok"] is True, reply
+        finally:
+            rx.close()
+
+
 # â”€â”€â”€ runner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def main() -> int:
