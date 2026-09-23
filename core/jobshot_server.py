@@ -92,9 +92,20 @@ class _Handler(BaseHTTPRequestHandler):
 
     # ─── routes ───
 
+    def _not_found(self):
+        """A 404 that names the routes. The one client that will ever hit this
+        is a phone built against an older path, and "unknown route" alone would
+        send someone hunting through Wi-Fi settings for a spelling mistake."""
+        self._send(404, {
+            "jobshot": receive.PROTOCOL,
+            "error": "unknown route",
+            "upload": receive.UPLOAD_PATH,
+            "ping": receive.PING_PATH,
+        })
+
     def do_GET(self):                          # noqa: N802
-        if self.path != receive.HELLO_PATH:
-            self._send(404)
+        if self.path not in receive.PING_PATHS:
+            self._not_found()
             return
         if not self._authorised():
             self._send(401, {"jobshot": receive.PROTOCOL, "error": "pair first"})
@@ -111,7 +122,7 @@ class _Handler(BaseHTTPRequestHandler):
     def do_POST(self):                         # noqa: N802
         if self.path != receive.UPLOAD_PATH:
             self._drain()
-            self._send(404)
+            self._not_found()
             return
         if not self._authorised():
             self._drain()

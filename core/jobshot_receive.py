@@ -51,7 +51,14 @@ from .image_io import is_supported_image
 
 PROTOCOL = 1
 UPLOAD_PATH = "/jobshot/v1/upload"
+# `ping` is canonical — it is the word JobShot published in its protocol doc,
+# and between two spellings of the same thing the one already written down
+# wins. `hello` is accepted as an alias: the endpoint costs nothing, and a
+# phone built against either word still pairs instead of failing in a way that
+# looks like a network fault.
+PING_PATH = "/jobshot/v1/ping"
 HELLO_PATH = "/jobshot/v1/hello"
+PING_PATHS = (PING_PATH, HELLO_PATH)
 TOKEN_HEADER = "X-JobShot-Token"
 DEFAULT_PORT = 8765
 

@@ -1464,19 +1464,43 @@ def test_receiver_server_serves_nothing_but_its_two_routes():
             rx.close()
 
 
-def test_receiver_server_answers_hello_so_the_phone_can_confirm_pairing():
+def test_receiver_server_answers_ping_so_the_phone_can_confirm_pairing():
+    """Both spellings answer: `ping` is what JobShot published, `hello` is the
+    alias, and a phone built against either must be able to pair rather than
+    fail in a way that looks like a network fault."""
     if not _have_pillow():
         return
     from core import jobshot_receive as recv
     with tempfile.TemporaryDirectory() as td:
         rx = _Receiver(Path(td))
         try:
-            status, reply = rx.get(recv.HELLO_PATH)
-            assert status == 200, reply
-            assert reply["jobshot"] == 1
-            assert reply["ship"] == "ENA CRYSTAL"
-            assert reply["app"] == "Happy Photo Organizer"
-            assert reply["ready"] is True
+            for path in recv.PING_PATHS:
+                status, reply = rx.get(path)
+                assert status == 200, (path, reply)
+                assert reply["jobshot"] == 1
+                assert reply["ship"] == "ENA CRYSTAL"
+                assert reply["app"] == "Happy Photo Organizer"
+                assert reply["ready"] is True
+        finally:
+            rx.close()
+
+
+def test_receiver_server_tells_an_old_client_where_the_routes_moved():
+    """The path mismatch that nearly shipped: JobShot was built against
+    /jobshot/ping and /jobshot/upload, this server serves /jobshot/v1/*. The
+    version prefix is the point — but the refusal should say so."""
+    if not _have_pillow():
+        return
+    from core import jobshot_receive as recv
+    with tempfile.TemporaryDirectory() as td:
+        rx = _Receiver(Path(td))
+        try:
+            status, reply = rx.get("/jobshot/ping")
+            assert status == 404, status
+            assert reply.get("upload") == recv.UPLOAD_PATH, reply
+            assert reply.get("ping") == recv.PING_PATH, reply
+            status, reply = rx.post(b"x", path="/jobshot/upload")
+            assert status == 404 and reply.get("upload") == recv.UPLOAD_PATH
         finally:
             rx.close()
 
