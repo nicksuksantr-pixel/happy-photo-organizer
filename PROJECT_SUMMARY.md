@@ -1,6 +1,6 @@
 # 🎨 Happy Photo Organizer — Project Summary
 
-**Status:** v1.047 (2026-09-22 — **a job from the phone can actually be filed**: drop zone, "From phone" button, and `scripts/import_job.py`; manifest version gate hardened · builds on v1.046 (JobShot import, one real job = one folder) and v1.045 (photos named after their folder) · tests 64/64)
+**Status:** v1.048 (2026-09-23 — **LAN receiver: a job sent from the phone over Wi-Fi**, paired by QR, filed by the same path as a dropped folder · **built for testing, NOT released** — last released build is v1.047 · builds on v1.047 (three ways to import a job by hand) and v1.045 (photos named after their folder) · tests 88/88)
 **Author:** Nick (with Codey — Claude Code)
 **Family:** Happy AI Family (sibling: HAPPY AI Agent)
 **Last full review:** Tester sprint 2026-06-04 (Codey, 3 parallel audit agents) — see "Audit history" below

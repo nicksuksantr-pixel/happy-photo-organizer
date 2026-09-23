@@ -35,6 +35,12 @@ a = Analysis(
         'tkinterdnd2',
         'pystray',
         'pystray._win32',
+        # qrcode is imported inside the pairing dialog's draw method. Static
+        # analysis does follow function-level imports, but the failure mode if
+        # it ever did not is "the QR silently will not draw in the frozen app
+        # only", which is not a thing to discover on a vessel.
+        'qrcode',
+        'qrcode.image.pil',
         # core/ helpers — usually picked up by static analysis but kept here
         # in case any of them grow into dynamic-import users later.
         'core.updater',
@@ -51,6 +57,7 @@ a = Analysis(
         'ui.dialogs',
         'ui.dialogs.settings',
         'ui.dialogs.ai_health',
+        'ui.dialogs.pairing',
     ],
     hookspath=[],
     hooksconfig={},

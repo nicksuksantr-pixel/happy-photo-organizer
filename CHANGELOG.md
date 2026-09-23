@@ -9,6 +9,56 @@ Cosmetic / design / V2-scope items that survived round 6 + 7 + 8. All
 catalogued in detail at the bottom of this file under "Round 6
 deferred".
 
+## [1.048] — 2026-09-23 — Send a job from the phone over Wi-Fi (built, not released)
+
+**Built for testing on Nick's machine only — there is no GitHub Release for
+this version.** The phone half is not confirmed working yet, and shipping an
+ignition with no engine on the other side is the v1.046 mistake in a new
+costume. Release after a real phone-to-PC test passes.
+
+### Added — HPO receives jobs over the LAN while it is open
+Pair once by scanning a QR in the app, then the phone sends a job straight in
+and HPO files it exactly as if the folder had been dropped on the drop zone.
+
+- **Phone button** in the header opens the pairing QR: the code, the address it
+  encodes, the vessel this PC files for, and whether it is listening. The
+  Windows firewall prompt is called out on screen — "the phone says it sent and
+  nothing arrived" is indistinguishable from a bug when the cause is a Defender
+  dialog nobody clicked.
+- The receiver runs **while HPO is open, once paired**. Before any pairing
+  there is no token and nothing could be accepted anyway. Closing HPO stops it;
+  the phone queues, which it already does.
+- The QR carries the port actually bound — if 8765 is taken, the OS picks one
+  and the QR follows it.
+- `GET /jobshot/v1/job/<job_id>` answers "did you already file this?" **after**
+  the fact, so a lost reply costs one small question instead of re-uploading
+  twenty megabytes over a vessel link — and lets the phone skip a resend
+  entirely. Receipts are written by every route, including the drop zone and
+  the script.
+
+### Security — it is a socket that writes files to disk
+- Zip-slip refused: entry names are validated against a whitelist **and** every
+  destination re-resolved against the quarantine root after joining.
+- Caps on archive size, unpacked size, entry count and compression ratio,
+  checked before anything is written.
+- Only photos and the JSON manifest; anything else means it is not a job.
+- Quarantine first — nothing reaches the destination until it has been
+  validated as a job.
+- Every request needs the token from the QR; a PC that has never paired accepts
+  nothing. Bound to one LAN address, not to everything the machine has.
+- A job from another vessel is refused rather than filed into the wrong tree.
+
+### Fixed — a refusal the phone could not read
+Answering an upload without draining its body makes Windows reset the
+connection mid-send, so a rejected upload looked like a dropped link rather
+than a wrong token — the one distinction pairing depends on.
+
+### Tests
+64 → **88**, plus a smoke that drives the app's own methods: an unpaired PC
+does not listen, a paired one does, a real zip over the socket is filed and
+renamed, the log line appears, the receipt answers, and closing stops the
+socket.
+
 ## [1.047] — 2026-09-22 — A job from the phone can actually be filed
 
 v1.046 finished the JobShot import and left it unreachable: `import_job()`
