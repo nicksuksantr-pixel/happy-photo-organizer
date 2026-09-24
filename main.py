@@ -256,43 +256,53 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         self.tier_badge.pack(anchor="w", pady=(3, 0), fill="x")
         self.tier_badge.bind("<Button-1>", lambda _e: self._open_ai_health())
 
-        # Right side: action buttons
+        # Right side: action buttons.
+        #
+        # A GRID, not a stack. The header is a fixed 92 px and four stacked
+        # 30 px buttons need 132 — which is how v1.048 and v1.050 each quietly
+        # clipped the button they had just added, Phone half off the bottom and
+        # Updates entirely gone. Neither was visible to me: I never open the
+        # window. Two rows fit; adding a fifth button means rethinking this,
+        # not appending to it.
         btn_frame = ctk.CTkFrame(header, fg_color="transparent")
         btn_frame.pack(side="right", padx=20, pady=8)
 
         ctk.CTkButton(
             btn_frame, text="AI Health", width=100, height=30,
+            font=("Segoe UI", 11),
             fg_color=COLOR_BG_INPUT, hover_color="#475569",
             text_color=COLOR_TEXT,
             command=self._open_ai_health,
-        ).pack(side="top", pady=(0, 4))
+        ).grid(row=0, column=0, padx=(0, 4))
         ctk.CTkButton(
             btn_frame, text="Settings", width=100, height=30,
+            font=("Segoe UI", 11),
             fg_color=COLOR_BG_INPUT, hover_color="#475569",
             text_color=COLOR_TEXT,
             command=self._open_settings,
-        ).pack(side="top")
+        ).grid(row=0, column=1, padx=(0, 4))
         # The only visible part of the LAN feature: scan once, then the phone
         # sends straight into whatever folder is chosen here.
         self.pair_btn = ctk.CTkButton(
             btn_frame, text="Phone", width=100, height=30,
+            font=("Segoe UI", 11),
             fg_color=COLOR_BG_INPUT, hover_color="#475569",
             text_color=COLOR_TEXT,
             command=self._open_pairing,
         )
-        self.pair_btn.pack(side="top", pady=(4, 0))
-        # Updates used to happen entirely off screen: the only way to ask was a
-        # right-click on the tray icon, and the only sign of an answer was a
-        # line scrolling past in the log. Nick, 2026-09-24: "ไม่รู้ไม่เห็นอะไรเลย
-        # กดก็ไม่ได้". This button is the whole feature made visible.
+        self.pair_btn.grid(row=0, column=2)
+        # Full width of the row beneath, because its label is the feature:
+        # "Up to date (1.050)" and "Downloading 37%" do not fit in 100 px, and
+        # a truncated status is the same as no status.
         self.update_btn = ctk.CTkButton(
-            btn_frame, text="Check for updates", width=100, height=30,
+            btn_frame, text="Check for updates", height=30,
             font=("Segoe UI", 11),
             fg_color=COLOR_BG_INPUT, hover_color="#475569",
             text_color=COLOR_TEXT,
             command=self._on_update_button,
         )
-        self.update_btn.pack(side="top", pady=(4, 0))
+        self.update_btn.grid(row=1, column=0, columnspan=3,
+                             sticky="ew", pady=(4, 0))
         self._update_btn_after_id = self.after(1200, self._poll_update_button)
 
         # Tier badge initial + start 2s poll loop (track id for cleanup)
@@ -1112,7 +1122,28 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
 
     def _open_pairing(self):
         PairingDialog(self, receiver=self._get_receiver(),
-                      on_ship_change=lambda _s: self._refresh_step_states())
+                      on_ship_change=lambda _s: self._refresh_step_states(),
+                      on_choose_dest=self._choose_dest_for_phone)
+
+    def _choose_dest_for_phone(self, ship: str) -> Path | None:
+        """Pick the destination from inside the pairing dialog.
+
+        A paired phone that cannot send says "not ready: no destination folder
+        chosen on the PC yet" — true, and useless if the fix is on a screen the
+        person is not looking at. They are looking at this one.
+        """
+        chosen = filedialog.askdirectory(
+            title=f"Where do {ship or 'this ship'}'s photos go?")
+        if not chosen:
+            return None
+        dest = Path(chosen)
+        self.dest_root = dest
+        self.dest_label.configure(text=f"Destination: {dest}", text_color=COLOR_TEXT)
+        self._log(f"Destination set: {dest}", "ok")
+        if ship and jobshot.remember_dest_root(ship, dest):
+            self._log(f"Remembered {dest} for {ship}", "ok")
+        self._refresh_step_states()
+        return dest
 
     def _start_receiver_if_paired(self):
         """Nick's flow is "open HPO, scan, send", so on every later start the

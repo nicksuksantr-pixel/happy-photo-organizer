@@ -40,11 +40,13 @@ from ui.theme import (
 class PairingDialog(ctk.CTkToplevel):
     """Shows the pairing QR and what the receiver is doing."""
 
-    def __init__(self, master, *, receiver, on_ship_change=None):
+    def __init__(self, master, *, receiver, on_ship_change=None,
+                 on_choose_dest=None):
         # fg_color is REQUIRED — without it CTkToplevel uses the theme's
         super().__init__(master, fg_color=COLOR_BG)
         self.receiver = receiver
         self._on_ship_change = on_ship_change
+        self._on_choose_dest = on_choose_dest
         self._qr_image = None          # keep a reference or Tk drops it
 
         self.title("Pair your phone")
@@ -116,6 +118,16 @@ class PairingDialog(ctk.CTkToplevel):
                      text_color=COLOR_MUTED, wraplength=410,
                      justify="left").pack(anchor="w", pady=(10, 0))
 
+        # The phone pairs happily and then refuses to send with "no destination
+        # folder chosen on the PC yet". That is true, and useless when the fix
+        # lives on a screen the person is not looking at — they are looking at
+        # this one.
+        self.dest_btn = ctk.CTkButton(
+            wrap, text="Choose the destination folder…", height=32,
+            font=("Segoe UI", 11, "bold"),
+            fg_color=COLOR_PRIMARY, text_color="#FFFFFF",
+            command=self._choose_dest)
+
         buttons = ctk.CTkFrame(wrap, fg_color="transparent")
         buttons.pack(fill="x", side="bottom", pady=(12, 0))
         ctk.CTkButton(
@@ -159,10 +171,23 @@ class PairingDialog(ctk.CTkToplevel):
         self._draw_qr(json.dumps(payload, separators=(",", ":")))
         self.address_label.configure(
             text=f"http://{payload['host']}:{payload['port']}")
-        self.status_label.configure(
-            text=f"Listening for {payload['ship'] or 'any vessel'}. "
-                 f"Leave HPO open while the phone sends.",
-            text_color=COLOR_OK)
+
+        # Pairing is not the same as being able to receive. Say which one is
+        # missing, and put the fix next to the sentence.
+        if self.receiver.dest_root() is None:
+            self.status_label.configure(
+                text="Paired phones can find this PC, but nothing can be sent "
+                     "yet: no destination folder is chosen.",
+                text_color=COLOR_WARN)
+            if self._on_choose_dest is not None:
+                self.dest_btn.pack(fill="x", pady=(8, 0))
+        else:
+            self.dest_btn.pack_forget()
+            self.status_label.configure(
+                text=f"Ready for {payload['ship'] or 'any vessel'} → "
+                     f"{self.receiver.dest_root()}\n"
+                     f"Leave HPO open while the phone sends.",
+                text_color=COLOR_OK)
 
     def _draw_qr(self, text: str):
         try:
@@ -182,6 +207,12 @@ class PairingDialog(ctk.CTkToplevel):
                 text=f"Could not draw the code:\n{str(e)[:120]}\n\n"
                      f"Type the address into JobShot instead.",
                 font=("Segoe UI", 11))
+
+    def _choose_dest(self):
+        if self._on_choose_dest is None:
+            return
+        if self._on_choose_dest(current_ship()) is not None:
+            self._refresh()
 
     def _copy_address(self):
         try:
