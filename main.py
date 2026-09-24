@@ -281,6 +281,19 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
             command=self._open_pairing,
         )
         self.pair_btn.pack(side="top", pady=(4, 0))
+        # Updates used to happen entirely off screen: the only way to ask was a
+        # right-click on the tray icon, and the only sign of an answer was a
+        # line scrolling past in the log. Nick, 2026-09-24: "ไม่รู้ไม่เห็นอะไรเลย
+        # กดก็ไม่ได้". This button is the whole feature made visible.
+        self.update_btn = ctk.CTkButton(
+            btn_frame, text="Check for updates", width=100, height=30,
+            font=("Segoe UI", 11),
+            fg_color=COLOR_BG_INPUT, hover_color="#475569",
+            text_color=COLOR_TEXT,
+            command=self._on_update_button,
+        )
+        self.update_btn.pack(side="top", pady=(4, 0))
+        self._update_btn_after_id = self.after(1200, self._poll_update_button)
 
         # Tier badge initial + start 2s poll loop (track id for cleanup)
         self._update_tier_badge()
@@ -612,6 +625,72 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         """Host contract for UpdateWorker — flag teardown before installer runs."""
         self._real_quit_requested = True
 
+    # kinds come from UpdateWorker.describe(); the window only picks a colour
+    _UPDATE_COLOURS = {
+        "ready": COLOR_PRIMARY,
+        "available": COLOR_PRIMARY,
+        "offline": COLOR_WARN,
+    }
+
+    def _poll_update_button(self):
+        """Mirror the worker onto the button. Cheap, and it is the only way the
+        user sees a download happening at all."""
+        if getattr(self, "_destroyed", False):
+            return
+        try:
+            label, kind, clickable = self.update_worker.describe()
+            self.update_btn.configure(
+                text=label,
+                fg_color=self._UPDATE_COLOURS.get(kind, COLOR_BG_INPUT),
+                state="normal" if clickable else "disabled")
+        except Exception:
+            pass
+        try:
+            self._update_btn_after_id = self.after(1200, self._poll_update_button)
+        except Exception:
+            pass
+
+    def _on_update_button(self):
+        """One button, three jobs — whichever the current state makes obvious."""
+        w = self.update_worker
+        if w.pending_installer and w.pending_installer.exists():
+            v = w.pending_installer_version or "?"
+            if not messagebox.askyesno(
+                    "Install update",
+                    f"Install v{v} now?\n\nHappy Photo Organizer will close, "
+                    f"update, and open again. Anything you have not committed "
+                    f"in Step 3 will still be there afterwards — the folders on "
+                    f"disk are not touched by an update."):
+                return
+            started, why = w.install_pending_now()
+            if not started:
+                self._log(f"Not installing yet: {why}", "warn")
+            return
+
+        if w.in_progress:
+            self._log(f"Update downloading — {w.download_pct}%", "info")
+            return
+        if w.checking:
+            return
+
+        self._log("Checking for updates...", "info")
+        w.manual_check()
+        # Say what came back, rather than leaving the button to imply it. 6s is
+        # past the 5s network timeout inside the poll.
+        self.after(6000, self._report_update_check)
+
+    def _report_update_check(self):
+        w = self.update_worker
+        if w.checking:
+            self.after(2000, self._report_update_check)
+            return
+        if w.last_error:
+            self._log(f"Update check failed: {w.last_error}", "warn")
+        elif w.pending_installer or w.pending_info or w.in_progress:
+            pass          # the worker logs its own progress from here
+        else:
+            self._log(f"No update available — v{APP_VERSION} is the latest", "ok")
+
     # Shim retained so HappyTray's "Check for updates now" callback keeps working
     # without having to know about the worker.
     def _update_check_tick(self) -> None:
@@ -803,6 +882,12 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         # HPO closed = not receiving. The phone queues the job and sends it the
         # next time the app is open, which is the behaviour it already has.
         self._stop_receiver()
+        if getattr(self, "_update_btn_after_id", None) is not None:
+            try:
+                self.after_cancel(self._update_btn_after_id)
+            except Exception:
+                pass
+            self._update_btn_after_id = None
         # Round-6 BUG-M8 (Cos review 2026-05-24): explicitly cancel the
         # deferred-withdraw after-id. Already guarded by _destroyed check
         # in _safe_withdraw, but cancelling avoids a wasted Tk dispatch.

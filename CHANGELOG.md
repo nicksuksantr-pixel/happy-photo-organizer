@@ -9,6 +9,40 @@ Cosmetic / design / V2-scope items that survived round 6 + 7 + 8. All
 catalogued in detail at the bottom of this file under "Round 6
 deferred".
 
+## [1.050] — 2026-09-24 — You can finally see the updater
+
+Built for testing; not released.
+
+### Added — an update button in the header, next to Settings
+The updater has always worked and has never been visible: the only manual check
+was a right-click on the tray icon, and the only sign of activity was a line in
+the log before the app restarted itself.
+
+The button says what is actually happening — `Check for updates` · `Checking…` ·
+`Up to date (1.050)` · `Updates: offline` · `Downloading 37%` · `Install v1.051`
+— and does the obvious thing for that state. A check that finds nothing **says
+so** rather than going quiet, and an install asks first, explaining that the app
+will close and reopen and that nothing on disk is touched.
+
+It will not install while a batch is running (it says why instead — a restart
+mid-run would cost the work), and it will not offer an installer that has since
+been cleaned out of the cache.
+
+`UpdateWorker.describe()` owns the wording so it can be tested without opening a
+window; the window only picks a colour. The worker gained bookkeeping only —
+`checking`, `last_check_at`, `last_error`, `download_pct` — none of which
+changes a decision. The percentage comes from a `progress_cb` the downloader
+already accepted and nobody had passed.
+
+### Fixed — a test that could fail one run in sixteen
+`test_receiver_server_refuses_everything_without_the_token` built its "wrong
+token" by replacing the last character with `0`, which produces the *real*
+token whenever it already ended in `0`. It failed on unrelated work, which is
+how it was found.
+
+### Tests
+92 → **96**, plus a smoke driving the button through the window's own methods.
+
 ## [1.048] — 2026-09-23 — Send a job from the phone over Wi-Fi (built, not released)
 
 **Built for testing on Nick's machine only — there is no GitHub Release for

@@ -25,6 +25,7 @@ Design notes:
 from __future__ import annotations
 
 import threading
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -63,6 +64,17 @@ class UpdateWorker:
         # Round-6 BUG-M6 (Cos review 2026-05-24).
         self._last_poll_ok: bool | None = None
 
+        # ─── what the UI shows (v1.050) ───
+        # None of this drives a decision; it exists so the update can be
+        # described on screen. Before it, the feature was invisible: the only
+        # way to ask was a right-click on the tray icon, and the only sign of
+        # an answer was a line scrolling past in the log.
+        self.checking = False
+        self.last_check_at: float | None = None
+        self.last_error: str = ""
+        self.latest_version: str | None = None
+        self.download_pct: int = 0
+
     @property
     def in_progress(self) -> bool:
         with self._in_progress_lock:
@@ -97,10 +109,44 @@ class UpdateWorker:
         self._after_id = self.host.after(self.UPDATE_INTERVAL_MS, self.tick)
 
     def manual_check(self) -> None:
-        """User-triggered check (tray 'Check for updates now'). Does NOT touch
-        the schedule — the next periodic tick still fires on time.
+        """User-triggered check (the Update button, or tray 'Check for updates
+        now'). Does NOT touch the schedule — the next periodic tick still fires
+        on time.
         """
+        self.checking = True
         threading.Thread(target=self._poll_github, daemon=True).start()
+
+    def describe(self) -> tuple[str, str, bool]:
+        """(label, kind, clickable) — what the update button should say.
+
+        Lives here rather than in the window so it can be tested without one,
+        and so there is a single source of truth for what the updater is doing:
+        a button that mirrors this cannot drift from it.
+        """
+        if self.pending_installer and self.pending_installer.exists():
+            return (f"Install v{self.pending_installer_version or '?'}",
+                    "ready", True)
+        if self.in_progress:
+            return f"Downloading {self.download_pct}%", "downloading", False
+        if self.checking:
+            return "Checking…", "checking", False
+        if self.pending_info is not None:
+            return f"Update v{self.pending_info.version}", "available", True
+        if self.last_error:
+            return "Updates: offline", "offline", True
+        if self.last_check_at is None:
+            return "Check for updates", "idle", True
+        return f"Up to date ({self.current_version})", "uptodate", True
+
+    def install_pending_now(self) -> tuple[bool, str]:
+        """Install an already-downloaded update because the user asked for it,
+        rather than waiting for the automatic moment. Returns (started, why not)."""
+        if self.host.is_batch_running:
+            return False, "a batch is running — it will install when that finishes"
+        if not (self.pending_installer and self.pending_installer.exists()):
+            return False, "nothing has been downloaded yet"
+        self._install_now(self.pending_installer_version)
+        return True, ""
 
     def resume_deferred(self) -> None:
         """Call after a batch ends. Resumes whichever stage was deferred."""
@@ -128,10 +174,19 @@ class UpdateWorker:
             from core import updater
             info = updater.check_for_update(self.current_version, timeout=5.0)
             ok = True
+            # Bookkeeping for the button, never a decision: `info is None`
+            # means "nothing newer", which is the answer a person most wants
+            # after pressing Check.
+            self.latest_version = info.version if info is not None else self.current_version
+            self.last_error = ""
             if info is not None:
                 self.host.after(0, lambda i=info: self._on_available(i))
-        except Exception:
+        except Exception as e:
             ok = False
+            self.last_error = str(e)[:120] or "could not reach GitHub"
+        finally:
+            self.checking = False
+            self.last_check_at = time.time()
         # State-transition logging only (round-6 BUG-M6) — avoids
         # 'update check failed' every 5 min while GitHub / DNS is down.
         prev = self._last_poll_ok
@@ -190,8 +245,13 @@ class UpdateWorker:
         def worker():
             from core import updater
             dest = updater.cache_dir() / f"HappyPhotoOrganizerSetup-v{info.version}.exe"
+            def _pct(done: int, total: int) -> None:
+                self.download_pct = int(done * 100 / total) if total else 0
+
+            self.download_pct = 0
             ok, msg = updater.download_installer(
                 info.download_url, dest,
+                progress_cb=_pct,
                 expected_size=info.size,
             )
             self.in_progress = False

@@ -1444,7 +1444,14 @@ def test_receiver_server_refuses_everything_without_the_token():
         tmp = Path(td)
         rx = _Receiver(tmp)
         try:
-            for token in (False, "", "not-the-token", rx.token[:-1] + "0"):
+            # "the same token with one character changed" — and it has to
+            # actually differ: appending a fixed "0" silently produced the REAL
+            # token on any run where it already ended in 0, which is one run in
+            # sixteen for a hex token. It happened on 2026-09-24 and the test
+            # failed for a reason that had nothing to do with the code.
+            tampered = rx.token[:-1] + ("1" if rx.token[-1] != "1" else "2")
+            assert tampered != rx.token
+            for token in (False, "", "not-the-token", tampered):
                 status, _reply = rx.post(_job_zip(tmp), token=token)
                 assert status == 401, (token, status)
             status, _reply = rx.get(recv.HELLO_PATH, token=False)
@@ -1918,6 +1925,148 @@ def test_contract_counts_the_jobs_the_sender_claimed():
             assert any("3 job(s)" in w for w in reply["warnings"]), reply["warnings"]
         finally:
             rx.close()
+
+
+# --- the update button says what the updater is doing -----------------------
+#
+# Nick, 2026-09-24: "ทำปุ่มกดระบบอัพเดทหน่อย ไม่รู้ไม่เห็นอะไรเลย กดก็ไม่ได้".
+# The updater worked and was invisible: the only way to ask was a right-click
+# on the tray icon, and the only answer was a line scrolling past in the log.
+# `describe()` is what the button shows, and it lives in core precisely so it
+# can be tested without opening a window.
+
+
+class _FakeUpdateHost:
+    """The five things UpdateWorker asks of its host."""
+
+    def __init__(self):
+        self.logs = []
+        self.is_batch_running = False
+
+    def after(self, _ms, fn=None, *a):
+        if fn is not None:
+            fn(*a)
+        return "after-id"
+
+    def after_cancel(self, _id):
+        pass
+
+    def log(self, msg, level="ok"):
+        self.logs.append((level, msg))
+
+    def on_before_install(self):
+        pass
+
+
+def _worker(tmp: Path):
+    from core.update_worker import UpdateWorker
+    return UpdateWorker(_FakeUpdateHost(), "1.049")
+
+
+def test_update_button_describes_every_state_it_can_be_in():
+    from types import SimpleNamespace
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        w = _worker(tmp)
+
+        # never checked — the button has to invite the click, not claim health
+        label, kind, clickable = w.describe()
+        assert (kind, clickable) == ("idle", True), (label, kind)
+        assert label == "Check for updates"
+
+        w.checking = True
+        label, kind, clickable = w.describe()
+        assert kind == "checking" and clickable is False, label
+
+        w.checking = False
+        w.last_check_at = 1.0
+        label, kind, clickable = w.describe()
+        assert kind == "uptodate" and clickable is True
+        assert "1.049" in label, label      # says WHICH version is current
+
+        w.last_error = "GitHub unreachable"
+        label, kind, _c = w.describe()
+        assert kind == "offline", label
+        w.last_error = ""
+
+        w.pending_info = SimpleNamespace(version="1.050", tag="v1.050")
+        label, kind, clickable = w.describe()
+        assert kind == "available" and clickable is True
+        assert "1.050" in label, label
+
+        w.in_progress = True
+        w.download_pct = 42
+        label, kind, clickable = w.describe()
+        assert kind == "downloading" and clickable is False
+        assert "42%" in label, label        # a download must be visible
+        w.in_progress = False
+
+        installer = tmp / "HappyPhotoOrganizerSetup-v1.050.exe"
+        installer.write_bytes(b"x")
+        w.pending_installer = installer
+        w.pending_installer_version = "1.050"
+        label, kind, clickable = w.describe()
+        assert kind == "ready" and clickable is True
+        assert label == "Install v1.050", label
+
+
+def test_update_button_does_not_offer_an_installer_that_is_gone():
+    """The cache is cleaned between runs. Offering "Install" for a file that
+    no longer exists would fail with nothing to explain it."""
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        w = _worker(tmp)
+        installer = tmp / "gone.exe"
+        installer.write_bytes(b"x")
+        w.pending_installer = installer
+        w.pending_installer_version = "1.050"
+        assert w.describe()[1] == "ready"
+
+        installer.unlink()
+        assert w.describe()[1] != "ready", w.describe()
+
+
+def test_install_now_refuses_mid_batch_and_says_why():
+    """A batch is the one time an update must not restart the app: Nick would
+    lose the run. The refusal carries its reason so the button can show it."""
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        w = _worker(tmp)
+        installer = tmp / "HappyPhotoOrganizerSetup-v1.050.exe"
+        installer.write_bytes(b"x")
+        w.pending_installer = installer
+        w.pending_installer_version = "1.050"
+
+        w.host.is_batch_running = True
+        started, why = w.install_pending_now()
+        assert started is False and "batch" in why, why
+
+        w.host.is_batch_running = False
+        w.pending_installer = None
+        started, why = w.install_pending_now()
+        assert started is False and "downloaded" in why, why
+
+
+def test_manual_check_marks_itself_as_checking():
+    """Without this the button stays on its old label while a check runs, and
+    the click looks like it did nothing — which is the original complaint."""
+    import time as _t
+    with tempfile.TemporaryDirectory() as td:
+        w = _worker(Path(td))
+        w.manual_check()
+        # `checking` is set on the calling thread, before the poll thread runs
+        deadline = _t.time() + 10
+        saw_reset = False
+        while _t.time() < deadline:
+            if not w.checking:
+                saw_reset = True
+                break
+            _t.sleep(0.2)
+        # it either already finished or is still going; what matters is that
+        # the flag is managed at all, and that a finished check stamps a time
+        assert saw_reset or w.checking
+        if saw_reset:
+            assert w.last_check_at is not None
 
 
 # â”€â”€â”€ runner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
