@@ -69,6 +69,16 @@ gh release create v1.026 dist/HappyPhotoOrganizerSetup.exe `
 - Drag-drop `dist/HappyPhotoOrganizerSetup.exe` ลงช่อง assets
 - กด "Publish release"
 
+> ⚠️ **สร้างเป็น draft ก่อน → อัปโหลด asset → ค่อย publish** (บทเรียน 2026-09-24)
+> ถ้าสร้าง release แบบ public แล้วค่อยอัปโหลด ตัวติดตั้ง 90 MB ใช้เวลาหลายนาที
+> และระหว่างนั้นมี release ที่ **ไม่มีไฟล์แนบ** ค้างอยู่บนเน็ต. ครั้งนี้ไม่มีใคร
+> เดือดร้อนเพราะ `check_for_update()` เจอ release ที่ไม่มี asset แล้ว `return None`
+> (= "ไม่มีอัปเดต") — แต่เป็นความปลอดภัยที่ได้มาโดยบังเอิญ ไม่ใช่การออกแบบ.
+> ผ่าน API: `"draft": true` ตอนสร้าง → อัปโหลด asset → `PATCH {"draft": false}`.
+>
+> ⏱️ **อัปโหลดผ่าน API ใช้เวลานานกว่าที่คิด** — 90 MB เกิน 10 นาทีก็มี. ถ้ารันใน
+> เชลล์ที่มี timeout ให้รัน background ไม่งั้นโดนฆ่ากลางคันแล้วได้ release เปล่า.
+
 ### Step 5 — เครื่องอื่นๆ
 - เครื่องที่ลง v1.025+ ติดตั้งแล้ว → next startup จะเช็คเอง → popup
 - เครื่องที่ลง v1.024 (ก่อน updater) → ต้อง manual download installer ครั้งสุดท้าย

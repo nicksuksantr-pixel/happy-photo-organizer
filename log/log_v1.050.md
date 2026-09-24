@@ -76,9 +76,21 @@ re-run until it passes.
 - The GUI itself is still not click-tested; what is proven is everything behind
   the button.
 
-## Status
+## Status — released
 
-Built for testing on Nick's machine. Still **not released** — the LAN receiver
-in v1.048/49 is waiting on one real phone-to-PC send, and this rides along with
-it. The irony is noted: the button that makes updates visible cannot reach him
-through an update.
+Nick: *"รีลิสเลย"*. **v1.050 is published**, and it carries everything since
+v1.047: the LAN receiver (v1.048), the protocol alignment (v1.049) and this
+button. The irony noted while it was held back is now resolved the only way it
+could be — this is the last release that has to be installed by hand for anyone
+sitting on v1.047.
+
+### One thing went wrong in the release itself
+The 90 MB asset upload ran past ten minutes and was killed, leaving a **public
+release with no installer attached** for the few minutes it took to notice and
+re-upload in the background.
+
+Nobody could have been hurt by it — `check_for_update()` returns `None` when a
+release has no matching asset, so every running copy saw "no update" and did
+nothing — but that is safety by accident, not by design. `RELEASE.md` now says
+to create the release as a **draft**, upload the asset, and only then publish,
+and to run the upload detached because ten minutes is not enough.

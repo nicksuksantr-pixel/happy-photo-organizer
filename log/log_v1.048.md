@@ -1,4 +1,4 @@
-# Log — v1.048 (2026-09-23) — built for testing, NOT released
+# Log — v1.048 (2026-09-23) — built for testing; shipped later inside v1.050
 
 ## Entry 1 — the LAN receiver, built inside out
 
@@ -103,7 +103,14 @@ mechanical rather than a matter of judgement.
   book to a temp file before any test runs — the job-catalog trap from v1.047,
   one version older.
 
-## Status: built, deliberately NOT released
+## Status: shipped inside v1.050 (2026-09-24)
+
+Held back for a day exactly as written below, then **released on Nick's word**
+("รีลิสเลย") as part of v1.050 without waiting for the phone-to-PC test. His
+call to make: the receiver only listens after a pairing, so an unpaired machine
+behaves precisely as it did before.
+
+### The original reasoning, kept because it was right at the time
 
 Nick's call, and mine to recommend: **the installer is built for testing on
 this machine only — no GitHub Release.** The phone half (JobShot v0.011) now
