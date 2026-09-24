@@ -1175,7 +1175,12 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
             self._log(f"From the phone: {where} {job.get('folder')} "
                       f"({job.get('photos')} photo(s))", "ok")
             if job.get("date_shifted"):
-                self._log("   the day rule filed it on a different date", "info")
+                # Name both dates and the reason. "a different date" sent Nick
+                # hunting for a bug three times in one afternoon (2026-09-24).
+                self._log(
+                    f"   work done {job.get('work_date', '?')} — that day number "
+                    f"was already used in this folder, so it was filed under "
+                    f"{job.get('folder', '')[:8]}", "info")
         for job in result.skipped:
             self._log(f"From the phone: skipped {job.get('folder', job.get('job_name', ''))}"
                       f" — {job.get('reason', '')}", "warn")

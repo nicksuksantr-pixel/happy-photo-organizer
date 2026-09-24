@@ -358,6 +358,13 @@ def receive_zip(
                 "merged": r.merged_into_existing,
                 "manifest": r.manifest_name,
                 "date_shifted": r.date_shifted,
+                # The day the work was actually done. `folder` may carry a
+                # different date: the archive's rule is one day number per
+                # folder, so the second job of a day is moved to a free one
+                # (Nick's rule, confirmed twice). Without this field the phone
+                # can only say "filed as 18-09-26" for work done on the 24th,
+                # which reads as a bug rather than as the rule working.
+                "work_date": r.work_date.strftime("%Y-%m-%d") if r.work_date else "",
             })
             result.warnings.extend(r.warnings)
         result.ok = bool(result.filed)

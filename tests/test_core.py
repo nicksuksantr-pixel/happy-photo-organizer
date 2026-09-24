@@ -1320,7 +1320,12 @@ def test_receiver_requires_the_paired_token():
         assert len(token) >= 32
         assert recv.get_token(create=True) == token      # stable once minted
         assert recv.verify_token(token) is True
-        assert recv.verify_token(token[:-1] + "0") is False
+        # one character different, and it must really be different: a fixed
+        # "0" IS the real token whenever it already ends in 0. Same bug as the
+        # one fixed in the server test on 2026-09-24 — I fixed that instance
+        # and did not grep for its siblings, so this one failed the next day.
+        assert recv.verify_token(
+            token[:-1] + ("1" if token[-1] != "1" else "2")) is False
         assert recv.verify_token("") is False
 
         payload = recv.qr_payload("ENA CRYSTAL", port=8765, host="192.168.1.20")
@@ -1846,8 +1851,13 @@ def test_contract_upload_reply_shape_is_frozen():
             assert isinstance(reply["warnings"], list)
 
             job = reply["filed"][0]
+            # work_date added 2026-09-24 so the phone can explain a folder the
+            # day rule moved. Additive: a reader that ignores unknown keys is
+            # unaffected, which is why it did not need JobShot to move first.
             assert set(job) == {"job_id", "job_name", "folder", "photos",
-                                "merged", "manifest", "date_shifted"}, sorted(job)
+                                "merged", "manifest", "date_shifted",
+                                "work_date"}, sorted(job)
+            assert job["work_date"] == "2026-09-23", job["work_date"]
             assert isinstance(job["job_id"], str)
             assert isinstance(job["folder"], str) and job["folder"]
             assert isinstance(job["photos"], int)

@@ -617,11 +617,17 @@ def _file_group(
         # twenty megabytes over a vessel link (JobShot protocol §4).
         try:
             from . import jobshot_index
-            jobshot_index.record(r.job_id, final_folder, r.photos_filed)
-        except Exception:
-            # A receipt that could not be written must never cost the filing
-            # that already happened; the archive can still answer by scan.
-            pass
+            if not jobshot_index.record(r.job_id, final_folder, r.photos_filed):
+                # Still not fatal — §4 falls back to scanning the archive — but
+                # SAY so. Three jobs were filed on 2026-09-24 and no receipt
+                # file appeared anywhere on the machine, and because this was a
+                # bare `pass` there was nothing to explain it. A fast path that
+                # silently never runs is worse than one that fails loudly.
+                r.warnings.append(
+                    f"receipt not written to {jobshot_index.INDEX_PATH} — "
+                    f"lookups will scan the archive instead")
+        except Exception as e:
+            r.warnings.append(f"receipt recorder unavailable: {str(e)[:120]}")
 
 
 def _write_manifest(arrival: _Arrival) -> None:
