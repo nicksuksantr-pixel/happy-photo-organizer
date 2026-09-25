@@ -9,6 +9,73 @@ Cosmetic / design / V2-scope items that survived round 6 + 7 + 8. All
 catalogued in detail at the bottom of this file under "Round 6
 deferred".
 
+## [1.053] — 2026-09-25 — The report draft rides along
+
+### Added — a job may carry `emr.json`, and the receipt names it
+JobShot asked whether a job folder could carry a third file: the
+maintenance-report draft typed at the machine, which EMR reads back out of the
+folder HPO builds. Reading the code gave worse answers than the ones they
+feared. The zip was not refused — `_bad_entry()` allowed only
+`^job(-...)?\.json$`, so the draft was **dropped during extraction** with a
+warning nobody surfaces. Even extracted it would not have been copied, because
+the file list comes from `manifest["photos"]` and a draft is never in it. And
+the receipt said nothing, while `filed` is what the phone turns into *safe to
+delete from the phone* — so Nick could delete the only copy of something he had
+written.
+
+- The wire now accepts **images and JSON, nothing else**. Everything else about
+  the gate is untouched — traversal, absolute paths, device names, ratios and
+  caps — and `notes.txt`, `run.exe` and `photo.jpg.exe` are still refused, with
+  a test that says so: widening a gate for a friend is exactly when a gate gets
+  widened for everyone.
+- Sidecars are **copied, never moved**, name and bytes intact — the arrival
+  folder belongs to the sender, and this must never be why a phone loses its
+  last copy. When two jobs merge into one folder, the second keeps its own
+  identity as `emr-<job_id>.json` rather than overwriting a draft that
+  describes different work.
+- Each filed entry reports `"extras": ["emr.json"]`, mirrored in the archived
+  manifest's `filed` block. A copy that fails is a warning and is left **out**
+  of `extras`: a file the reply does not mention must never be treated as
+  filed.
+
+### Unchanged — Nick's day rule, relayed twice and already true
+*A day may only be reused once the month is full.* That is what
+`_find_free_day_earliest` has done since v1.026 — verified by running it, not
+by reading it — but it had no test, which for a rule stated this deliberately
+is a gap. Pinned now.
+
+### Tests
+96 → **101**.
+
+## [1.052] — 2026-09-24 — The moved date explains itself
+
+Three jobs sent on one day were filed as `24-09-26`, `04-09-26` and `18-09-26`
+and the phone reported an error. That is the archive rule working: a day number
+is never reused while the month has a free day. Nick confirmed it a third time,
+so the fix is in **the explanation, not the rule** — the reply now carries
+`work_date` beside `date_shifted` so JobShot can say *moved from 24-09-26*, and
+the PC log names both dates and the reason.
+
+Also: a receipt write that failed silently (`except Exception: pass`) now
+reports itself — three successful filings had written no receipt file and there
+was no way to learn why from outside the app — and a second copy of the
+one-run-in-sixteen token test was found by grepping for the pattern rather than
+waiting for it to fail.
+
+## [1.051] — 2026-09-24 — Put the buttons back on screen
+
+Four 30 px buttons stacked into a fixed 92 px header need 132, so **Phone** was
+cut in half and the update button added the day before was entirely below the
+fold — the control built to make the updater visible was itself invisible.
+Nick's screenshot is what found it. The header is a grid now, with the update
+button spanning the width its own labels need.
+
+"Cannot connect" turned out to be the opposite: the log shows three
+`GET /jobshot/v1/hello` answered 200. The phone was paired and being told *no
+destination folder chosen on the PC yet* — true, and useless when the fix sits
+behind the window being looked at. The pairing dialog now separates *paired*
+from *ready* and carries the folder picker itself.
+
 ## [1.050] — 2026-09-24 — You can finally see the updater
 
 Built for testing; not released.

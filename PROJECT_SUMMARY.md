@@ -1,6 +1,6 @@
 # 🎨 Happy Photo Organizer — Project Summary
 
-**Status:** v1.052 (2026-09-24 — **RELEASED** — **LAN receiver: a job sent from the phone over Wi-Fi**, paired by QR, filed by the same path as a dropped folder · **built for testing, NOT released** — last released build is v1.047 · builds on v1.047 (three ways to import a job by hand) and v1.045 (photos named after their folder) · tests 96/96 · **an update button you can actually see and press**)
+**Status:** v1.053 (2026-09-25 — **RELEASED** — **a job sent from the phone over Wi-Fi**, paired by QR, filed by the same path as a dropped folder, and it may now carry the report draft (`emr.json`) through to the archive folder · the reply names what was filed, including which day the archive rule moved it to · an update button you can see and press · builds on v1.047 (three ways to import a job by hand) and v1.045 (photos named after their folder) · tests 101/101)
 **Author:** Nick (with Codey — Claude Code)
 **Family:** Happy AI Family (sibling: HAPPY AI Agent)
 **Last full review:** Tester sprint 2026-06-04 (Codey, 3 parallel audit agents) — see "Audit history" below
