@@ -74,6 +74,13 @@ MAX_ENTRIES = 5000
 MAX_RATIO = 200                            # unpacked / compressed, zip-bomb guard
 
 _JSON_NAME_RE = re.compile(r"^job(-[A-Za-z0-9._-]+)?\.json$")
+# A job folder may also carry sidecars the phone wrote for somebody else to
+# read — `emr.json` is the maintenance-report draft the engineer typed at the
+# machine, which Engine Maintenance Report picks up out of the filed folder.
+# Before this, such an entry was dropped with a warning while the receipt still
+# said "filed", so Nick could delete the only copy of a draft that never
+# arrived (JobShot, 2026-09-25). Data only: images and JSON, nothing else.
+_SIDECAR_NAME_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}\.json$")
 _SAFE_SEGMENT_RE = re.compile(r"^[^\x00-\x1f<>:\"|?*\\/]+$")
 
 
@@ -201,8 +208,8 @@ def _bad_entry(name: str) -> str:
                 "LPT1", "LPT2", "LPT3"):
             return "reserved device name"
     leaf = Path(segments[-1])
-    if not (is_supported_image(leaf) or _JSON_NAME_RE.match(leaf.name)):
-        return "not a photo or a job manifest"
+    if not (is_supported_image(leaf) or _SIDECAR_NAME_RE.match(leaf.name)):
+        return "not a photo or a JSON file"
     return ""
 
 
@@ -365,6 +372,11 @@ def receive_zip(
                 # can only say "filed as 18-09-26" for work done on the 24th,
                 # which reads as a bug rather than as the rule working.
                 "work_date": r.work_date.strftime("%Y-%m-%d") if r.work_date else "",
+                # Files carried through that are neither photos nor the
+                # manifest, under the names they were filed as. The phone shows
+                # a job as safe to delete on the strength of this reply, so
+                # anything it carried has to be accounted for by name.
+                "extras": list(r.extras),
             })
             result.warnings.extend(r.warnings)
         result.ok = bool(result.filed)

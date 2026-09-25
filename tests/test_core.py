@@ -111,6 +111,35 @@ def test_assign_unique_dates_are_unique():
     assert len(set(days)) == len(days), f"days not unique: {days}"
 
 
+def test_a_day_repeats_only_once_the_month_is_full():
+    """Nick's rule, stated again on 2026-09-25 and relayed through two other
+    apps: *a day may only be reused once the month is FULL — fill the month
+    before repeating a day.* It was already the behaviour; this pins it, because
+    a rule nobody tests is a rule waiting to be quietly optimised away.
+
+    EMR takes every report's date from the folder name HPO chooses, so this
+    decides what the whole archive is filed under.
+    """
+    from datetime import datetime as _dt
+
+    # 29 of September's 30 days spoken for: the 30th must be used, not a repeat
+    occupied = set(range(1, 30))
+    assert processor._find_free_day_earliest(24, 30, occupied) == 30
+
+    # every day taken — only now may a day repeat, and it keeps the job's own
+    assert processor._find_free_day_earliest(24, 30, set(range(1, 31))) is None
+
+    # and end to end: four jobs on one real day fan out over free days
+    plan = processor.Plan(assignments=[
+        processor.JobAssignment(folder_date=_dt(2026, 9, 24), job_name=f"Job {i}")
+        for i in range(4)
+    ])
+    processor.assign_unique_dates(plan, used_days={24}, target_year_month=(2026, 9))
+    days = sorted(a.folder_date.day for a in plan.assignments)
+    assert days == [1, 2, 3, 4], days
+    assert not any(a.date_was_capped for a in plan.assignments)
+
+
 def test_capped_keeps_own_day_not_last_day():
     """C1: when the month is full, overflowing assignments keep their OWN EXIF
     day (clamped), NOT all collapse onto last_day."""
@@ -1854,9 +1883,12 @@ def test_contract_upload_reply_shape_is_frozen():
             # work_date added 2026-09-24 so the phone can explain a folder the
             # day rule moved. Additive: a reader that ignores unknown keys is
             # unaffected, which is why it did not need JobShot to move first.
+            # extras added 2026-09-25 for JobShot's emr.json. Additive again:
+            # a reader that ignores unknown keys is unaffected.
             assert set(job) == {"job_id", "job_name", "folder", "photos",
                                 "merged", "manifest", "date_shifted",
-                                "work_date"}, sorted(job)
+                                "work_date", "extras"}, sorted(job)
+            assert isinstance(job["extras"], list)
             assert job["work_date"] == "2026-09-23", job["work_date"]
             assert isinstance(job["job_id"], str)
             assert isinstance(job["folder"], str) and job["folder"]
@@ -2077,6 +2109,130 @@ def test_manual_check_marks_itself_as_checking():
         assert saw_reset or w.checking
         if saw_reset:
             assert w.last_check_at is not None
+
+
+# --- the report draft rides along (JobShot's emr.json, 2026-09-25) ----------
+#
+# The phone may put a third kind of file in a job folder: `emr.json`, the
+# maintenance-report draft the engineer typed at the machine. EMR reads it out
+# of the folder HPO builds. Before this, the extraction dropped it with a
+# warning and the receipt still said "filed" — so Nick could delete the only
+# copy of a draft that never arrived.
+
+
+def _job_zip_with_draft(tmp: Path, *, job_id="20260925-090000-draft1",
+                        job_name="DG3 Turbo Inspection", draft=b'{"emr": 1, "problem": ["leak"]}'):
+    import io
+    import zipfile
+    buf = io.BytesIO()
+    names = []
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for n in (1, 2):
+            name = f"{n:04d}.jpg"
+            src = tmp / f"_src{n}.jpg"
+            _noisy_jpeg(src)
+            zf.writestr(f"{job_id}/{name}", src.read_bytes())
+            names.append(name)
+        if draft is not None:
+            zf.writestr(f"{job_id}/emr.json", draft)      # before the manifest
+        zf.writestr(f"{job_id}/job.json", json.dumps({
+            "jobshot": 1, "job_id": job_id, "job_name": job_name,
+            "ship": "ENA CRYSTAL", "created_at": "2026-09-25T09:00:00+07:00",
+            "work_date": "2026-09-25", "photos": names,
+        }))
+    return buf.getvalue()
+
+
+def test_a_report_draft_reaches_the_archive_folder_untouched():
+    if not _have_pillow():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        rx = _Receiver(tmp)
+        try:
+            draft = b'{"emr": 1, "problem": ["seal leaking"], "action": ["renewed"]}'
+            status, reply = rx.post(_job_zip_with_draft(tmp, draft=draft))
+            assert status == 200, reply
+            job = reply["filed"][0]
+
+            # the receipt names it — the phone shows "safe to delete" on this
+            assert job["extras"] == ["emr.json"], job
+
+            landed = rx.dest / job["folder"] / "emr.json"
+            assert landed.is_file(), sorted(p.name for p in (rx.dest / job["folder"]).iterdir())
+            assert landed.read_bytes() == draft, "the draft was altered in transit"
+
+            # and it is not mistaken for a photo or for the manifest
+            manifest = json.loads(
+                (rx.dest / job["folder"] / "job.json").read_text(encoding="utf-8"))
+            assert "emr.json" not in [_photo_name_of(e) for e in manifest["photos"]]
+            assert manifest["filed"]["extras"] == ["emr.json"], manifest["filed"]
+        finally:
+            rx.close()
+
+
+def _photo_name_of(entry):
+    return entry if isinstance(entry, str) else entry.get("file", "")
+
+
+def test_a_job_with_no_draft_says_so_rather_than_inventing_one():
+    if not _have_pillow():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        rx = _Receiver(tmp)
+        try:
+            status, reply = rx.post(_job_zip_with_draft(tmp, draft=None))
+            assert status == 200, reply
+            assert reply["filed"][0]["extras"] == [], reply["filed"][0]
+        finally:
+            rx.close()
+
+
+def test_a_second_draft_never_overwrites_the_first():
+    """Two jobs can merge into one folder. Their drafts describe different
+    work, so the second must not land on top of the first."""
+    if not _have_pillow():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        rx = _Receiver(tmp)
+        try:
+            first = b'{"emr": 1, "problem": ["first"]}'
+            second = b'{"emr": 1, "problem": ["second"]}'
+            status, reply1 = rx.post(_job_zip_with_draft(tmp, draft=first))
+            assert status == 200, reply1
+            status, reply2 = rx.post(_job_zip_with_draft(
+                tmp, job_id="20260925-100000-draft2", draft=second))
+            assert status == 200, reply2
+
+            folder = rx.dest / reply2["filed"][0]["folder"]
+            assert reply2["filed"][0]["merged"] is True, reply2
+            assert (folder / "emr.json").read_bytes() == first
+            second_name = reply2["filed"][0]["extras"][0]
+            assert second_name != "emr.json", second_name
+            assert (folder / second_name).read_bytes() == second
+        finally:
+            rx.close()
+
+
+def test_the_archive_still_takes_only_photos_and_json():
+    """Widening the gate for a sidecar must not widen it for anything else:
+    this is a socket on a shared vessel network."""
+    import io
+    import zipfile
+    if not _have_pillow():
+        return
+    from core import jobshot_receive as recv
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        for name in ("notes.txt", "run.exe", "setup.bat", "photo.jpg.exe"):
+            assert recv._bad_entry(f"job/{name}"), f"{name} should be refused"
+        for name in ("0001.jpg", "job.json", "emr.json", "parts.json"):
+            assert recv._bad_entry(f"job/{name}") == "", f"{name} should be allowed"
+        # traversal is unaffected by the wider leaf rule
+        assert recv._bad_entry("job/../evil.json")
+        assert recv._bad_entry("C:/Windows/System32/evil.json")
 
 
 # â”€â”€â”€ runner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

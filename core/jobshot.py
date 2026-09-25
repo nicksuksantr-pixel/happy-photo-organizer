@@ -86,6 +86,11 @@ class ImportResult:
     photos_filed: int = 0
     photo_renames: dict[str, str] = field(default_factory=dict)  # phone → final
     manifest_name: str = ""
+    # Files carried through that are neither photos nor the manifest — the
+    # report draft the engineer typed (`emr.json`) is the first of them. Named
+    # as they were filed, because a receipt that does not mention a file cannot
+    # make it safe to delete from the phone.
+    extras: list[str] = field(default_factory=list)
     grouped_with: list[str] = field(default_factory=list)   # job_ids filed together
     warnings: list[str] = field(default_factory=list)
 
@@ -342,6 +347,7 @@ class _Arrival:
     manifest: dict
     work_date: datetime
     photos: list[tuple[object, Path]]      # (manifest entry as given, source file)
+    extras: list[Path]                     # sidecars to carry through untouched
     result: ImportResult
 
 
@@ -389,8 +395,22 @@ def _read_arrival(job_folder: Path) -> _Arrival | ImportResult:
         result.error = "none of the photos listed in the manifest are present"
         return result
 
+    # Sidecars: JSON the phone left for somebody else to read. `photos[]` will
+    # never list them, so anything keyed on that list drops them silently —
+    # which is exactly what happened before 2026-09-25.
+    extras: list[Path] = []
+    try:
+        for f in sorted(job_folder.iterdir()):
+            if not f.is_file() or f.suffix.lower() != ".json":
+                continue
+            if f.name == MANIFEST_NAME or f.name.startswith("job-"):
+                continue
+            extras.append(f)
+    except OSError as e:
+        result.warnings.append(f"could not list the job folder: {str(e)[:80]}")
+
     return _Arrival(folder=job_folder, manifest=manifest, work_date=work_date,
-                    photos=photos, result=result)
+                    photos=photos, extras=extras, result=result)
 
 
 def import_job(
@@ -610,6 +630,7 @@ def _file_group(
             for phone, temp in temp_for_phone[idx].items()
         }
         r.photos_filed = len(r.photo_renames)
+        r.extras = _copy_extras(arrival, final_folder)
         _write_manifest(arrival)
         r.ok = True
         # The receipt, written for every route — LAN, drop zone or script. A
@@ -628,6 +649,34 @@ def _file_group(
                     f"lookups will scan the archive instead")
         except Exception as e:
             r.warnings.append(f"receipt recorder unavailable: {str(e)[:120]}")
+
+
+def _copy_extras(arrival: _Arrival, folder: Path) -> list[str]:
+    """Copy the sidecars into the filed folder, untouched, names intact.
+
+    Copied rather than moved: the arrival folder is the sender's, and this
+    function must never be the reason a phone loses the only copy of something.
+    A name already taken means another job merged in here first, so the second
+    one keeps its own identity (`emr-<job_id>.json`) instead of overwriting a
+    draft that belongs to different work.
+    """
+    filed: list[str] = []
+    for src in arrival.extras:
+        target = folder / src.name
+        if target.exists():
+            safe = _SAFE_ID_RE.sub("-", arrival.result.job_id) or "second"
+            target = folder / f"{src.stem}-{safe}{src.suffix}"
+            arrival.result.warnings.append(
+                f"{folder.name} already had {src.name} — this job's was filed "
+                f"as {target.name}")
+        try:
+            shutil.copy2(src, target)
+            filed.append(target.name)
+        except OSError as e:
+            # Loud, and NOT filed: the phone must not be told this survived.
+            arrival.result.warnings.append(
+                f"could not file {src.name}: {str(e)[:100]}")
+    return filed
 
 
 def _write_manifest(arrival: _Arrival) -> None:
@@ -665,6 +714,7 @@ def _write_manifest(arrival: _Arrival) -> None:
         "date_shifted": result.date_shifted,
         "merged_into_existing_folder": result.merged_into_existing,
         "grouped_with": list(result.grouped_with),
+        "extras": list(result.extras),
         "hpo_version": read_version(),
         "filed_at": datetime.now().isoformat(timespec="seconds"),
     }
