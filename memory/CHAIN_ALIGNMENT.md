@@ -142,6 +142,24 @@ passes every test today, for as long as the other side keeps a habit.
 on your own code, **write down which side is holding it up.** *"Covered by a test"* and *"covered by their
 habit"* look identical from inside and behave differently exactly once.
 
+### §6.4 · Two silent-loss paths found on 2026-09-26 in the real run — added after issue
+
+**§6.4a — `spares` and `spare_parts` are both accepted, and sending both loses everything.** EMR
+resolves them as `raw.get("spares", raw.get("spare_parts"))`, so the fallback runs **only when
+`spares` is absent**. A writer that emits `"spares": null` **alongside** a populated
+`"spare_parts"` loses every row **silently, with `dropped: 0`** — nothing was refused, because
+nothing was offered. **JS sends exactly one of the two keys.** EMR has specified it and pinned it
+with a test rather than guessing which key a writer meant. Full field-by-field spec:
+`Engine_Maintenance_Report/docs/SPARE_PARTS_SPEC.md`.
+
+**§6.4b — the ship name on the controlled document can differ from the job's, silently.** By EMR's
+contract §0 the Ship Name comes from **EMR Settings** and never from the phone. Measured on the
+21:27 job: `emr.json` says `ship: ENA Test`, and the issued `.docx` prints **`ENA Challenger`**.
+Working exactly as specified, and harmless tonight because both are test values — **but this is a
+controlled document that names a vessel.** Not fixed unilaterally by anyone: **if the phone's
+`ship` is ever to be authoritative, that is a contract decision and it is Nick's.** Until then all
+three know the two can disagree, and EMR is not at fault for the divergence.
+
 ---
 
 ## §7 · What each project guarantees
@@ -176,16 +194,50 @@ refuses rather than half-fills an ambiguous folder · unconfirmed values are dro
 
 ## §9 · Proven and not proven, as of the night of 2026-09-26
 
-**Proven by artifact** — `Downloads\26-09-26 Overhauled Air Compressor No. 1\` holds a printed
-`F-04-TEC-03 … Overhauled Air Compressor No. 1.docx` beside `emr.json` and a `job.json` whose `filed`
-block reads `hpo_version: 1.055`, with `job_id 20260926-162655` and `ship: ENA CHALLENGER`.
-**The full chain has completed: phone → HPO → EMR → a real document.**
+**Proven by artifact — `Downloads\26-09-26 Inspected Tumble Dryer\`, 2026-09-26 21:27.** Nick ran a
+real job end to end and pressed Create report:
 
-⚠️ **All three reports were wrong about this, in different directions.** JS cited a different job
-(`FloodLight`, 14:18) which has **no** `.docx`; EMR wrote that the full chain had never run in one
-sitting and that its end-to-end run was against a *sample*, when the folder it printed from carries
-HPO's `filed` block; HPO correctly declined to certify EMR's half. **The truth was visible only on
-disk.** No chain-wide claim goes into a report again without naming the artifact it rests on.
+```
+created_at (JobShot) 2026-09-26T21:24:19+07:00
+filed_at   (HPO)     2026-09-26T21:27:51        <- 3m32s AFTER creation
+hpo_version          1.057      renamed 7/7     date_shifted false
+document             …Inspected Tumble Dryer.docx, 517 KB, written 21:32
+in the document      7 media = 3 template + the 4 TAGGED photos; the 3 `parts` label
+                     shots correctly absent, exactly as EMR guarantees
+provenance           problem ai_confirmed · cause typed · action typed · test ai_confirmed
+                     -- all four sections passed the gate, none dropped
+```
+
+**The full chain has completed: phone → HPO v1.057 → EMR v0.3.5 → a printed `F-04-TEC/03`.** Nick
+ran it, not a harness, so it is testimony. §10's watched run is still worth doing as a second pass.
+
+### ⛔ The first version of this clause was wrong, and how it was caught is the clause that matters
+
+**This section originally cited `26-09-26 Overhauled Air Compressor No. 1`. That folder is
+JobShot's generated fixture, not a chain artifact, and its own timestamps say so.** EMR refused the
+credit and produced the measurement (`docs/CHAIN_ALIGNMENT_RESPONSE.md`):
+
+```
+created_at 2026-09-26T16:26:55+07:00
+filed_at   2026-09-26T15:40:00        <- FORTY-SIX MINUTES BEFORE it was created
+```
+
+**HPO cannot file a job that JobShot has not produced yet.** Two more marks of a constant rather
+than a clock: `created_at` carries an offset and `filed_at` does not, and `filed_at` is a round
+minute to the second. Corroborated: the six photos are byte-identical to
+`JobShot\ผู้ใช้\emr_sample_v2\archive\…`, and the two manifests differ in exactly three fields.
+
+⭐ **The rule this earns, binding on all three: a `filed` block is data, not provenance.** The
+Director read `hpo_version: 1.055` as proof HPO had filed it — a fixture generator writes that
+field just as easily. **Before treating any folder as evidence of a chain run, check that
+`filed_at` follows `created_at`, and that both carry a timezone.** A generated fixture is supposed
+to look real; that is its job. It is the chronology that cannot be faked by accident.
+
+⚠️ **All four of us were wrong about this one fact, in four different directions.** JS claimed the
+chain for `FloodLight` (no `.docx` exists); EMR said the chain had never completed at all; HPO
+correctly declined to certify a half it had not watched; and the Director asserted it from a
+fixture. **The truth arrived only when Nick ran the real thing at 21:27.** No chain-wide claim goes
+into any document again without naming the artifact **and its chronology**.
 
 **Not proven, and not to be claimed:** no report from this chain has been **filed with the technical
 department** · nothing has run **on another ship's PC**, a real USB stick, or a ship's link · **a full

@@ -46,6 +46,36 @@ fixed" before starting work, so the same mistake isn't repeated in another proje
   **What to do, in order:** ① **for every defaulted or permissive branch in a parser, ask whether any input has ever reached this line** — if the answer is "the other side always sends it", that branch is untested by construction, so write the test that sends the shape the other side never sends; ② **ask the other side for a fixture their own writer GENERATED, not one they typed** — a hand-written fixture is written by the same understanding as the code it tests, so it agrees with the mistake, while a generated one carries the *writer's* understanding and can disagree (this is what found both bugs above, and neither was found by reading code); ③ **ask for a fixture of a shape the other side cannot currently produce**, and read a green run on it not as agreement about today but as the guard working on the day it is finally needed; ④ **say in the record which side is holding a rule up** — "covered by a test" and "covered by their habit" look identical from here and behave differently exactly once.
   **It runs in every direction along a contract:** HPO and JobShot are both on the other end of this same wire, and the question *"which side is propping this rule up?"* has an answer at each end. Kin: [[a-guard-must-be-tested-with-the-bug-it-guards]] (a guard never shown failing), [[an-executable-check-is-the-only-lesson-that-fires-unremembered]], [[probe-the-gate-dont-read-it]], [[a-brief-that-maps-onto-an-existing-feature-is-a-question]].
 
+- **`describing-your-contract-is-how-you-test-it`** (EMR, 2026-09-26) — ⭐⭐ The companion to
+  [[a-guard-the-other-side-props-up-is-not-a-guard]]: that row says such a guard exists, this one
+  says **how you find it before it costs you.** **Write down, for the other side, exactly what you
+  accept — every spelling, every default, every reason a value does not arrive — and check each
+  sentence against the code as you write it.** The sentences you cannot write are the branches
+  nobody has ever exercised.
+  **Two defects in one file in one day, and neither was found by reading the code.** Both were in
+  EMR's phone-draft reader, and both were the same shape — a rule held up by the writer on the
+  other side of the wire:
+  1. `source.get(name, "typed")` — absent provenance means typed — had **no test**, because
+  JobShot always writes the map. Found when **JobShot generated a fixture of a shape their own
+  writer never emits.**
+  2. `field_of(name, *aliases)` accepted `serial` for `sn` and `description` for `desc` but looked
+  the provenance up under the **primary name only**, so
+  `{"serial": …, "source": {"serial": "ai"}}` had its label ignored and **printed an
+  unconfirmed value** — the one guarantee the module exists to keep, defeated by the spelling
+  of a key. Found **while writing the field spec that told JobShot the alias was accepted.**
+  Writing "we also accept `serial`" is what made me go and check what happens when they use it.
+  **Neither was found by tests written by the same hand as the code** — a test written by the
+  author encodes the author's understanding, which is the understanding that contains the mistake.
+  The two things that work both come from outside it: **a fixture the other side generates**, and
+  **a specification written for the other side to read.** The second is the cheap one. It needs no
+  other project's time, it can be done today, and it produces a document you owed them anyway.
+  **How to apply:** before asking another project to match your format, write the spec **field by
+  field from the code, not from memory** — accepted spellings, required vs optional, what a value
+  outside the allowed set becomes, and a numbered list of every reason an input does not appear.
+  Run each claim. Then publish it: a spec you have not tested is a wrong instruction issued with
+  authority ([[emr-is-the-last-gate-the-form-is-the-reference]] for why that is worse than silence).
+  Kin: [[a-guard-must-be-tested-with-the-bug-it-guards]],
+
 ## 💾 Data / Persistence / Backup-Restore
 - **atomic-write-everywhere** (ScanDocs, PLC, ENA) — in-place write of jobs.json/project/autosave → a kill or **power-loss** (Nick's ship dips) truncates and silently wipes. Write temp + flush + `os.fsync` + `os.replace` (atomic on NTFS).
 - **parse-then-swap-never-clear-then-parse** (NotiWallet, ScanDocs) — restore that clears then parses a malformed/foreign backup wipes everything. Always parse-then-swap; extract to a staging dir then move; mirror the "claimed-but-none-parsed → abort" guard on EVERY box; only wipe when the zip has files; zip-slip guard.
