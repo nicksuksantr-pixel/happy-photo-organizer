@@ -50,10 +50,12 @@ a range on the next scan and would mark them used, and worse, inside a single
 batch `assign_unique_dates` could hand day 27 to another folder in the same
 pass. The reader and the writer would disagree with each other in the same run.
 
-**Open, and deliberately not decided here: whether the span is recorded at all.**
-JobShot's position was that the range now has nowhere to appear, and that they
-would rather remove the `work_date_end` control than leave Nick filling a box
-nothing prints. HPO's answer is that it has a home neither side had looked at:
+**Open, and deliberately not decided here: whether the span is recorded at all.
+Both sides now agree on the option; what is open is whether Nick wants it.**
+JobShot first held that the range had nowhere to appear and offered to remove
+the `work_date_end` control rather than leave Nick filling a box nothing prints.
+They have since withdrawn that and the control stays while this is open (their
+`3b39e3c`). The home neither side had looked at:
 **`job.json`'s `filed` block** (`core/jobshot.py:709-718`), the archive's own
 record, which already carries `work_date` beside `folder_date` for exactly this
 class of problem — where the job went versus when the work was done.
@@ -70,9 +72,15 @@ does not move), copied into `filed.work_date_end` here, and EMR printing a span
 when it is present and later than `work_date`. **No folder naming change, no
 day-rule change, no allocator change.**
 
-Not being built. Recorded as an option beside "remove the control" for the
-Director or Nick to close — and if it is closed the other way, that decision
-gets written here too.
+**Neither side is building it**, by agreement: the chain has stopped to test,
+and a fourth change shipped on a day with five releases in it is how the next
+silent defect gets in. JobShot is also deliberately NOT adding `work_date_end`
+to the manifest yet — if the option is taken it is one line and a test on their
+side, and if it is dropped nothing was shipped that has to be unshipped.
+
+Recorded as an option beside "remove the control" so whoever closes it is
+choosing rather than discovering. If it closes the other way that decision gets
+written here too, with agreement on the record rather than silence.
 
 ## 3. The `.part` question, answered and then made moot
 
