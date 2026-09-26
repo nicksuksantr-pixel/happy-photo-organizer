@@ -9,6 +9,53 @@ Cosmetic / design / V2-scope items that survived round 6 + 7 + 8. All
 catalogued in detail at the bottom of this file under "Round 6
 deferred".
 
+## [1.054] — 2026-09-26 — The lost-reply route can speak about the draft
+
+Nick ordered one checklist for the whole chain, passed hand to hand (JS → HPO →
+EMR → R&D Director), each side appending what it actually checked. Writing HPO's
+section honestly is what produced this release — see `docs/CHAIN_CHECKLIST.md`.
+
+### Added — `extras` in `GET /jobshot/v1/job/<id>`
+That route exists for one situation: the upload reply was lost. Which is exactly
+the situation in which the phone cannot tell whether the **report draft**
+survived — it answered `filed`, `folder`, `photos`, `filed_at` and nothing about
+the sidecar, while `extras` is what JobShot turns into *safe to delete from the
+phone*.
+
+Raised on the sheet rather than shipped, because three parties were checking
+against a released wire (the v1.049 lesson: a deviation nobody wrote down is a
+bug even when the code is better). JobShot voted yes — and reported that their
+`markFiled` had been **replacing** stored extras with the latest receipt's, so a
+resend hitting §4 got an empty list that **overwrote a confirmation the PC had
+already given**. Fixed on their side; this removes the case that fix papers over.
+
+- Same meaning as the upload reply: **what is on disk, under the names it is on
+  disk as.**
+- From the receipt book when it has it, from the archived manifest's
+  `filed.extras` when it does not — so it answers for jobs filed before v1.054.
+- An index entry from v1.053 has **no `extras` key at all**, which is not the
+  same as a job that filed none: answering `[]` would tell the phone a draft it
+  is still holding was never confirmed, so a keyless entry falls through to the
+  archive. Missing and empty are different facts.
+- A merged folder answers per job — the second one's receipt names
+  `emr-<job_id>.json`, the file that actually belongs to it.
+
+### Changed — a skip reason that says what to do
+JobShot prints the reason verbatim: *"The PC skipped this job: not a job."* reads
+as final, when the truth is nearly always "the manifest did not arrive, send it
+again". Now `"no job.json in it — send the job again"`, and at the top level
+`"no job.json in the upload — send the job again"`.
+
+### Fixed — the §4 shape was never actually frozen
+The v1.049 contract tests pin the key sets of §2 and §3; §4 was only
+spot-checked, so adding a key to it broke nothing — the wrong kind of quiet. It
+is pinned now, `extras` included, on a recorded vote.
+
+### Tests
+105 → **109** (and 101 → 105 while filling in the sheet: a refused, corrupt or
+too-new manifest takes its draft with it, and any `*.json` rides along except
+`job-*.json`).
+
 ## [1.053] — 2026-09-25 — The report draft rides along
 
 ### Added — a job may carry `emr.json`, and the receipt names it

@@ -1921,9 +1921,16 @@ def test_contract_ping_and_receipt_shapes_are_frozen():
             assert status == 200, receipt
             # here `filed` is a BOOL — the same word, the other type, which is
             # exactly the trap that bit the client once already
+            assert set(receipt) == {"jobshot", "filed", "job_id", "folder",
+                                    "photos", "extras", "filed_at"}, sorted(receipt)
             assert isinstance(receipt["filed"], bool) and receipt["filed"] is True
             assert isinstance(receipt["folder"], str) and receipt["folder"]
             assert isinstance(receipt["photos"], int)
+            # extras added v1.054 on JobShot's vote (CHAIN-2026-09-26-01): the
+            # route that answers a lost reply must be able to say whether the
+            # report draft was filed, not only the photos.
+            assert isinstance(receipt["extras"], list)
+            assert isinstance(receipt["filed_at"], str)
         finally:
             rx.close()
 
@@ -2371,6 +2378,120 @@ def test_any_json_sidecar_rides_along_except_a_manifest():
         # copied, never moved: the sender keeps everything it sent
         for name in ("emr.json", "parts.json", "job-backup.json"):
             assert (arrival / name).is_file(), name
+
+
+# --- v1.054: the lost-reply route can speak about the draft too -------------
+#
+# JobShot decides "safe to delete from the phone" from `extras`. When the §3
+# reply is lost the phone asks §4 instead, and until now §4 could say the job
+# was filed while staying silent about the one file Nick typed by hand.
+
+
+def test_the_receipt_route_names_the_draft_it_filed():
+    if not _have_pillow():
+        return
+    from core import jobshot_receive as recv
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        rx = _Receiver(tmp)
+        try:
+            status, reply = rx.post(_job_zip_with_draft(tmp))
+            assert status == 200, reply
+            job_id = reply["filed"][0]["job_id"]
+            assert reply["filed"][0]["extras"] == ["emr.json"]
+
+            # the phone never saw that reply — this is all it has
+            status, receipt = rx.get(recv.JOB_PATH_PREFIX + job_id)
+            assert status == 200, receipt
+            assert receipt["extras"] == ["emr.json"], receipt
+        finally:
+            rx.close()
+
+
+def test_the_receipt_route_answers_for_a_job_filed_before_this_version():
+    """An index entry written by v1.053 has no `extras` key at all. Answering
+    [] there would tell the phone a draft it is still holding was never
+    confirmed — so the archive, which kept the manifest, answers instead."""
+    if not _have_pillow():
+        return
+    from core import jobshot_index as index
+    from core import jobshot_receive as recv
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        rx = _Receiver(tmp)
+        try:
+            status, reply = rx.post(_job_zip_with_draft(tmp))
+            assert status == 200, reply
+            job_id = reply["filed"][0]["job_id"]
+
+            # rewrite the receipt book the way v1.053 wrote it
+            with index._LOCK:
+                jobs = index._load()
+                entry = jobs[job_id]
+                entry.pop("extras")
+                jobs[job_id] = entry
+                index._save(jobs)
+            assert "extras" not in index._load()[job_id]
+
+            status, receipt = rx.get(recv.JOB_PATH_PREFIX + job_id)
+            assert status == 200, receipt
+            assert receipt["extras"] == ["emr.json"], receipt
+        finally:
+            rx.close()
+
+
+def test_the_receipt_route_gives_each_merged_job_its_own_draft_name():
+    """Two jobs in one folder means two drafts describing different work. The
+    second one is filed as emr-<job_id>.json, and §4 must say so — a phone told
+    "emr.json" would look for a file that belongs to the other job."""
+    if not _have_pillow():
+        return
+    from core import jobshot_receive as recv
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        rx = _Receiver(tmp)
+        try:
+            status, first = rx.post(_job_zip_with_draft(
+                tmp, draft=b'{"emr": 1, "problem": ["first"]}'))
+            assert status == 200, first
+            status, second = rx.post(_job_zip_with_draft(
+                tmp, job_id="20260925-100000-draft2",
+                draft=b'{"emr": 1, "problem": ["second"]}'))
+            assert status == 200, second
+            assert second["filed"][0]["merged"] is True, second
+
+            for reply in (first, second):
+                job_id = reply["filed"][0]["job_id"]
+                status, receipt = rx.get(recv.JOB_PATH_PREFIX + job_id)
+                assert status == 200, receipt
+                assert receipt["extras"] == reply["filed"][0]["extras"], receipt
+                for name in receipt["extras"]:
+                    assert (rx.dest / receipt["folder"] / name).is_file(), name
+            assert first["filed"][0]["extras"] != second["filed"][0]["extras"]
+        finally:
+            rx.close()
+
+
+def test_a_skipped_job_is_told_what_to_do_about_it():
+    """JobShot prints the reason verbatim after "The PC skipped this job:".
+    "not a job" reads as final; the truth is nearly always "send it again"."""
+    if not _have_pillow():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        rx = _Receiver(tmp)
+        try:
+            jid = "20260926-081000-gated"
+            status, reply = rx.post(_draft_zip_with_broken_manifest(
+                tmp, job_id=jid, manifest_path=f"{jid}/a/b/job.json"))
+            assert status == 422, (status, reply)
+            reason = reply["skipped"][0]["reason"]
+            sentence = f"The PC skipped this job: {reason}."
+            assert "send the job again" in reason, sentence
+            assert "not a job" != reason, sentence
+            assert "send the job again" in reply["error"], reply["error"]
+        finally:
+            rx.close()
 
 
 def main() -> int:

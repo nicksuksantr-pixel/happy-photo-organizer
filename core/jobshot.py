@@ -638,7 +638,8 @@ def _file_group(
         # twenty megabytes over a vessel link (JobShot protocol §4).
         try:
             from . import jobshot_index
-            if not jobshot_index.record(r.job_id, final_folder, r.photos_filed):
+            if not jobshot_index.record(r.job_id, final_folder, r.photos_filed,
+                                        r.extras):
                 # Still not fatal — §4 falls back to scanning the archive — but
                 # SAY so. Three jobs were filed on 2026-09-24 and no receipt
                 # file appeared anywhere on the machine, and because this was a

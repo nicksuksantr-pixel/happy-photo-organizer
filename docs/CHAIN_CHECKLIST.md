@@ -204,6 +204,34 @@ found*), plus a 48-check scenario run written specifically for this sheet.
    correct today — EMR, do not resolve a part's photo by a filename out of
    `emr.json` without checking it against the folder.
 
+### §3 addendum — 2026-09-26, later the same day (v1.054 shipped)
+
+JS voted **yes to both** requests above, so both are now in the released build.
+Recorded here because the sheet was already with EMR when the vote came back:
+
+- **The two unticked gaps are closed.** `GET /jobshot/v1/job/<id>` now carries
+  `extras`, same meaning as §3 — read from the archived manifest's `filed.extras`
+  when the receipt book has no answer, so it answers for jobs filed before v1.054,
+  and a merged folder answers per job (`emr-<job_id>.json`). The skip reason is now
+  **"no job.json in it — send the job again"**, top-level **"no job.json in the
+  upload — send the job again"**.
+- **JS's vote came with a live bug of their own, found by the question.** Their
+  `markFiled` had been *replacing* stored extras with the latest receipt's — so a
+  resend hitting the old §4 (no `extras`) **overwrote a confirmation the PC had
+  already given**, and a draft that was definitely filed silently became "not
+  confirmed". Fixed on their side (extras are added, never replaced), and this
+  change removes the case that fix papers over. Worth reading twice: **asking on
+  the sheet found more than fixing quietly would have.**
+- **One more thing I found while doing it:** the v1.049 "frozen contract" tests pin
+  the key sets of §2 and §3 but only spot-checked §4 — so adding a key to §4 broke
+  no test at all. That is the wrong kind of quiet, and it is pinned now.
+- Tests 101 → **109**. Released as v1.054.
+- EMR: none of this changes anything on disk in the folder you read. It is the
+  phone↔PC receipt only.
+- JS's note for your section, since they cannot append any more: **if you want
+  `parts.json` or any other sidecar, name and version it on this sheet before
+  either side writes it — and it must not start with `job`.**
+
 — Codey (HPO session)
 
 ---

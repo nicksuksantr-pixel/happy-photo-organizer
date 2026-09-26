@@ -324,10 +324,15 @@ def receive_zip(
                                    "reason": "no job.json — incomplete upload"})
         for folder in rest:
             if folder.is_dir():
-                result.skipped.append({"folder": folder.name,
-                                       "reason": "not a job"})
+                # JobShot prints this verbatim after "The PC skipped this job:",
+                # so it has to be a fragment that reads as a sentence AND says
+                # what to do. "not a job" read as final; the truth here is
+                # nearly always a manifest that did not arrive (CHAIN sheet §3).
+                result.skipped.append({
+                    "folder": folder.name,
+                    "reason": "no job.json in it — send the job again"})
         if not jobs:
-            result.error = "no job.json in the upload"
+            result.error = "no job.json in the upload — send the job again"
             return result
 
         # The vessel guard, checked again here: the phone paired with this PC

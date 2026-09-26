@@ -156,6 +156,12 @@ class _Handler(BaseHTTPRequestHandler):
             "job_id": job_id,
             "folder": entry.get("folder", ""),
             "photos": entry.get("photos", 0),
+            # The sidecars this job filed, under the names they are on disk as.
+            # §3 has carried this since v1.053; without it here, the route that
+            # exists for a lost reply could say the photos are safe and stay
+            # silent about the report draft — the one file Nick typed by hand.
+            # Added v1.054 on JobShot's vote (CHAIN-2026-09-26-01).
+            "extras": list(entry.get("extras") or []),
             "filed_at": entry.get("filed_at", ""),
         })
 

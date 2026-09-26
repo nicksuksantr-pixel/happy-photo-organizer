@@ -86,8 +86,15 @@ def _save(jobs: dict) -> bool:
                                   lock_perms=False)
 
 
-def record(job_id: str, folder: Path, photos: int) -> bool:
-    """Write the receipt. Called for every job filed, by every route."""
+def record(job_id: str, folder: Path, photos: int,
+           extras: list[str] | None = None) -> bool:
+    """Write the receipt. Called for every job filed, by every route.
+
+    `extras` is here because the phone decides whether a report draft is safe
+    to delete from the reply's `extras`, and a lost reply sends it to §4
+    instead — which could say the job was filed but not whether the draft was
+    (CHAIN-2026-09-26-01, JobShot voted yes 2026-09-26).
+    """
     if not valid_job_id(job_id) or folder is None:
         return False
     with _LOCK:
@@ -96,6 +103,7 @@ def record(job_id: str, folder: Path, photos: int) -> bool:
             "folder": folder.name,
             "folder_path": str(folder),
             "photos": int(photos),
+            "extras": [str(e) for e in (extras or [])],
             "filed_at": datetime.now().isoformat(timespec="seconds"),
         }
         return _save(jobs)
@@ -118,11 +126,17 @@ def _scan(dest_root: Path, job_id: str) -> dict | None:
             if str(manifest.get("job_id", "")) != str(job_id):
                 continue
             photos = manifest.get("photos")
+            block = manifest.get("filed") or {}
+            # This manifest belongs to THIS job, so its `extras` are the files
+            # this job filed — which is the right answer even in a merged
+            # folder holding another job's draft as well.
+            extras = block.get("extras")
             return {
                 "folder": folder.name,
                 "folder_path": str(folder),
                 "photos": len(photos) if isinstance(photos, list) else 0,
-                "filed_at": str((manifest.get("filed") or {}).get("filed_at", "")),
+                "extras": [str(e) for e in extras] if isinstance(extras, list) else [],
+                "filed_at": str(block.get("filed_at", "")),
             }
     return None
 
@@ -141,7 +155,11 @@ def lookup(job_id: str, dest_root: Path | None = None) -> dict | None:
         entry = _load().get(str(job_id))
     if entry:
         path = entry.get("folder_path")
-        if path and Path(path).is_dir():
+        # An entry written before v1.054 has no `extras` KEY at all, which is
+        # not the same as a job that filed none. Answering [] there would tell
+        # the phone a draft it is holding was never confirmed, so let the
+        # archive — which still has the manifest — answer instead.
+        if path and Path(path).is_dir() and "extras" in entry:
             return entry
         # The folder is gone or moved: fall through and let the archive speak.
 
