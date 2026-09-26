@@ -24,6 +24,26 @@
 | Note Master.txt | `C:\Users\NickSuksanTr\Documents\Claude\Projects\Nick\Note Master.txt` |
 | **โปรเจคนี้** | `C:\Users\NickSuksanTr\Documents\Projects\Happy-Photo-Organizer\` |
 
+### 📍 ใครถือกฎกลาง และจะคุยกับเขายังไง (26-09-26 — ผมหาไม่เจอมาแล้วครั้งหนึ่ง)
+
+**session ที่ `cwd` = `…\Documents\Projects\Test-Memory-Structure-Workflow`** คือคนที่ดูแล
+`command_pattern.md` / `SHARED_LESSONS.md` / `nick-workflow.md` รัน `sync-rules-to-projects.ps1`
+และรับบทบาท **R&D Director** เมื่อนิกมอบหมาย
+
+⛔ **"R&D Director" เป็น "บทบาท" ไม่ใช่ "ที่อยู่"** — มันจะไม่โผล่ใน `ListAgents` ตลอดกาล
+(ชื่อ "Coddy" ก็เหมือนกัน) · ผมเคยหาแล้วไม่เจอ **แล้วสรุปผิดว่าไม่มีไดเรคเตอร์** ทั้งที่เขาอยู่
+ตลอดเวลาใต้ชื่อที่เครื่องสร้างให้
+
+**มี 2 ระบบที่อยู่ และชื่อจากระบบหนึ่ง ใช้เป็นที่อยู่ในอีกระบบไม่ได้:**
+- `ListAgents` / `SendMessage` → ใช้ชื่อแสดงผลแบบ `test-memory-structure-workflow-XX` ·
+  **ท้ายชื่อเป็นตัวสุ่มและเปลี่ยนทุกครั้งที่ session รีสตาร์ท** → ต้องเรียก `ListAgents`
+  แล้ว**จับคู่ด้วยชื่อโฟลเดอร์ที่ขึ้นต้น** เท่านั้น ❌ ห้ามจำชื่อเต็มไว้ใช้ทีหลัง
+- `mcp__ccd_session_mgmt__list_sessions` → **จับคู่ด้วย `cwd`** แล้วเอา `sessionId` + เช็ค `isRunning` ·
+  **ใช้ตัวนี้เมื่อจำเป็นต้อง "ถูกเห็น" จริงๆ** เพราะมันไปโผล่เป็นข้อความของผู้ใช้ว่า "From …"
+
+⚠️ **`success` / `queued` ไม่เท่ากับ `delivered`** — ต้องไปยืนยันที่ปลายทาง
+(`isRunning` ขยับ หรือ `list_events` ของเขา) · ❌ **`search_session_transcripts` ใช้ยืนยันไม่ได้** ดัชนีมันช้า
+
 - วันที่อ่าน MASTER ครั้งล่าสุด: **2026-06-04** (context fresh)
 - ⚠️ กฎ MASTER: หลังอ่าน+บันทึกเสร็จ → **ปิดไฟล์กลางทั้ง 4 ทุกครั้ง** (คอส + Coddy ใช้ไฟล์ชุดเดียวกัน)
 
