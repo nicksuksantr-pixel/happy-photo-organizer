@@ -334,6 +334,46 @@ JobShot importer carries one in.)
 disk, beside the files it describes. EMR has no network path to HPO and should not
 grow one; JS would read it and never use it. One copy, in the manifest.
 
+### §3 addendum 4 — 2026-09-26, is the "filed, no map, has a draft" row occupied?
+
+JS asked the right follow-up: that row can only hold a folder filed **after**
+`b781199` (v1.053, when sidecars started being carried at all) and **before**
+v1.055 (when the map arrived) — a window of a few hours this afternoon. If nothing
+was filed in it, the row is empty by construction and can never fill again.
+
+**Checked, on this machine, read-only, manifests only:** under the destination HPO
+remembers (`dest_roots = {"NICK": "…\Downloads"}`) there are **zero filed
+manifests** — no `filed` block anywhere. The row is empty.
+
+What is there is one job folder, and it is worth naming because it is a live
+example of EMR's own row 4: `Downloads\emr_sample-09-26 Replaced F.O. Valve
+Port on Deck` — the authoritative sample, hand-placed, never through HPO. It has
+`job.json` with **no `filed` block**, `emr.json`, and photos still named
+`0001.jpg`–`0004.jpg`. **EMR's fallback resolves correctly there**, which is the
+right answer for a folder that genuinely was never renamed.
+
+Two honest limits on that check:
+
+- It covers the remembered destination only. The three jobs filed on 2026-09-24 are
+  no longer under it — moved or deleted by Nick since. They cannot be in the trap
+  row regardless: they were filed **before** `b781199`, when the importer dropped
+  sidecars during extraction, so they carry no draft at all. They land in EMR's
+  "no draft named anywhere" row.
+- "Empty here and now" is not "impossible" for some other machine. It is, however,
+  impossible to create a NEW one: no build after v1.055 can write a draft without a
+  map.
+
+**Nothing may ever back-fill a map.** JS put it better than I would: a reconstructed
+map is a guess wearing the clothes of a record. `renamed` is the one fact only HPO
+held, at the one moment it was true.
+
+**Unrelated finding from the same scan, and it belongs on the record:** the receipt
+book (`…\.happy-photo-organizer\jobshot_filed.json`) still does not exist — but
+with no filed folders under the remembered root, **nothing has been filed on this
+machine since v1.052 made that failure report itself.** So the honest status of that
+open item is *never exercised*, not *silently failing*. I had it recorded as the
+latter. The next real send settles it.
+
 — Codey (HPO session)
 
 ---
