@@ -2555,6 +2555,55 @@ def _manifests(folder: Path) -> dict:
             for m in sorted(folder.glob("job*.json"))}
 
 
+def test_contract_the_filed_block_shape_is_frozen():
+    """EMR reads `filed.extras`, `filed.renamed` and `filed.folder` out of every
+    `job*.json` in the folder. Their own contract document said "job.json is not
+    read at all" until 2026-09-26, so a refactor here could have killed every
+    photo tag on the printed report while every text box still filled in.
+
+    Frozen like the wire shapes in §2/§3/§4: if one of these keys moves or
+    changes type, the question is not "fix the test", it is "has EMR been told".
+    """
+    if not _have_pillow():
+        return
+    from core import jobshot
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        arrival = tmp / "arr" / "20260926-160000-frozen"
+        arrival.mkdir(parents=True)
+        names = []
+        for n in (1, 2):
+            _noisy_jpeg(arrival / f"{n:04d}.jpg")
+            names.append(f"{n:04d}.jpg")
+        (arrival / "emr.json").write_bytes(b'{"emr": 1}')
+        (arrival / "job.json").write_text(json.dumps({
+            "jobshot": 1, "job_id": "20260926-160000-frozen",
+            "job_name": "Frozen Shape", "ship": "ENA TEST",
+            "work_date": "2026-09-26", "photos": names,
+        }), encoding="utf-8")
+        result = jobshot.import_job(arrival, tmp / "dest")
+        assert result.ok, result.error
+
+        filed = json.loads((result.final_folder / "job.json")
+                           .read_text(encoding="utf-8"))["filed"]
+        assert set(filed) == {
+            "folder", "folder_date", "work_date", "date_shifted",
+            "merged_into_existing_folder", "grouped_with", "extras",
+            "renamed", "hpo_version", "filed_at"}, sorted(filed)
+
+        # the three EMR named as load-bearing, with their types
+        assert isinstance(filed["folder"], str) and filed["folder"]
+        assert isinstance(filed["extras"], list)
+        assert isinstance(filed["renamed"], dict)
+        assert all(isinstance(k, str) and isinstance(v, str)
+                   for k, v in filed["renamed"].items()), filed["renamed"]
+        # and they describe what is actually on disk
+        assert filed["extras"] == ["emr.json"]
+        for phone_name, archive_name in filed["renamed"].items():
+            assert (result.final_folder / archive_name).is_file(), archive_name
+        assert (tmp / "dest" / filed["folder"]).is_dir()
+
+
 def test_a_draft_can_be_resolved_to_the_photos_actually_on_disk():
     """The whole point: a name out of emr.json, through the map, to a file."""
     if not _have_pillow():

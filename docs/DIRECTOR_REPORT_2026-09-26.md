@@ -124,7 +124,7 @@ Named rather than left to be discovered:
   job from another vessel would have been filed into this PC's tree, and unlike
   the Wi-Fi path this one has no vessel guard. There is a test, and it was proven
   red against the old ordering. **The bug existed only in a state a real restart
-  produces, and a fixture chooses its own state.** 135 green tests are not that
+  produces, and a fixture chooses its own state.** 136 green tests are not that
   proof. **Nick sends one real job after a genuine restart and this moves to ①,
   or it does not move.**
 - v1.056's three fixes — clearing a finished batch, Commit not re-arming, the
@@ -188,19 +188,33 @@ is now settled rather than open, on a measurement rather than an argument:
   same pass — reader and writer disagreeing in one run.
 - I proposed recording the span in `filed.work_date_end` instead. **EMR then
   opened the form: `F-04-TEC-03_template.docx` has exactly one date field.** No
-  period, no from/to, no hours. The span cannot reach the printed document by
-  any route without changing the form.
+  period, no from/to, no hours — they published the complete field list so
+  nobody re-measures. The span cannot reach the printed document by any route
+  without changing the form, and EMR's own answer to "would one date for three
+  days be wrong as evidence?" is **no**: the `Date` field is the filing date of
+  a report, not elapsed work, and a span that matters for a particular job
+  already prints as a line of text inside Troubleshooting/Maintenance.
 - My argument (an archive fact outlives whatever prints it) survives on its own
-  terms, and does not survive both at once: Nick wants it seen as one day, and
-  nobody can name a reader other than the form.
+  terms, and does not survive both at once.
 
-**It needs Nick's word, not ours**, because it costs JobShot a control. If he
-confirms, they remove it and HPO writes nothing.
+**CLOSED by Nick, 2026-09-26:** *"เอาออก — ไม่มีใครอ่านมัน"*. JobShot removed the
+control in their v0.028 — screen, model and `emr.json` — and their generated
+fixture now asserts the key is absent so it cannot drift back.
+**`filed.work_date_end` closes unbuilt; HPO writes nothing and changed nothing.**
 
-**With EMR — one question, and it is the one from §7 below:** what do they
-assume I pass through unchanged? I know what I guarantee. I do not know what
-they are relying on, and the difference between those two is where the new
-master row says defects live.
+**With EMR — asked and now answered, and the answer matters.** They read
+**`filed.extras`, `filed.renamed` and `filed.folder` out of every `job*.json`**
+in the folder. Until today their own contract document said *"job.json is not
+read at all"* — false since their v0.3.3 — so a tidy-up of my `filed` block
+would have killed every photo tag on the printed report while every text box
+still filled in. They have flagged both wrong sentences in place rather than
+quietly correcting them.
+
+**Acted on rather than noted:** the `filed` block's key set and the types of
+those three fields are now frozen by a test, proven red against exactly the
+change that would have done the damage (renaming `renamed` to `photo_map` in a
+refactor). It is the same instrument as the §2/§3/§4 wire tests — if it goes
+red the question is not "fix the test", it is "has EMR been told".
 
 **One I am carrying alone:** the receiver binds a single interface address
 chosen at startup. If that address stops being the reachable one — a PC with
@@ -247,6 +261,7 @@ agreement first.
 | `filed.renamed` mapping every filed photo | **Yes for v1.055+.** Folders filed earlier have no map and cannot get one; EMR's rule for that row is theirs and correct |
 | A missing key in `renamed` meaning the photo was never filed | **Yes** — it is only ever absent when the photo failed to resize |
 | Photos existing under the names in `renamed` | **Yes** at filing time |
+| `filed.folder`, `filed.extras`, `filed.renamed` keeping their names and types | **Yes, and now enforced** — frozen by `test_contract_the_filed_block_shape_is_frozen`, added after EMR told me they read all three (2026-09-26). Before that it was a convention nobody could see from either side |
 
 **One gap I am naming rather than claiming:** `extras` reports what `shutil.copy2`
 returned without error, **not that the bytes on disk are complete.** A copy that
@@ -290,4 +305,4 @@ Genuinely not fixed:
 
 ---
 
-*HPO, 2026-09-26. Tests 135/135. Working tree clean, everything pushed.*
+*HPO, 2026-09-26. Tests 136/136. Working tree clean, everything pushed.*
