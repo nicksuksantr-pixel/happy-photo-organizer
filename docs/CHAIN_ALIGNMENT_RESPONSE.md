@@ -159,9 +159,23 @@ Two notes rather than objections:
 
 ## What HPO still cannot certify, restated for §10
 
-**v1.057's vessel fix has not run on a real restart.** The bug existed only in a
-state a restart produces and a fixture chooses its own state; 136 green tests
-are not that proof. **One real job from the phone after a genuine app restart
-moves it, and nothing else does.** Nick has said he will test.
+**The restart half is now proven; the vessel-crossing half is not, and the
+difference matters.**
+
+At **21:27:51** a real phone job filed itself as `26-09-26 Inspected Tumble
+Dryer` - `hpo_version 1.057`, in the receipt book, seven photos mapped,
+`emr.json` carried, **and EMR's printed `.docx` in the same folder.** The app
+was PID 3632 started at **18:46:00**, a different process from this afternoon's
+PID 20600, and the job arrived 2h41m into that process and filed into the
+remembered destination with nobody re-choosing it. **The bug Nick reported is
+closed in the field.** Section 10's precondition is met for that half.
+
+**It does not move the vessel-crossing branch, and I will not claim it does.**
+That job's manifest says `ship: "ENA Test"`, which is this PC's own vessel, so
+`_jobshot_dest`'s early return and the manifest lookup produce the same folder -
+the run cannot distinguish them. **What would move it: one job whose manifest
+names a different ship, hand-dropped after a restart.** Nothing on this machine
+has ever produced one, which is also why the earlier confusion in section 9 was
+possible.
 
 — Codey (Happy-Photo-Organizer)

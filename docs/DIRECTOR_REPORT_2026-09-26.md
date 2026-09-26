@@ -118,18 +118,30 @@ Named rather than left to be discovered:
 - **The update cache reclaiming itself.** The Director measured 87.4 MB in
   `~/.happy-photo-organizer/updates`; after Nick installed 1.057 and restarted I
   measured **0 entries, 0.0 MB**.
+- **THE WHOLE CHAIN, ON A REAL JOB, 2026-09-26 21:27:51** - phone to HPO to EMR
+  to a printed report. `26-09-26 Inspected Tumble Dryer`: seven photos renamed,
+  `emr.json` carried, `extras` and a 7-entry `renamed` map, in the receipt book,
+  **and a `F-04-TEC-03 ... Inspected Tumble Dryer.docx` beside them.** Genuinely
+  real, unlike the fixtures examined earlier tonight: `job_id` 21:24:19,
+  `filed_at` 21:27:51 - **created first, filed three minutes later** - and
+  `hpo_version 1.057`, the app that is actually running.
+- **v1.057's destination restore, proven after a genuine restart.** The app is
+  PID **3632, started 18:46:00** - a different process from the PID 20600 that
+  was running this afternoon. The job arrived **2h41m later** and filed itself
+  into the remembered destination **with nobody re-choosing it**. That is the
+  bug Nick reported, closed in the field rather than in a fixture.
 
 ### ② Proven by tests only — read this as *not yet proven*
 
-- **v1.057's vessel fix.** `_jobshot_dest` returns early when a destination is
-  already set; that was harmless while it was `None` on every fresh start, and
-  **the restore I added in v1.057 is what made it dangerous** — a hand-dropped
-  job from another vessel would have been filed into this PC's tree, and unlike
-  the Wi-Fi path this one has no vessel guard. There is a test, and it was proven
-  red against the old ordering. **The bug existed only in a state a real restart
-  produces, and a fixture chooses its own state.** 136 green tests are not that
-  proof. **Nick sends one real job after a genuine restart and this moves to ①,
-  or it does not move.**
+- **v1.057's vessel-CROSSING branch - still here, and I want to be exact about
+  why the 21:27 run did not move it.** `_jobshot_dest` returns early when a
+  destination is already set; the restore I added is what made that dangerous,
+  because a hand-dropped job from **another** vessel would have been filed into
+  this PC's tree. Tonight's job carries `ship: "ENA Test"`, which **is** this
+  PC's vessel - so the early-return path and the manifest path give the same
+  answer, and the run cannot tell them apart. The restart half is now proven as
+  a real run; **the foreign-vessel half needs a job whose manifest names a
+  different ship**, and nothing on this machine has ever produced one.
 - v1.056's three fixes — clearing a finished batch, Commit not re-arming, the
   commit dropping its consumed sources. Nick has seen the button in a screenshot
   and the version banner; he has not run a batch through it in front of me.
@@ -166,10 +178,12 @@ For the phone → archive half, which is mine:
 **There is no retyping anywhere in my segment.** The engineer types the report
 once, on the phone, which is the point of the chain.
 
-**What I do not certify: EMR's half.** JobShot reports an F-04-TEC/03 printed
-from a phone job. I have not watched that run and will not report another
-project's state as fact. For the vessel-this-week decision, that half has to
-come from EMR.
+**EMR's half - now certified by the artifact rather than by report.** At 21:27
+a real phone job produced `26-09-26 Inspected Tumble Dryer`, and a
+`F-04-TEC-03 ... .docx` sits in that folder beside my `filed` block. I still do
+not report EMR's internal state, but I do not have to: the printed document is
+on disk next to the job that produced it, and **all seven photo references in
+the draft resolve through `filed.renamed` to files that exist**.
 
 ---
 
