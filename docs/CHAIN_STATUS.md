@@ -36,51 +36,48 @@ report another project's state as fact. **Nick: for the EMR half, ask EMR.**
 What I can say is that everything EMR needs from me arrives without a human:
 the draft, the photos under their archive names, and the map between the two.
 
-## 2. Multi-day jobs — Nick's ruling, and the one thing it leaves open
+## 2. Multi-day jobs — ruled by Nick, and already what the code does
 
-**Nick's ruling: photos sent together are one job and get one date.** That
-removes the work that was queued rather than answering it — no consecutive-day
-reservation, no full-month rule for a range, and his day-uniqueness rule is
-untouched. `assign_unique_dates` stays exactly as it is.
+**Nick, 2026-09-26, verbatim:**
 
-**The folder NAME must not carry a range, and that is now settled between HPO
-and JobShot.** Naming a folder `26-28.09.26` while the allocator reserved one
-day would claim days 27 and 28 that nothing reserved — `scan_used_days` expands
-a range on the next scan and would mark them used, and worse, inside a single
-batch `assign_unique_dates` could hand day 27 to another folder in the same
-pass. The reader and the writer would disagree with each other in the same run.
+> *"ไอ้เรื่องที่ว่าเป็นช่วงเวลาวันทำงานน่ะ จริงๆก็คือถ้าส่งจากมือถืออ่ะมันก็เป็นไฟล์เดียวกันถูกไหม
+> ก็อยากให้มองเป็นวันเดียวกัน คือเราก็มีหน้าที่แค่ดูวันที่ตามกฎเดิมเลยว่าอันไหนว่างก็ใส่เลยเป็นวันเดียวเลย
+> แต่ถ้ามันเต็มแล้วก็ค่อยไปทับวันอื่นเอาอีกทีนึง เพราะยังไงชื่อก็ไม่ตรงกันอยู่แล้ว แค่ตรงแค่วันที่ ถูกไหม"*
 
-**Open, and deliberately not decided here: whether the span is recorded at all.
-Both sides now agree on the option; what is open is whether Nick wants it.**
-JobShot first held that the range had nowhere to appear and offered to remove
-the `work_date_end` control rather than leave Nick filling a box nothing prints.
-They have since withdrawn that and the control stays while this is open (their
-`3b39e3c`). The home neither side had looked at:
-**`job.json`'s `filed` block** (`core/jobshot.py:709-718`), the archive's own
-record, which already carries `work_date` beside `folder_date` for exactly this
-class of problem — where the job went versus when the work was done.
+In English: sent from the phone as one job means **one day**. Our only job is
+the existing rule — take whichever day is free. **If the month is full, then go
+ahead and reuse a day**, because the folder names differ anyway; only the date
+would coincide.
 
-That would keep EMR's rule intact rather than bending it. *The folder decides
-the date* exists to stop `emr.json` — a draft the engineer can still edit — from
-overriding the archive. `filed.work_date_end` is not the draft; it is HPO's own
-record, written once at filing time and never edited, and already what EMR reads
-for `renamed` and `extras`.
+**No code change. This is exactly what `assign_unique_dates` does**, verified by
+running it rather than reading it:
 
-Cost if it is taken: `work_date_end` added to `job.json` on the phone side
-(additive — tested against the current reader, which accepts it, so `"jobshot"`
-does not move), copied into `filed.work_date_end` here, and EMR printing a span
-when it is present and later than `work_date`. **No folder naming change, no
-day-rule change, no allocator change.**
+| Situation | `_find_free_day_earliest` | Result |
+|---|---|---|
+| day 26 free | `26` | filed on its own day |
+| days 1-26 taken | `27` | earliest free day |
+| **every day 1-30 taken** | `None` | **reuse, flagged `date_was_capped`** |
 
-**Neither side is building it**, by agreement: the chain has stopped to test,
-and a fourth change shipped on a day with five releases in it is how the next
-silent defect gets in. JobShot is also deliberately NOT adding `work_date_end`
-to the manifest yet — if the option is taken it is one line and a test on their
-side, and if it is dropped nothing was shipped that has to be unshipped.
+**One nuance worth Nick's eye, because his words and the code could differ
+here.** He said *"go and overlap another day"*; the code keeps **the job's own
+real day** (clamped to the month length) rather than moving it to some other
+day. That is deliberate and predates this conversation — `core/processor.py:388-399`:
+a Tester round on 2026-06-04 found that slamming every overflowing job onto the
+last day of the month collapsed different jobs onto one date and risked
+same-name merges. Keeping each job's own day means **different work days stay on
+different folder dates, and only genuinely same-day jobs share one** — which is
+the same reasoning Nick gives for why sharing is safe at all. Flagged rather
+than changed; one word from him settles it either way.
 
-Recorded as an option beside "remove the control" so whoever closes it is
-choosing rather than discovering. If it closes the other way that decision gets
-written here too, with agreement on the record rather than silence.
+### The one thing his ruling does not explicitly answer
+Whether the **span** should still be recorded — `filed.work_date_end` for EMR to
+print "26-28 September" while the folder stays one day. My reading of *"อยากให้
+มองเป็นวันเดียวกัน"* is that he wants it seen as one day and the span does not
+need to appear at all, which would close the option and leave JobShot's
+`work_date_end` control with nothing downstream. **Not acting on that reading.**
+It is recorded as a reading, not a decision, for him to confirm or correct in a
+word — and JobShot has deliberately shipped nothing that would have to be
+unshipped either way.
 
 ## 3. The `.part` question, answered and then made moot
 
