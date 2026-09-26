@@ -469,6 +469,35 @@ def test_no_source_file_carries_a_bom_or_cr():
     assert not offenders, "invisible bytes in source:\n  " + "\n  ".join(offenders)
 
 
+def test_no_record_carries_an_invisible_control_character():
+    r"""A patch script lost its doubled backslashes writing a Windows path, so
+    `\25` reached Python as an OCTAL escape and put byte 0x15 into a markdown
+    file where "25" belonged (2026-09-26, and EMR hit the identical bug within
+    the hour). It renders as nothing, it reads as a typo, and no diff shows it.
+
+    Sibling of the BOM/CR check above, for the files that carry the records
+    rather than the code. CR is allowed here: three files under memory/ are
+    mirrors written by the PowerShell sync and are not ours to normalise.
+    """
+    skip = {"dist", "build", ".git", "__pycache__", ".venv", "_trash"}
+    allowed = {9, 10, 13}                       # tab, newline, carriage return
+    newline = 10
+    offenders = []
+    for pattern in ("*.md", "*.json", "*.spec"):
+        for path in ROOT.rglob(pattern):
+            if skip & set(path.relative_to(ROOT).parts):
+                continue
+            raw = path.read_bytes()
+            for i, byte in enumerate(raw):
+                if byte < 32 and byte not in allowed:
+                    line = raw.count(newline, 0, i) + 1
+                    offenders.append(
+                        f"{path.relative_to(ROOT)}:{line} byte {hex(byte)}")
+                    break
+    sep = chr(10) + "  "
+    assert not offenders, "control characters in records:" + sep + sep.join(offenders)
+
+
 def test_read_version_survives_a_bom():
     """Hardening: even if a Windows tool re-saves VERSION with a BOM, the
     reader must still return a clean version string."""
