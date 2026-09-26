@@ -43,13 +43,36 @@ removes the work that was queued rather than answering it — no consecutive-day
 reservation, no full-month rule for a range, and his day-uniqueness rule is
 untouched. `assign_unique_dates` stays exactly as it is.
 
-**Open, and deliberately not decided here:** if a folder gets one date, a date
-*range* has nowhere to appear. The archive can already represent one — 
-`_FOLDER_DATE_RANGE_RE` (`core/processor.py:234`) parses `15-17.05.26 <job>` and
-`scan_used_days` reserves every day it covers — and the phone can now record
-`work_date_end`. So the fact exists at both ends and has no home in the middle.
-Whether that matters is Nick's call, not a design question three sessions should
-settle between themselves.
+**The folder NAME must not carry a range, and that is now settled between HPO
+and JobShot.** Naming a folder `26-28.09.26` while the allocator reserved one
+day would claim days 27 and 28 that nothing reserved — `scan_used_days` expands
+a range on the next scan and would mark them used, and worse, inside a single
+batch `assign_unique_dates` could hand day 27 to another folder in the same
+pass. The reader and the writer would disagree with each other in the same run.
+
+**Open, and deliberately not decided here: whether the span is recorded at all.**
+JobShot's position was that the range now has nowhere to appear, and that they
+would rather remove the `work_date_end` control than leave Nick filling a box
+nothing prints. HPO's answer is that it has a home neither side had looked at:
+**`job.json`'s `filed` block** (`core/jobshot.py:709-718`), the archive's own
+record, which already carries `work_date` beside `folder_date` for exactly this
+class of problem — where the job went versus when the work was done.
+
+That would keep EMR's rule intact rather than bending it. *The folder decides
+the date* exists to stop `emr.json` — a draft the engineer can still edit — from
+overriding the archive. `filed.work_date_end` is not the draft; it is HPO's own
+record, written once at filing time and never edited, and already what EMR reads
+for `renamed` and `extras`.
+
+Cost if it is taken: `work_date_end` added to `job.json` on the phone side
+(additive — tested against the current reader, which accepts it, so `"jobshot"`
+does not move), copied into `filed.work_date_end` here, and EMR printing a span
+when it is present and later than `work_date`. **No folder naming change, no
+day-rule change, no allocator change.**
+
+Not being built. Recorded as an option beside "remove the control" for the
+Director or Nick to close — and if it is closed the other way, that decision
+gets written here too.
 
 ## 3. The `.part` question, answered and then made moot
 
