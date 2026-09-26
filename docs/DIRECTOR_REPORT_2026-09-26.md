@@ -16,7 +16,10 @@ from a folder, or **sent from the phone over Wi-Fi** — and the app resizes and
 groups them by shooting day, asks Gemini for a job name per group, lets Nick
 review and correct the names, then commits: each group becomes one folder named
 `DD-MM-YY <job name>`, every photo inside renamed after its folder, and the
-day number unique across the archive. A job that arrives from the phone skips
+day number unique **among the folders present in the destination** — the
+used-day scan reads the folders on disk, so removing one returns its day to
+the pool (corrected 2026-09-26 against `CHAIN_ALIGNMENT.md` §5.5, which is
+right; my first wording said "unique across the archive" and overstated it). A job that arrives from the phone skips
 the AI and the review entirely: it is already named and grouped, so it is filed
 straight through, carrying its report draft (`emr.json`) into the folder
 untouched and recording which phone photo became which archive photo.
