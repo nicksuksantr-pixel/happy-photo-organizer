@@ -69,15 +69,29 @@ different folder dates, and only genuinely same-day jobs share one** — which i
 the same reasoning Nick gives for why sharing is safe at all. Flagged rather
 than changed; one word from him settles it either way.
 
-### The one thing his ruling does not explicitly answer
+### The span: closing, on a measurement rather than on my argument
 Whether the **span** should still be recorded — `filed.work_date_end` for EMR to
-print "26-28 September" while the folder stays one day. My reading of *"อยากให้
-มองเป็นวันเดียวกัน"* is that he wants it seen as one day and the span does not
-need to appear at all, which would close the option and leave JobShot's
-`work_date_end` control with nothing downstream. **Not acting on that reading.**
-It is recorded as a reading, not a decision, for him to confirm or correct in a
-word — and JobShot has deliberately shipped nothing that would have to be
-unshipped either way.
+print "26-28 September" while the folder stays one day. I proposed it and argued
+that an archive fact outlives whatever prints it. **Two independent lines now
+close it, and the second is a measurement that beats the argument:**
+
+1. Nick's *"อยากให้มองเป็นวันเดียวกัน"* — he wants it seen as one day.
+2. **EMR measured the form.** `F-04-TEC-03_template.docx` has **exactly one date
+   field** — no period of work, no from/to, no hours. A duration could only ever
+   be prose somebody types into Troubleshooting. So `work_date_end` cannot reach
+   the printed document by any route without changing the form itself.
+
+My argument still stands on its own terms, which is why JobShot would not have
+removed the control on EMR's measurement alone. What it does not survive is both
+at once: **nobody can name a reader other than the form, and the form has no
+slot.** Worth keeping as the lesson rather than the outcome — the question
+"where would this fact be read?" was answerable by opening a .docx, and three
+sessions had been reasoning about where it *belonged* instead.
+
+**Still not settled by us.** It costs JobShot a control they shipped yesterday,
+so it gets Nick's word rather than our agreement — they are asking him directly.
+If he confirms: they remove the control and the field in one change, HPO writes
+nothing, and my agreement is on the record rather than my silence.
 
 ## 3. The `.part` question, answered and then made moot
 
