@@ -402,15 +402,31 @@ def cache_dir() -> Path:
 
 
 def cleanup_old_installers(keep: str | None = None) -> None:
-    """Remove cached installer .exe files, except `keep` filename."""
+    """Empty the download cache, except `keep`.
+
+    Sweeps EVERY file, not only `*.exe`. Today a stranded partial is already an
+    `.exe` — `download_installer` writes straight to its final name and resumes
+    by reading that file's size, so there is no staging file to miss (measured
+    2026-09-26: the whole module's only `tempfile` use is the debug log). The
+    filter was therefore not covering anything, and it was one refactor away
+    from covering nothing: the day somebody adds a `.part`, a `.tmp` or a
+    per-download directory, a suffix test silently stops reclaiming and the
+    first thing a full disk breaks is the updater itself.
+
+    Only this module and `update_worker` write here (`cache_dir()` on both
+    sides), and nothing else is meant to live in it, so "everything except the
+    installer we are keeping" is the honest rule. Directories are left alone —
+    nothing creates one today, and removing a tree is not this function's job.
+    """
     try:
         for f in cache_dir().iterdir():
-            if f.is_file() and f.suffix.lower() == ".exe":
-                if keep and f.name == keep:
-                    continue
-                try:
-                    f.unlink()
-                except Exception:
-                    pass
+            if not f.is_file():
+                continue
+            if keep and f.name == keep:
+                continue
+            try:
+                f.unlink()
+            except Exception:
+                pass
     except Exception:
         pass

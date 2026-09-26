@@ -3080,6 +3080,35 @@ def test_emptying_the_list_by_deleting_rows_disarms_commit():
         assert w.phase4_btn.state == "disabled", w.phase4_btn.state
 
 
+def test_the_update_cache_is_emptied_whatever_is_in_it():
+    """The Director asked three times whether a stranded `.part` from a failed
+    resume could survive for ever. Today it cannot exist - the download writes
+    straight to its final `.exe` name and resumes by reading that file's size -
+    but a suffix filter that covers nothing is one refactor away from covering
+    nothing while looking like it covers something. The sweep takes everything
+    except the installer being kept."""
+    from core import updater
+    with tempfile.TemporaryDirectory() as td:
+        cache = Path(td) / "updates"
+        cache.mkdir()
+        real = updater.cache_dir
+        updater.cache_dir = lambda: cache
+        try:
+            keep = "HappyPhotoOrganizerSetup-v1.057.exe"
+            for name in (keep,
+                         "HappyPhotoOrganizerSetup-v1.056.exe",
+                         "HappyPhotoOrganizerSetup-v1.058.exe.part",
+                         "HappyPhotoOrganizerSetup-v1.058.tmp",
+                         "download.crdownload",
+                         "stray"):
+                (cache / name).write_bytes(b"x" * 8)
+            updater.cleanup_old_installers(keep=keep)
+            left = sorted(f.name for f in cache.iterdir())
+            assert left == [keep], left
+        finally:
+            updater.cache_dir = real
+
+
 def test_the_destination_is_remembered_across_a_restart():
     """Nick, 2026-09-26: "เวลาเปิดปิดหรืออัพเดทโปรแกรม ช่องโฟเดอร์ที่เลือกไว้ไม่จำ เลยต้องเลือกใหม่ทุกครั้ง".
     Only the pairing dialog ever wrote the destination down, so after a restart
