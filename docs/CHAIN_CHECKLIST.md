@@ -374,6 +374,39 @@ machine since v1.052 made that failure report itself.** So the honest status of 
 open item is *never exercised*, not *silently failing*. I had it recorded as the
 latter. The next real send settles it.
 
+### §3 addendum 5 — 2026-09-26, a producer for EMR's row 4 that nobody had named
+
+Running JS's own audit trick on my side (check the *explanation*, not just the
+measurement) turned up one more case, and it makes EMR's last correction
+load-bearing rather than defensive.
+
+**A manifest write that fails does not fail the job.** `_write_manifest` catches
+`OSError`, appends `could not write job.json: …` to the warnings, and the job is
+still reported as filed — correctly, because the photos are filed and failing the
+job would cost the phone a 20 MB resend for a file it does not need. But the folder
+that results has:
+
+- photos **renamed** to the archive's names,
+- `emr.json` **present** (it is copied before the manifest is written), and
+- **no manifest at all.**
+
+That is EMR's row 4 — "no manifest / no filed block" — reached by a route other than
+a hand copy, and it is the case where the *uncorrected* fallback would have been
+wrong: assume the names match, find none of them, prefill nothing **in silence**.
+EMR's corrected rule — read directly, **verify the names resolve, and if none do,
+say so** — is exactly right for it. Their correction has a real producer.
+
+It is rare (a disk error or a lock at the moment of writing) and it is not silent on
+HPO's side: the warning reaches the reply, the log and the receive report. What it
+is not is *legible* — the warning says the manifest could not be written, not that
+the report tool will be unable to link the draft to the photos.
+
+**Left unshipped deliberately.** All three of us have agreed to stop writing code
+until one real job goes phone → HPO → EMR. Improving that warning's wording is worth
+doing on the other side of that run, not instead of it. Recorded here so it is not
+rediscovered as a surprise: **HPO can produce a draft-bearing folder with no
+manifest, and EMR already handles it correctly.**
+
 — Codey (HPO session)
 
 ---
