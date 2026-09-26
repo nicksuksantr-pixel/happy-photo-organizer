@@ -1,6 +1,6 @@
 # 🎨 Happy Photo Organizer — Project Summary
 
-**Status:** v1.056 (2026-09-26 — **RELEASED** — **a finished batch can be cleared without restarting the app** ("Start a new batch"), Commit no longer re-arms over folders already filed, and a commit drops the sources it consumed so the next job cannot re-ingest it · **a job sent from the phone over Wi-Fi** files itself with its report draft (`emr.json`) and a per-job map from the phone's photo names to the archive's — **proven end to end on a real job at 14:18:55 today** · an update button you can see and press · tests 130/130)
+**Status:** v1.057 (2026-09-26 — **RELEASED** — **the destination folder is remembered across restarts and updates**, so the phone stops being told there is nowhere to send · a finished batch can be cleared without restarting ("Start a new batch") · **a job sent from the phone over Wi-Fi** files itself with its report draft and a per-job map from the phone's photo names to the archive's — proven end to end on a real job at 14:18:55 today · tests 134/134)
 **Author:** Nick (with Codey — Claude Code)
 **Family:** Happy AI Family (sibling: HAPPY AI Agent)
 **Last full review:** Tester sprint 2026-06-04 (Codey, 3 parallel audit agents) — see "Audit history" below

@@ -3080,6 +3080,145 @@ def test_emptying_the_list_by_deleting_rows_disarms_commit():
         assert w.phase4_btn.state == "disabled", w.phase4_btn.state
 
 
+def test_the_destination_is_remembered_across_a_restart():
+    """Nick, 2026-09-26: "เวลาเปิดปิดหรืออัพเดทโปรแกรม ช่องโฟเดอร์ที่เลือกไว้ไม่จำ เลยต้องเลือกใหม่ทุกครั้ง".
+    Only the pairing dialog ever wrote the destination down, so after a restart
+    Step 1 came up empty AND the phone was told there was no destination - for a
+    folder that had never moved."""
+    if not _have_ctk():
+        return
+    import main as _app
+    from core import auth, jobshot
+    with tempfile.TemporaryDirectory() as td:
+        dest = Path(td) / "archive"
+        dest.mkdir()
+        store = {"jobshot_ship": "ENA TEST"}
+        real = (auth.load_config, auth.update_config)
+        auth.load_config = lambda: dict(store)
+
+        def _update(updates):
+            store.update(updates)
+            return True
+
+        auth.update_config = _update
+        try:
+            # 1. he picks a folder in the main window
+            w = _StubWindow()
+            w.dest_label = _FakeWidget()
+            w._set_dest(dest)
+            assert w.dest_root == dest
+            # both keys, so a renamed vessel cannot lose it
+            assert store["dest_roots"]["ENA TEST"] == str(dest), store.get("dest_roots")
+            assert store["last_dest_root"] == str(dest), store.get("last_dest_root")
+            assert jobshot.get_dest_root("ENA TEST") == dest
+
+            # 2. he closes the app and opens it again
+            fresh = _StubWindow()
+            fresh.dest_label = _FakeWidget()
+            fresh.dest_root = None
+            fresh._restore_dest()
+            assert fresh.dest_root == dest, "the destination was not remembered"
+            assert str(dest) in fresh.dest_label.text, fresh.dest_label.text
+
+            # 3. and the vessel gets renamed - the folder did not move
+            store["jobshot_ship"] = "ENA CHALLENGER"
+            renamed = _StubWindow()
+            renamed.dest_label = _FakeWidget()
+            renamed.dest_root = None
+            renamed._restore_dest()
+            assert renamed.dest_root == dest, "a renamed vessel lost the folder"
+        finally:
+            auth.load_config, auth.update_config = real
+
+
+def test_the_startup_path_really_restores_the_destination():
+    """The two tests above call _restore_dest directly, so deleting its call
+    from __init__ would bring Nick's bug back with both of them green. This is
+    the wiring check that the behaviour tests cannot make."""
+    import ast
+    src = (ROOT / "main.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    window = next(n for n in ast.walk(tree)
+                  if isinstance(n, ast.ClassDef) and n.name == "MainWindow")
+    methods = {n.name: n for n in window.body if isinstance(n, ast.FunctionDef)}
+
+    def calls_in(fn):
+        return {n.func.attr for n in ast.walk(methods[fn])
+                if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)}
+
+    assert "_restore_dest" in calls_in("__init__"),         "__init__ no longer restores the destination"
+    # and every picker goes through the one door that remembers
+    for picker in ("_pick_dest", "_choose_dest_for_phone"):
+        assert "_set_dest" in calls_in(picker),             f"{picker} sets the destination without remembering it"
+
+
+def test_a_job_from_another_vessel_is_not_filed_into_this_pc_tree():
+    """Restoring dest_root at startup made _jobshot_dest's early return swallow
+    the per-vessel lookup, so a hand-dropped job from another ship would have
+    been filed here. The Wi-Fi path refuses a foreign ship outright; this path
+    has no guard at all, so the destination is the only thing standing up."""
+    if not _have_ctk():
+        return
+    import json as _json
+    from core import auth, jobshot
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        mine, theirs = tmp / "mine", tmp / "theirs"
+        mine.mkdir()
+        theirs.mkdir()
+        store = {"jobshot_ship": "ENA TEST",
+                 "dest_roots": {"ENA TEST": str(mine),
+                                "ENA CHALLENGER": str(theirs)}}
+        real = (auth.load_config, auth.update_config)
+        auth.load_config = lambda: dict(store)
+        auth.update_config = lambda u: (store.update(u), True)[1]
+        try:
+            job = tmp / "20260926-120000-abc"
+            job.mkdir()
+            (job / "0001.jpg").write_bytes(b"x" * 10)
+            (job / "job.json").write_text(_json.dumps({
+                "jobshot": 1, "job_id": "20260926-120000-abc",
+                "job_name": "Bow Thruster", "ship": "ENA Challenger",
+                "work_date": "2026-09-26", "photos": ["0001.jpg"],
+            }), encoding="utf-8")
+
+            w = _StubWindow()
+            w.dest_label = _FakeWidget()
+            w._restore_dest()
+            assert w.dest_root == mine, "this PC files for ENA TEST"
+
+            chosen = w._jobshot_dest([job])
+            assert chosen == theirs, (
+                f"a job from ENA Challenger was going to be filed into {chosen}")
+            assert w.dest_root == mine,                 "and it must not have changed this PC's own destination"
+            assert any("not this PC's vessel" in m for m in w.logs), w.logs
+        finally:
+            auth.load_config, auth.update_config = real
+
+
+def test_a_destination_that_is_gone_is_not_restored():
+    """An unplugged drive must not come back as "ready" and fail on the first
+    job - it has to ask again, and say why."""
+    if not _have_ctk():
+        return
+    from core import auth
+    with tempfile.TemporaryDirectory() as td:
+        missing = Path(td) / "not-there"
+        store = {"jobshot_ship": "", "last_dest_root": str(missing)}
+        real = (auth.load_config, auth.update_config)
+        auth.load_config = lambda: dict(store)
+        auth.update_config = lambda u: (store.update(u), True)[1]
+        try:
+            w = _StubWindow()
+            w.dest_label = _FakeWidget()
+            w.dest_root = None
+            w._restore_dest()
+            assert w.dest_root is None, "restored a folder that is not there"
+            assert any("gone" in m for m in w.logs), w.logs
+        finally:
+            auth.load_config, auth.update_config = real
+
+
 def test_a_reset_is_refused_while_a_worker_is_running():
     if not _have_ctk():
         return

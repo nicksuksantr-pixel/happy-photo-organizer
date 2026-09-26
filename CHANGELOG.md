@@ -9,6 +9,37 @@ Cosmetic / design / V2-scope items that survived round 6 + 7 + 8. All
 catalogued in detail at the bottom of this file under "Round 6
 deferred".
 
+## [1.057] — 2026-09-26 — It remembers your folder
+
+Nick: *"เวลาเปิดปิดหรืออัพเดทโปรแกรม ช่องโฟเดอร์ที่เลือกไว้ไม่จำ เลยต้องเลือกใหม่ทุกครั้ง"* — close, reopen
+or update the app and the destination box was empty again.
+
+Three places choose a destination; only two of them ever wrote it down, and
+nothing read it back at startup. The second half of his report is the expensive
+half: the phone receiver reads that same variable, so after every restart the
+phone was told *"no destination folder chosen on the PC yet"* about a folder that
+had never moved.
+
+- One way in, so every picker remembers. It is written twice: under the vessel,
+  and PC-wide — because renaming the vessel (Nick renamed his today) must not
+  lose a folder that did not move.
+- Restored at startup, before anything asks whether this PC can receive.
+- A folder that is **gone** — an unplugged drive — is not restored and says so
+  on the label, instead of coming up "ready" and failing on the first job.
+- A save that fails now says so. Both persistence calls *return* failure rather
+  than raising it, so the app could have reported "Destination set" and
+  forgotten it again — the original bug wearing a success message.
+
+### Fixed — a job from another vessel could have landed in this PC's tree
+Introduced by the restore itself and caught in review: `_jobshot_dest` returns
+early when a destination is already set, which was harmless while that was None
+on every fresh start. With a restored value it skipped reading the job's own
+manifest, and the hand-drop path — unlike the Wi-Fi path — has no vessel guard.
+It now reads the job's vessel first and files into that vessel's folder.
+
+### Tests
+132 → **134**, each proven red against the code it replaces.
+
 ## [1.056] — 2026-09-26 — You can clear a finished batch
 
 Nick: *"เวลาสร้างงานเสร็จแล้วเคลียงานจากลิสเพื่อทำใหม่ไม่ได้ ต้องปิดโปรแกรมเปิดใหม่เท่านั้น"* — after a

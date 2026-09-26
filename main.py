@@ -76,6 +76,11 @@ ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 
+def _same_ship(a: str, b: str) -> bool:
+    """Vessel names compared the way the receiver compares them."""
+    return jobshot_receive._norm_ship(a) == jobshot_receive._norm_ship(b)
+
+
 class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
     def __init__(self):
         super().__init__()
@@ -196,6 +201,7 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         self._unmap_after_id: str | None = None
 
         self._build_ui()
+        self._restore_dest()
         self._refresh_step_states()
         self._check_auth_on_start()
         self.update_worker.start()
@@ -1171,12 +1177,7 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         if not chosen:
             return None
         dest = Path(chosen)
-        self.dest_root = dest
-        self.dest_label.configure(text=f"Destination: {dest}", text_color=COLOR_TEXT)
-        self._log(f"Destination set: {dest}", "ok")
-        if ship and jobshot.remember_dest_root(ship, dest):
-            self._log(f"Remembered {dest} for {ship}", "ok")
-        self._refresh_step_states()
+        self._set_dest(dest, ship=ship)
         return dest
 
     def _start_receiver_if_paired(self):
@@ -1244,8 +1245,12 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
     def _jobshot_dest(self, jobs: list[Path]) -> Path | None:
         """Where this ship's photos live. Asked once per vessel, then
         remembered — an arriving job should file itself."""
-        if self.dest_root:
-            return self.dest_root
+        # Ask the jobs which vessel they belong to FIRST. This used to sit
+        # behind `if self.dest_root: return` — harmless while dest_root was
+        # None on every fresh start, and wrong the moment v1.057 began
+        # restoring it: a folder handed over on a USB stick from another
+        # vessel would have been filed into this PC's tree without a word,
+        # and unlike the Wi-Fi path this one has no vessel guard.
         ship = ""
         for folder in jobs:
             manifest, _err = jobshot.read_manifest(folder)
@@ -1253,6 +1258,20 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
                 ship = str(manifest.get("ship", "") or "")
                 if ship:
                     break
+
+        mine = current_ship()
+        if ship and mine and not _same_ship(ship, mine):
+            theirs = jobshot.get_dest_root(ship)
+            if theirs is not None:
+                # Deliberately does NOT become this PC's destination.
+                self._log(f"{ship} is not this PC's vessel — filing into "
+                          f"{theirs}", "warn")
+                return theirs
+            self._log(f"{ship} is not this PC's vessel ({mine}) and has no "
+                      f"folder remembered here", "warn")
+
+        if self.dest_root:
+            return self.dest_root
         remembered = jobshot.get_dest_root(ship)
         if remembered is not None:
             self.dest_root = remembered
@@ -1267,11 +1286,7 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         if not chosen:
             return None
         dest = Path(chosen)
-        self.dest_root = dest
-        self.dest_label.configure(text=f"Destination: {dest}", text_color=COLOR_TEXT)
-        if ship and jobshot.remember_dest_root(ship, dest):
-            self._log(f"Remembered {dest} for {ship}", "ok")
-        self._refresh_step_states()
+        self._set_dest(dest, ship=ship)
         return dest
 
     def _import_jobshot(self, jobs: list[Path], in_flight: list[Path]):
@@ -1524,10 +1539,73 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
     def _pick_dest(self):
         folder = filedialog.askdirectory(title="Select destination folder")
         if folder:
-            self.dest_root = Path(folder)
-            self.dest_label.configure(text=f"Destination: {self.dest_root}", text_color=COLOR_TEXT)
-            self._log(f"Destination set: {self.dest_root}", "ok")
-            self._refresh_step_states()
+            self._set_dest(Path(folder), "Destination set")
+
+    # ─── The destination, remembered ─────────────
+
+    def _set_dest(self, dest: Path, what: str = "Destination set",
+                  ship: str | None = None):
+        """One way in for every path that chooses a destination, so all of them
+        remember it. Before v1.057 only the pairing dialog wrote it down, so
+        after a restart or an update Step 1 came up empty and the phone was told
+        "no destination folder chosen on the PC yet" — for a folder Nick had
+        chosen weeks ago (Nick, 2026-09-26)."""
+        self.dest_root = dest
+        self.dest_label.configure(text=f"Destination: {dest}", text_color=COLOR_TEXT)
+        self._log(f"{what}: {dest}", "ok")
+        # The vessel this folder belongs to: usually this PC's, but a job
+        # dropped in by hand carries its own and that is the one to remember.
+        mine = current_ship()
+        ship = mine if ship is None else ship
+        wrote_ship = bool(ship) and jobshot.remember_dest_root(ship, dest)
+        if wrote_ship:
+            self._log(f"Remembered {dest} for {ship}", "ok")
+
+        # The PC-wide fallback, so a RENAMED vessel does not lose a folder that
+        # never moved (Nick renamed his from "Nick" to "ENA Test" today). Only
+        # for this PC's own ship: a folder chosen for somebody else's vessel
+        # must not become the default this PC restores into.
+        wrote_last = True
+        if not ship or _same_ship(ship, mine):
+            wrote_last = auth.update_config({"last_dest_root": str(dest)})
+
+        # `update_config` and `remember_dest_root` RETURN failure, they do not
+        # raise it. Discarding that was the original bug wearing a success
+        # message: "Destination set", and forgotten again by the next start.
+        if not wrote_last or (bool(ship) and not wrote_ship):
+            self._log(
+                "Could not save the destination — it will be forgotten when "
+                f"HPO closes. Check {auth.CONFIG_FILE}", "warn")
+        self._refresh_step_states()
+
+    def _restore_dest(self):
+        """Put back the destination this PC was last using. Called once at
+        startup, before anything asks whether we are ready to receive."""
+        remembered = None
+        ship = current_ship()
+        if ship:
+            remembered = jobshot.get_dest_root(ship)
+        if remembered is None:
+            last = auth.load_config().get("last_dest_root")
+            remembered = Path(str(last)) if last else None
+        if remembered is None:
+            return
+        # A folder that is not there any more is not a destination. Say so
+        # rather than come up "ready" and fail on the first job.
+        if not remembered.is_dir():
+            # Say it on the screen too, not only in the log. The pairing dialog
+            # and the phone would otherwise both report "no destination chosen",
+            # which is a different problem with a different fix.
+            self._log(f"Last destination is gone: {remembered} — choose one again",
+                      "warn")
+            self.dest_label.configure(
+                text=f"Destination: {remembered} — NOT AVAILABLE, choose again",
+                text_color=COLOR_WARN)
+            return
+        self.dest_root = remembered
+        self.dest_label.configure(text=f"Destination: {remembered}",
+                                  text_color=COLOR_TEXT)
+        self._log(f"Destination: {remembered}", "info")
 
     # ─── Phase 1+2 ───────────────────────────────
 
