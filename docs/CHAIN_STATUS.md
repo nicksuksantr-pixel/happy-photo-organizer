@@ -58,6 +58,25 @@ running it rather than reading it:
 | days 1-26 taken | `27` | earliest free day |
 | **every day 1-30 taken** | `None` | **reuse, flagged `date_was_capped`** |
 
+### Nick's follow-up, 2026-09-26 — the same rule, said more exactly
+
+> *"เรื่องวันที่เนี่ย HPO จะเป็นคนจัดการตามกฎเดิมเลย คือวันไหนว่างให้ลงช่องนั้น ในการสร้างชื่อโฟลเดอร์อะนะ
+> ไม่ใช่ว่าเอามาจากที่ทำงานจริงๆ ยังใช้กฎเดิมเหมือนเดิม ไม่มีอะไรเปลี่ยน แต่ถ้ามันเกิดว่าเต็ม 30 ถึง 31 วันแล้วเนี่ย
+> คืองานมันเต็มไปแล้วเนี่ย ให้เราสุ่มวันเอาได้ สามารถซ้ำได้ ในงานที่มีแล้วก็สามารถใช้วันที่ซ้ำกันได้"*
+
+**HPO owns the date. The day in the folder name is a free slot, not a record of
+when the work happened** — and when the month is full we may pick a day and let
+it duplicate. That is the rule as it already stands, and it answers the nuance
+below. Measured, not assumed:
+
+| Case | What happens today |
+|---|---|
+| work day 26, nothing taken | `26` — its own day, because it is free |
+| work day 26, **26 already taken** | **`1`** — the earliest free day; the folder date now has nothing to do with the work date, exactly as he says |
+| days 1-26 taken | `27` |
+| days 20-30 taken | `1` |
+| **all 30 days taken** | reuse, `date_was_capped` — the permission he has just granted |
+
 **One nuance worth Nick's eye, because his words and the code could differ
 here.** He said *"go and overlap another day"*; the code keeps **the job's own
 real day** (clamped to the month length) rather than moving it to some other
@@ -67,7 +86,16 @@ last day of the month collapsed different jobs onto one date and risked
 same-name merges. Keeping each job's own day means **different work days stay on
 different folder dates, and only genuinely same-day jobs share one** — which is
 the same reasoning Nick gives for why sharing is safe at all. Flagged rather
-than changed; one word from him settles it either way.
+than changed — and his follow-up has now settled it: *"ให้เราสุ่มวันเอาได้"* is a
+**permission to duplicate, not an instruction to randomise**, and keeping each
+job's own day is one pick inside that permission.
+
+It is also the better pick, for one reason worth stating: with the month full
+every choice is a duplicate, so *which* duplicate only matters for whether two
+folders end up with the same name **and** the same day — which makes them merge
+into one folder. Keeping each job's real day means jobs shot on different days
+can never collide that way; a random day could pair two same-named jobs from
+different days by accident. **No code change.**
 
 ### The span: closing, on a measurement rather than on my argument
 Whether the **span** should still be recorded — `filed.work_date_end` for EMR to
