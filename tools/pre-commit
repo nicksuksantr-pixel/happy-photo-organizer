@@ -1,0 +1,60 @@
+#!/bin/sh
+# Git pre-commit hook — the invisible-byte guards, and nothing else.
+#
+# NOT INSTALLED BY DEFAULT. To turn it on for this clone:
+#
+#     cp tools/pre-commit .git/hooks/pre-commit
+#
+# Why only these three checks, when the suite has 113?
+#
+# The full suite takes 82 seconds (measured 2026-09-26). A hook that costs 82
+# seconds on every commit is a hook that gets --no-verify'd within a week, and a
+# guard people bypass is worse than no guard: it retires the worry without doing
+# the work. These three take 0.3 seconds.
+#
+# They also happen to be the right ones for a hook. The failures they catch are
+# INVISIBLE — a BOM, a CR, a control character an octal escape wrote into a
+# markdown file — so they are the failures a human reviewing the diff cannot be
+# expected to catch. Everything else in the suite fails loudly on screen when
+# you run it, which is the other half of the rule below.
+#
+# The rule this exists to enforce (EMR, 2026-09-26, after committing over a red
+# guard because the check and the commit were separate statements on one shell
+# line): A CHECK WHOSE FAILURE DOES NOT GATE THE NEXT STEP IS A REPORT, NOT A
+# GUARD. Note especially that piping a test run through `tail` or `head`
+# DISCARDS its exit code — `python tests/test_core.py | tail -4 && git commit`
+# commits over a red suite, silently. Measured on this machine, not assumed.
+#
+# Running the full suite before a commit is still the caller's job. This only
+# makes the silent class impossible to commit.
+
+python - <<'PY'
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path("tests").resolve()))
+try:
+    import test_core
+except Exception as e:                      # a broken suite must not block work
+    print(f"pre-commit: could not load the guards ({e}) - skipping")
+    sys.exit(0)
+
+failed = []
+for name in ("test_no_source_file_carries_a_bom_or_cr",
+             "test_no_record_carries_an_invisible_control_character",
+             "test_version_file_has_no_bom_and_parses_to_the_right_tuple"):
+    check = getattr(test_core, name, None)
+    if check is None:
+        continue
+    try:
+        check()
+    except AssertionError as e:
+        failed.append(f"{name}:\n{e}")
+
+if failed:
+    print("pre-commit REFUSED - invisible bytes in the tree:\n")
+    for f in failed:
+        print(f"  {f}\n")
+    print("These do not show in a diff. Fix them rather than --no-verify.")
+    sys.exit(1)
+PY

@@ -407,6 +407,36 @@ doing on the other side of that run, not instead of it. Recorded here so it is n
 rediscovered as a surprise: **HPO can produce a draft-bearing folder with no
 manifest, and EMR already handles it correctly.**
 
+### §3 addendum 6 — 2026-09-26, EMR's last finding applies to me, measured
+
+EMR committed over a red guard because the check and the commit were separate
+statements on one shell line. **A check whose failure does not gate the next step
+is a report, not a guard.** I went looking for the same hole here and found it,
+and it is worse than theirs in one way — mine was in every command I ran today:
+
+    python tests/test_core.py 2>&1 | tail -4 && git commit ...
+
+**The pipe discards the exit code.** Measured, not assumed: a command exiting 1,
+piped through `tail`, reports 0, and the `&&` fires. I read every run with my own
+eyes and no red suite ever got past me today, but the mechanism was there the whole
+time and eyes are not a gate.
+
+Two things came out of it:
+
+- **My habit changes**: never pipe a run that gates something. Capture the code, or
+  do not pipe.
+- **`tools/pre-commit`** now exists — the three invisible-byte guards, 0.3 seconds,
+  **not installed** (`cp tools/pre-commit .git/hooks/pre-commit` turns it on; Nick's
+  call, not mine). Proved both ways before being offered: exit 0 clean, exit 1 with
+  0x15 planted.
+
+Deliberately **not** the whole suite: it takes **82 seconds** (measured). A hook
+that costs 82 seconds per commit is one that gets `--no-verify`'d inside a week, and
+a guard people bypass is worse than none — it retires the worry without doing the
+work. The three it does run are the right ones for a hook anyway: their failures are
+invisible in a diff, so they are exactly what a human reviewer cannot catch.
+Everything else in the suite fails loudly on screen when you run it.
+
 — Codey (HPO session)
 
 ---
