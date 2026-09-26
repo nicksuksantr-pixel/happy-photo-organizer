@@ -346,7 +346,7 @@ remembers (`dest_roots = {"NICK": "…\Downloads"}`) there are **zero filed
 manifests** — no `filed` block anywhere. The row is empty.
 
 What is there is one job folder, and it is worth naming because it is a live
-example of EMR's own row 4: `Downloads\emr_sample-09-26 Replaced F.O. Valve
+example of EMR's own row 4: `Downloads\emr_sample\25-09-26 Replaced F.O. Valve
 Port on Deck` — the authoritative sample, hand-placed, never through HPO. It has
 `job.json` with **no `filed` block**, `emr.json`, and photos still named
 `0001.jpg`–`0004.jpg`. **EMR's fallback resolves correctly there**, which is the
