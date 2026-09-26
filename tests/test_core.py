@@ -2237,6 +2237,142 @@ def test_the_archive_still_takes_only_photos_and_json():
 
 # â”€â”€â”€ runner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
+# --- a draft aboard a job whose manifest does not survive (CHAIN sheet §3) ---
+#
+# JobShot asked it exactly: what happens to a job that arrives with emr.json but
+# whose job.json is rejected? The draft must not be filed, must not be left
+# lying in the archive or in quarantine, and above all the reply must not name
+# it — `extras` is what the phone turns into "safe to delete from the phone".
+
+
+def _draft_zip_with_broken_manifest(tmp: Path, *, job_id, manifest_path=None,
+                                    manifest_bytes=None):
+    import io
+    import zipfile
+    buf = io.BytesIO()
+    names = []
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for n in (1, 2):
+            name = f"{n:04d}.jpg"
+            src = tmp / f"_bm{n}.jpg"
+            _noisy_jpeg(src)
+            zf.writestr(f"{job_id}/{name}", src.read_bytes())
+            names.append(name)
+        zf.writestr(f"{job_id}/emr.json", b'{"emr": 1, "problem": ["orphan"]}')
+        if manifest_bytes is None:
+            manifest_bytes = json.dumps({
+                "jobshot": 1, "job_id": job_id, "job_name": "Orphan Draft",
+                "ship": "ENA CRYSTAL", "work_date": "2026-09-26",
+                "photos": names,
+            }).encode()
+        zf.writestr(manifest_path or f"{job_id}/job.json", manifest_bytes)
+    return buf.getvalue()
+
+
+def _no_draft_survived(rx, reply):
+    """The draft is nowhere on this PC, and nothing claims it was filed."""
+    for root in (rx.dest, rx.tmp / "quarantine"):
+        if root and root.exists():
+            strays = [str(f) for f in root.rglob("*") if "emr" in f.name.lower()]
+            assert not strays, strays
+    assert not reply.get("filed"), reply
+    for job in reply.get("filed", []):
+        assert job.get("extras") == [], job
+
+
+def test_a_refused_manifest_takes_its_draft_with_it():
+    """job.json nested deep enough for the gate to refuse it: the folder then
+    holds photos and a draft and no manifest, which is not a job."""
+    if not _have_pillow():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        rx = _Receiver(tmp)
+        try:
+            jid = "20260926-081000-gated"
+            status, reply = rx.post(_draft_zip_with_broken_manifest(
+                tmp, job_id=jid, manifest_path=f"{jid}/a/b/job.json"))
+            assert status == 422, (status, reply)
+            assert "job.json" in (reply.get("error") or ""), reply
+            assert any("refused entry" in w for w in reply.get("warnings", [])), reply
+            _no_draft_survived(rx, reply)
+        finally:
+            rx.close()
+
+
+def test_a_corrupt_manifest_takes_its_draft_with_it():
+    if not _have_pillow():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        rx = _Receiver(tmp)
+        try:
+            status, reply = rx.post(_draft_zip_with_broken_manifest(
+                tmp, job_id="20260926-082000-corrupt",
+                manifest_bytes=b"{ this is not json"))
+            assert status == 422, (status, reply)
+            assert any("valid JSON" in str(s.get("reason", ""))
+                       for s in reply.get("skipped", [])), reply
+            _no_draft_survived(rx, reply)
+        finally:
+            rx.close()
+
+
+def test_a_manifest_from_a_newer_protocol_takes_its_draft_with_it():
+    """The version gate is the one place a future JobShot will meet this build
+    first. It must fail closed, and the phone must keep the draft."""
+    if not _have_pillow():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        rx = _Receiver(tmp)
+        try:
+            newer = json.dumps({
+                "jobshot": 2, "job_id": "20260926-083000-v2",
+                "job_name": "From A Newer Phone", "ship": "ENA CRYSTAL",
+                "work_date": "2026-09-26", "photos": ["0001.jpg", "0002.jpg"],
+            }).encode()
+            status, reply = rx.post(_draft_zip_with_broken_manifest(
+                tmp, job_id="20260926-083000-v2", manifest_bytes=newer))
+            assert status == 422, (status, reply)
+            assert any("version" in str(s.get("reason", "")).lower()
+                       for s in reply.get("skipped", [])), reply
+            _no_draft_survived(rx, reply)
+        finally:
+            rx.close()
+
+
+def test_any_json_sidecar_rides_along_except_a_manifest():
+    """HPO never interprets a sidecar, so a new one (parts.json) needs no
+    change here. The exception is the trap worth knowing: `job-*.json` is read
+    as a manifest variant and is deliberately NOT carried as an extra."""
+    if not _have_pillow():
+        return
+    from core import jobshot
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        arrival = tmp / "arrival" / "20260926-090000-side"
+        arrival.mkdir(parents=True)
+        names = []
+        for n in (1, 2):
+            _noisy_jpeg(arrival / f"{n:04d}.jpg")
+            names.append(f"{n:04d}.jpg")
+        for name in ("emr.json", "parts.json", "job-backup.json"):
+            (arrival / name).write_text('{"x": 1}', encoding="utf-8")
+        (arrival / "job.json").write_text(json.dumps({
+            "jobshot": 1, "job_id": "20260926-090000-side",
+            "job_name": "Sidecar Test", "ship": "ENA CRYSTAL",
+            "work_date": "2026-09-26", "photos": names,
+        }), encoding="utf-8")
+        result = jobshot.import_job(arrival, tmp / "dest")
+        assert result.ok, result.error
+        assert result.extras == ["emr.json", "parts.json"], result.extras
+        assert not (result.final_folder / "job-backup.json").exists()
+        # copied, never moved: the sender keeps everything it sent
+        for name in ("emr.json", "parts.json", "job-backup.json"):
+            assert (arrival / name).is_file(), name
+
+
 def main() -> int:
     tests = [(n, f) for n, f in sorted(globals().items())
              if n.startswith("test_") and callable(f)]
