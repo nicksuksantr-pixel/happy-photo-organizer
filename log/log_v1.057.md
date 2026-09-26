@@ -68,4 +68,8 @@ brings his exact bug back with both green. The structural check is in now, over
   remembered-destination pair against the old code (`KeyError 'dest_roots'` —
   nothing was ever written), and the foreign-vessel test against the ordering as
   it stood an hour ago (it filed ENA Challenger's job into this PC's folder).
-- Still not verified, and it is a window change: **Nick has not seen it.**
+- **Confirmed by Nick on his own machine, 2026-09-26: "จำค่าแล้วครับ"** — the
+  destination survives a restart. That is the behaviour confirmed, in words.
+  The window itself he has still not shown me: v1.056's "Start a new batch"
+  button has never appeared in a screenshot, so by the v1.051 rule that change
+  is still unfinished even though this one is done.
