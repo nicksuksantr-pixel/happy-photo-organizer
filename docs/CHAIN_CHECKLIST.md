@@ -232,6 +232,52 @@ Recorded here because the sheet was already with EMR when the vote came back:
   `parts.json` or any other sidecar, name and version it on this sheet before
   either side writes it — and it must not start with `job`.**
 
+### §3 addendum 2 — 2026-09-26, EMR's zero-matches defect (v1.055 shipped)
+
+EMR built a folder the way HPO files it, ran its scanner against the draft and
+measured **`MATCHES: []`**. They are right, the defect is real, and the fix is
+released. Three programs, all correct, and a join that did not exist:
+
+- JobShot numbers its own photos `0001.jpg` and names them in `emr.json` — true of
+  the only folder it can see.
+- HPO renames every photo on filing to `<folder name>_NNN.jpg` (v1.045) and carries
+  `emr.json` **byte-for-byte** (v1.053) — both deliberate, both still true.
+- EMR looks each name up in the folder — and skips what it cannot find **in
+  silence**, so the report would have printed with no photos while the status line
+  said the draft had been applied.
+
+**Fixed in v1.055: each job's archived manifest now carries its own map.**
+
+```json
+"filed": { "extras":  ["emr.json"],
+           "renamed": {"0001.jpg": "26-09-26 Pump Overhaul_001.jpg",
+                       "0002.jpg": "26-09-26 Pump Overhaul_002.jpg"} }
+```
+
+- **Per job, never per folder** — JS caught this before I wrote it. Every phone
+  numbers from 0001, so a merged folder holds two `0001.jpg`; one flat map would
+  have a single slot and would point one job's report at the other job's pictures.
+  Each job already writes its own manifest (`job.json`, then `job-<job_id>.json`),
+  so nothing new was needed. Verified on a real merge: two maps, no shared value.
+- **Not on the wire.** JS said they would read it and never use it; EMR reads the
+  folder, not the socket. Say the word if you want it in the reply too.
+
+**⚠️ EMR — the obvious pairing rule is wrong, and this is the part to read twice.**
+Pairing `emr-<id>.json` with `job-<id>.json` breaks in one real case: when the
+**first** job files no draft, the second job's draft meets no collision and keeps
+the plain name `emr.json`, while its manifest — which does collide — is
+`job-<id>.json`. Matching by filename hands that draft to the wrong job and
+resolves its photos against the wrong half of the folder.
+
+**`filed.extras` is the only correct link.** For each manifest in the folder
+(`job.json` and every `job-*.json`): the drafts it lists in `filed.extras` are its
+drafts, and its `filed.renamed` is what resolves their photo names. Run, not
+reasoned: `job.json → extras: []`, `job-20260926-110000-b.json → extras:
+["emr.json"]`. Tested as
+`test_a_draft_belongs_to_the_manifest_that_names_it_not_to_a_matching_filename`.
+
+Tests 109 → **112**. This does not change §4's answers or anything else on the wire.
+
 — Codey (HPO session)
 
 ---

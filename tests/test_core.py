@@ -2494,6 +2494,133 @@ def test_a_skipped_job_is_told_what_to_do_about_it():
             rx.close()
 
 
+# --- v1.055: emr.json names the phone's photos, the folder holds the archive's --
+#
+# HPO renames photos on filing (v1.045) and carries emr.json byte-for-byte
+# (v1.053), so every photo name inside the draft matches nothing in the folder.
+# EMR measured it: zero matches, skipped in silence, a report filled in with no
+# photos while the status line said the draft had been applied. The map that
+# fixes it already existed at filing time and was thrown away.
+
+
+def _drop_job(root: Path, job_id: str, job_name: str, draft: bytes | None,
+              photos: int = 2) -> Path:
+    """One arrival folder, the way a phone leaves it: photos numbered from 1."""
+    folder = root / job_id
+    folder.mkdir(parents=True)
+    names = []
+    for n in range(1, photos + 1):
+        _noisy_jpeg(folder / f"{n:04d}.jpg")
+        names.append(f"{n:04d}.jpg")
+    if draft is not None:
+        (folder / "emr.json").write_bytes(draft)
+    (folder / "job.json").write_text(json.dumps({
+        "jobshot": 1, "job_id": job_id, "job_name": job_name,
+        "ship": "ENA CRYSTAL", "work_date": "2026-09-26", "photos": names,
+    }), encoding="utf-8")
+    return folder
+
+
+def _manifests(folder: Path) -> dict:
+    return {m.name: json.loads(m.read_text(encoding="utf-8"))
+            for m in sorted(folder.glob("job*.json"))}
+
+
+def test_a_draft_can_be_resolved_to_the_photos_actually_on_disk():
+    """The whole point: a name out of emr.json, through the map, to a file."""
+    if not _have_pillow():
+        return
+    from core import jobshot
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        draft = {"emr": 1, "parts": [{"photo": "0002.jpg"}], "before": "0001.jpg"}
+        arrival = _drop_job(tmp / "arr", "20260926-100000-res", "Pump Overhaul",
+                            json.dumps(draft).encode())
+        result = jobshot.import_job(arrival, tmp / "dest")
+        assert result.ok, result.error
+
+        filed = json.loads((result.final_folder / "job.json")
+                           .read_text(encoding="utf-8"))["filed"]
+        renamed = filed["renamed"]
+        # the draft is untouched, so it still says 0001.jpg / 0002.jpg
+        carried = json.loads((result.final_folder / "emr.json")
+                             .read_text(encoding="utf-8"))
+        assert carried == draft, "the draft must not be rewritten"
+        for phone_name in ("0001.jpg", "0002.jpg"):
+            assert phone_name in renamed, renamed
+            assert (result.final_folder / renamed[phone_name]).is_file()
+        # and the archive names really are different, or none of this matters
+        assert set(renamed) != set(renamed.values()), renamed
+
+
+def test_each_job_keeps_its_own_rename_map_in_a_merged_folder():
+    """Every phone numbers its own job from 0001, so a folder-level map would
+    have one slot for "0001.jpg" and would point one job's report at the other
+    job's pictures — the emr-<job_id>.json problem one layer down."""
+    if not _have_pillow():
+        return
+    from core import jobshot
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        dest = tmp / "dest"
+        first = jobshot.import_job(
+            _drop_job(tmp / "a1", "20260926-100000-a", "Pump Overhaul",
+                      b'{"emr": 1, "photo": "0001.jpg"}'), dest)
+        second = jobshot.import_job(
+            _drop_job(tmp / "a2", "20260926-110000-b", "Pump Overhaul",
+                      b'{"emr": 1, "photo": "0001.jpg"}'), dest)
+        assert second.merged_into_existing, "the test needs a merge"
+        assert first.final_folder == second.final_folder
+
+        manifests = _manifests(second.final_folder)
+        assert set(manifests) == {"job.json", "job-20260926-110000-b.json"}, \
+            sorted(manifests)
+        maps = {name: m["filed"]["renamed"] for name, m in manifests.items()}
+        a, b = maps["job.json"], maps["job-20260926-110000-b.json"]
+        # the same key in both, and it must NOT resolve to the same file
+        assert a["0001.jpg"] != b["0001.jpg"], maps
+        for m in (a, b):
+            for archive_name in m.values():
+                assert (second.final_folder / archive_name).is_file(), archive_name
+        assert not set(a.values()) & set(b.values()), maps
+
+
+def test_a_draft_belongs_to_the_manifest_that_names_it_not_to_a_matching_filename():
+    """Pairing emr-<id>.json with job-<id>.json looks safe and is not: when the
+    FIRST job files no draft, the second job's draft keeps the plain name
+    `emr.json` while its manifest is `job-<id>.json`. `filed.extras` is the only
+    correct link, which is why it is written next to `filed.renamed`."""
+    if not _have_pillow():
+        return
+    from core import jobshot
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        dest = tmp / "dest"
+        first = jobshot.import_job(
+            _drop_job(tmp / "a1", "20260926-100000-a", "Pump Overhaul", None), dest)
+        second = jobshot.import_job(
+            _drop_job(tmp / "a2", "20260926-110000-b", "Pump Overhaul",
+                      b'{"emr": 1, "photo": "0001.jpg"}'), dest)
+        assert second.merged_into_existing
+        assert first.extras == [] and second.extras == ["emr.json"], \
+            (first.extras, second.extras)
+
+        manifests = _manifests(second.final_folder)
+        # the trap: the plain-named draft belongs to the job with the SUFFIXED
+        # manifest, so matching names would hand it the wrong photos
+        assert manifests["job.json"]["filed"]["extras"] == []
+        by_name = manifests["job-20260926-110000-b.json"]["filed"]
+        assert by_name["extras"] == ["emr.json"], by_name
+
+        owner = [m for m in manifests.values() if "emr.json" in m["filed"]["extras"]]
+        assert len(owner) == 1
+        renamed = owner[0]["filed"]["renamed"]
+        assert (second.final_folder / renamed["0001.jpg"]).is_file()
+        # and that is the second job's picture, not the first job's
+        assert renamed["0001.jpg"] not in \
+            manifests["job.json"]["filed"]["renamed"].values()
+
+
 def main() -> int:
     tests = [(n, f) for n, f in sorted(globals().items())
              if n.startswith("test_") and callable(f)]

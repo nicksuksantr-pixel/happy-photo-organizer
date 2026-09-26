@@ -9,6 +9,52 @@ Cosmetic / design / V2-scope items that survived round 6 + 7 + 8. All
 catalogued in detail at the bottom of this file under "Round 6
 deferred".
 
+## [1.055] — 2026-09-26 — The draft's photo names now lead somewhere
+
+### Fixed — a join between three correct programs
+EMR built a folder the way HPO files it, ran its scanner against the draft and
+measured **zero matches**. The chain: JobShot numbers its own photos `0001.jpg`
+and names them in `emr.json` (correct — those are the names in the only folder
+it can see); HPO renames every photo on filing to `<folder name>_NNN.jpg`
+(v1.045) and carries `emr.json` byte-for-byte (v1.053) — both correct; EMR looks
+each name up in the folder (correct). No step is wrong and the join does not
+exist. EMR skips a name it cannot find **in silence**, so a report would have
+printed with no photos while the status line said the draft had been applied.
+
+Each job's archived manifest now carries its own map:
+
+```json
+"filed": { "extras": ["emr.json"],
+           "renamed": {"0001.jpg": "26-09-26 Pump Overhaul_001.jpg"} }
+```
+
+`rename_photos_for_folder()` already returned exactly this and `_file_group`
+already kept it per arrival — it was live at filing time and dropped when the
+function returned. This is persistence, not computation.
+
+**Per job, never per folder.** Every phone numbers its own job from 1, so a
+merged folder holds two different `0001.jpg`s; one flat map would have a single
+slot for that key and would point one job's report at the other job's pictures —
+the two-drafts-overwriting problem one layer down, and just as quiet. Each job
+already writes its own manifest (`job.json`, then `job-<job_id>.json`), so
+per-job storage needed no new file. Verified on a real merge: two maps, no
+shared value.
+
+Not on the wire: JobShot said they would read it and never use it (the phone has
+no business caring what the archive calls a file) and EMR reads the folder, not
+the socket.
+
+### Also — the obvious pairing rule is wrong in one case
+Pairing `emr-<id>.json` with `job-<id>.json` breaks when the **first** job files
+no draft: the second job's draft meets no collision so it keeps the plain name
+`emr.json`, while its manifest, which does collide, is `job-<id>.json`. Matching
+by filename hands the draft to the wrong job. **`filed.extras` is the only
+correct link** — the manifest that names a draft is the manifest whose `renamed`
+resolves it. Tested, because it was run rather than reasoned about.
+
+### Tests
+109 → **112**.
+
 ## [1.054] — 2026-09-26 — The lost-reply route can speak about the draft
 
 Nick ordered one checklist for the whole chain, passed hand to hand (JS → HPO →

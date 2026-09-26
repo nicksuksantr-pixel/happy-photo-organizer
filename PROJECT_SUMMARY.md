@@ -1,6 +1,6 @@
 # 🎨 Happy Photo Organizer — Project Summary
 
-**Status:** v1.054 (2026-09-26 — **RELEASED** — **a job sent from the phone over Wi-Fi**, paired by QR, filed by the same path as a dropped folder, carrying the report draft (`emr.json`) through to the archive folder · both the upload reply and the lost-reply receipt name every file that was filed, and which day the archive rule moved the job to · an update button you can see and press · builds on v1.047 (three ways to import a job by hand) and v1.045 (photos named after their folder) · tests 109/109)
+**Status:** v1.055 (2026-09-26 — **RELEASED** — **a job sent from the phone over Wi-Fi**, paired by QR, filed by the same path as a dropped folder, carrying the report draft (`emr.json`) through to the archive folder **with a per-job map from the phone's photo names to the archive's**, so the draft can be resolved against the folder it lands in · both the upload reply and the lost-reply receipt name every file that was filed, and which day the archive rule moved the job to · an update button you can see and press · builds on v1.047 (three ways to import a job by hand) and v1.045 (photos named after their folder) · tests 112/112)
 **Author:** Nick (with Codey — Claude Code)
 **Family:** Happy AI Family (sibling: HAPPY AI Agent)
 **Last full review:** Tester sprint 2026-06-04 (Codey, 3 parallel audit agents) — see "Audit history" below

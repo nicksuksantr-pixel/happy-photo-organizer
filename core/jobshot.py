@@ -716,6 +716,21 @@ def _write_manifest(arrival: _Arrival) -> None:
         "merged_into_existing_folder": result.merged_into_existing,
         "grouped_with": list(result.grouped_with),
         "extras": list(result.extras),
+        # phone name -> archive name, for THIS job only.
+        #
+        # The photos are renamed on filing (v1.045) but `emr.json` is carried
+        # byte-for-byte, so the names inside it are the phone's and match
+        # nothing in the folder. EMR measured the result: zero matches, and its
+        # own rule is to skip a name it cannot find *in silence* - so the
+        # report would have been filled in with no photos while saying the
+        # draft had been applied (found on the chain sheet, 2026-09-26).
+        #
+        # It lives in each job's own manifest and nowhere else, because a
+        # merged folder holds two jobs that each numbered their photos from
+        # 0001: one flat map at folder level would have one slot for `0001.jpg`
+        # and would point one job's report at the other job's pictures. That is
+        # the `emr-<job_id>.json` problem one layer down, and just as quiet.
+        "renamed": dict(result.photo_renames),
         "hpo_version": read_version(),
         "filed_at": datetime.now().isoformat(timespec="seconds"),
     }
