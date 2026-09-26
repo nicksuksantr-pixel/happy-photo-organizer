@@ -1,7 +1,10 @@
 # Bug Log — v1.055
 
-> **Status: OPEN — deferred by Nick ("จดไว้ค่อยแก้พร้อมครั้งหน้าไม่รีบ", 2026-09-26).**
-> Nothing here is fixed. This file is the brief for the session that does fix it.
+> **Status: FIXED in v1.056 (2026-09-26).** Nick read this brief and said
+> *"แก้ทั้ง 3 ตัวพร้อมกันเลย"* — all three the same day. See `log/log_v1.056.md`
+> for what shipped and for the two further rounds of review it took, and
+> `CHANGELOG.md` [1.056]. The diagnosis below is left exactly as it was written,
+> before any of it was fixed.
 > Diagnosed read-only by three independent investigations; **nobody ran the app** —
 > every claim below is from source, cited to `file:line`. Confirm against a running
 > window before trusting the reproduction steps.

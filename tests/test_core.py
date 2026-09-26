@@ -2650,6 +2650,507 @@ def test_a_draft_belongs_to_the_manifest_that_names_it_not_to_a_matching_filenam
             manifests["job.json"]["filed"]["renamed"].values()
 
 
+# --- v1.056: a finished batch can be cleared, and not committed twice -------
+#
+# Nick, 2026-09-26: "เวลาสร้างงานเสร็จแล้วเคลียงานจากลิสเพื่อทำใหม่ไม่ได้ ต้องปิดโปรแกรมเปิดใหม่".
+# Diagnosis in bug/bug_v1.055.md: no control existed, the commit left the plan
+# armed, and it left source_paths full while the drop zone appended to them.
+
+
+def _two_row_plan(tmp: Path, *, second_named: bool = True):
+    """One pending folder per row, the way Phase 1 leaves them."""
+    dest = tmp / "dest"
+    dest.mkdir(exist_ok=True)
+    rows = []
+    for idx, name in enumerate(("Pump Overhaul", "Valve Repair" if second_named else ""), 1):
+        folder = dest / f"2026-09-2{idx}{processor.PENDING_MARKER}0{idx}"
+        folder.mkdir()
+        (folder / f"img_{idx:03d}.jpg").write_bytes(bytes([idx]) * 10)
+        rows.append(processor.JobAssignment(
+            folder_date=datetime(2026, 9, 20 + idx), job_name=name,
+            temp_folder=folder))
+    return processor.Plan(assignments=rows, dest_root=dest), rows, dest
+
+
+def test_committing_the_same_plan_twice_files_nothing_and_errors_nothing():
+    """The commit button used to re-arm on any truthy plan. Pressing it again
+    walked folders that had been renamed away and reported an error for every
+    row of a run that had in fact succeeded."""
+    with tempfile.TemporaryDirectory() as td:
+        plan, rows, dest = _two_row_plan(Path(td))
+
+        first = processor.phase4_rename_folders(plan)
+        assert first.renamed == 2, (first.renamed, first.errors)
+        assert first.errors == [], first.errors
+        assert all(a.committed for a in rows)
+        filed = sorted(f.name for f in dest.iterdir())
+
+        second = processor.phase4_rename_folders(plan)
+        assert second.renamed == 0, second.renamed
+        assert second.already_done == 2, second.already_done
+        assert second.errors == [], second.errors
+        assert second.skipped == 0, second.skipped
+        # and nothing on disk moved
+        assert sorted(f.name for f in dest.iterdir()) == filed
+
+
+def test_a_row_skipped_for_want_of_a_name_can_still_be_committed_afterwards():
+    """The real reason the button must not simply be disabled after a commit:
+    Nick names the row that was skipped and commits again. Only that row moves,
+    and the ones already filed are reported as such rather than as errors."""
+    with tempfile.TemporaryDirectory() as td:
+        plan, rows, dest = _two_row_plan(Path(td), second_named=False)
+
+        first = processor.phase4_rename_folders(plan)
+        assert (first.renamed, first.skipped) == (1, 1), (first.renamed, first.skipped)
+        assert rows[0].committed is True
+        assert rows[1].committed is False, "a skipped row is not committed"
+
+        rows[1].job_name = "Valve Repair"
+        second = processor.phase4_rename_folders(plan)
+        assert second.renamed == 1, (second.renamed, second.errors)
+        assert second.already_done == 1, second.already_done
+        assert second.errors == [], second.errors
+        assert (dest / "22-09-26 Valve Repair").is_dir()
+        assert (dest / "21-09-26 Pump Overhaul").is_dir()
+
+
+def test_an_errored_row_is_not_marked_committed():
+    """committed must mean "this folder is in the archive", not "we tried"."""
+    with tempfile.TemporaryDirectory() as td:
+        plan, rows, dest = _two_row_plan(Path(td))
+        # make the second row impossible: its pending folder is gone
+        import shutil as _sh
+        _sh.rmtree(rows[1].temp_folder)
+
+        res = processor.phase4_rename_folders(plan)
+        assert res.renamed == 1, res.renamed
+        assert res.errors, "the missing folder must be reported"
+        assert rows[0].committed is True
+        assert rows[1].committed is False
+
+
+def test_the_window_has_a_way_to_clear_a_finished_batch():
+    """Mechanical, not a judgement call: the v1.047/v1.048 lesson is that a
+    finished feature with no entry point is not finished, and grep is what
+    catches it. Reads main.py as source - no window is opened."""
+    import ast
+    src = (ROOT / "main.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    window = next(n for n in ast.walk(tree)
+                  if isinstance(n, ast.ClassDef) and n.name == "MainWindow")
+    methods = {n.name: n for n in window.body if isinstance(n, ast.FunctionDef)}
+
+    for name in ("_reset_batch", "_on_new_batch"):
+        assert name in methods, f"{name} is missing"
+
+    def calls_in(fn_name):
+        return {n.func.attr for n in ast.walk(methods[fn_name])
+                if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)}
+
+    # the button exists AND is wired to the handler
+    assert "new_batch_btn" in src, "no new-batch button"
+    assert "command=self._on_new_batch" in src, "the button calls nothing"
+    assert "_reset_batch" in calls_in("_on_new_batch"), "the button resets nothing"
+    # and the analysis path shares the one implementation, so they cannot drift
+    assert "_reset_batch" in calls_in("_start_phase12"), \
+        "_start_phase12 still clears the batch its own way"
+
+
+def _have_ctk() -> bool:
+    try:
+        import customtkinter  # noqa: F401
+        return True
+    except Exception:
+        return False
+
+
+class _FakeWidget:
+    """Enough of a CTk widget for the window's own logic to run headless."""
+
+    def __init__(self):
+        self.state = "normal"
+        self.text = ""
+        self.children = []
+        self.mapped = True
+        self.filed = False
+
+    def configure(self, **kw):
+        if "state" in kw:
+            self.state = kw["state"]
+        if "text" in kw:
+            self.text = kw["text"]
+
+    def winfo_children(self):
+        return list(self.children)
+
+    def winfo_ismapped(self):
+        return self.mapped
+
+    def destroy(self):
+        self.destroyed = True
+
+    def pack(self, **kw):
+        self.mapped = True
+
+    def pack_forget(self):
+        self.mapped = False
+
+    def mark_filed(self, final_folder=None):
+        self.filed = True
+        self.filed_folder = final_folder
+
+
+class _Silent:
+    """messagebox with the dialogs taken out. Records what was asked."""
+
+    def __init__(self, answer=True):
+        self.answer = answer
+        self.asked = []
+        self.shown = []
+
+    def askyesno(self, title, message, **kw):
+        self.asked.append((title, message))
+        return self.answer
+
+    def showinfo(self, title, message="", **kw):
+        self.shown.append((title, message))
+
+    def showwarning(self, title, message="", **kw):
+        self.shown.append((title, message))
+
+
+class _no_dialogs:
+    """with _no_dialogs() as box: ... - swaps main.messagebox for the duration."""
+
+    def __init__(self, answer=True):
+        self.box = _Silent(answer)
+
+    def __enter__(self):
+        import main as _app
+        self._app = _app
+        self._real = _app.messagebox
+        _app.messagebox = self.box
+        return self.box
+
+    def __exit__(self, *exc):
+        self._app.messagebox = self._real
+        return False
+
+
+class _StubWindow:
+    """Drives the REAL MainWindow methods without opening a window.
+
+    Only the attributes those methods touch. Anything missing raises, which is
+    the point: a method that starts reaching for new state fails loudly here
+    instead of passing a test that never exercised it.
+    """
+
+    def __init__(self, plan=None, sources=None, busy=False):
+        import types
+        self.plan = plan
+        self.source_paths = list(sources or [])
+        self._committed_sources = list(sources or [])
+        self.dest_root = Path("D:/archive")
+        self.worker = types.SimpleNamespace(is_alive=lambda: busy) if busy else None
+        self._rename_done = False
+        self._phase_start = 1.0
+        self._batch_running = True
+        self.table_scroll = _FakeWidget()
+        self.review_summary = _FakeWidget()
+        self.status_detail = _FakeWidget()
+        self.phase4_btn = _FakeWidget()
+        self.phase12_btn = _FakeWidget()
+        self.cancel_btn = _FakeWidget()
+        self.new_batch_btn = _FakeWidget()
+        self.delete_flagged_btn = _FakeWidget()
+        self.sources_label = _FakeWidget()
+        self.logs = []
+        self.boxes = []
+        for name in ("step1", "step2", "step3"):
+            w = _FakeWidget()
+            w.set_status = lambda v, _w=w: setattr(_w, "status", v)
+            setattr(self, name, w)
+        self.update_worker = types.SimpleNamespace(resume_deferred=lambda: None)
+
+    # the few helpers the methods under test call back into
+    def _log(self, msg, level="info"):
+        self.logs.append(msg)
+
+    def _refresh_sources(self):
+        pass
+
+    def _set_progress(self, ratio, label=""):
+        if label:
+            self.status_detail.configure(text=label)
+
+    def __getattr__(self, name):
+        """Bind any other MainWindow method to this stub on first use."""
+        import main as _app
+        fn = getattr(_app.MainWindow, name, None)
+        if fn is None or not callable(fn):
+            raise AttributeError(name)
+        return fn.__get__(self)
+
+
+def _plan_rows(tmp: Path, names=("Pump Overhaul", "Valve Repair")):
+    dest = tmp / "dest"
+    dest.mkdir(exist_ok=True)
+    rows = []
+    for idx, name in enumerate(names, 1):
+        folder = dest / f"2026-09-2{idx}{processor.PENDING_MARKER}0{idx}"
+        folder.mkdir()
+        (folder / f"img_{idx:03d}.jpg").write_bytes(bytes([idx]) * 10)
+        rows.append(processor.JobAssignment(
+            folder_date=datetime(2026, 9, 20 + idx), job_name=name,
+            temp_folder=folder))
+    return processor.Plan(assignments=rows, dest_root=dest), rows, dest
+
+
+def test_commit_is_not_re_armed_over_a_batch_that_is_fully_filed():
+    """BUG-2, behaviourally: after a clean commit there is nothing to commit."""
+    if not _have_ctk():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        plan, rows, _dest = _plan_rows(Path(td))
+        processor.phase4_rename_folders(plan)
+        w = _StubWindow(plan=plan)
+        w._reset_buttons()
+        assert w.phase4_btn.state == "disabled", w.phase4_btn.state
+
+
+def test_commit_comes_back_for_a_row_that_was_skipped_then_named():
+    if not _have_ctk():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        plan, rows, _dest = _plan_rows(Path(td), names=("Pump Overhaul", ""))
+        processor.phase4_rename_folders(plan)
+        w = _StubWindow(plan=plan)
+        w._reset_buttons()
+        assert w.phase4_btn.state == "normal", "the unnamed row still needs committing"
+        rows[1].job_name = "Valve Repair"
+        processor.phase4_rename_folders(plan)
+        w._reset_buttons()
+        assert w.phase4_btn.state == "disabled", w.phase4_btn.state
+
+
+def test_deleting_the_last_unfiled_row_disarms_commit():
+    """The review's finding: _reset_buttons was not the only thing that armed
+    the button, so removing the last pending row left it live over nothing."""
+    if not _have_ctk():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        plan, rows, _dest = _plan_rows(Path(td), names=("Pump Overhaul", ""))
+        processor.phase4_rename_folders(plan)      # row 2 skipped, row 1 filed
+        w = _StubWindow(plan=plan)
+        w._reset_buttons()
+        assert w.phase4_btn.state == "normal"
+        plan.assignments.remove(rows[1])           # the per-row Delete
+        w._sync_commit_button()
+        assert w.phase4_btn.state == "disabled", w.phase4_btn.state
+
+
+def test_a_finished_commit_clears_only_the_sources_it_consumed():
+    if not _have_ctk():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        plan, rows, _dest = _plan_rows(Path(td))
+        res = processor.phase4_rename_folders(plan)
+        spent = Path("C:/photos/job-A")
+        w = _StubWindow(plan=plan, sources=[spent])
+        # a folder Nick queued WHILE the commit was running
+        queued = Path("C:/photos/job-B")
+        w.source_paths.append(queued)
+        with _no_dialogs():
+            w._on_rename_done(res)
+        assert w.source_paths == [queued], w.source_paths
+        assert w._rename_done is True
+        assert any("Sources cleared" in m for m in w.logs), w.logs
+
+
+def test_a_commit_that_left_work_behind_keeps_the_sources_and_is_not_done():
+    """Cancelled or errored: `renamed` was non-zero, but rows are still unfiled.
+    Reading `renamed` alone used to clear his sources and flip Step 3 to done."""
+    if not _have_ctk():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        plan, rows, _dest = _plan_rows(Path(td), names=("Pump Overhaul", ""))
+        res = processor.phase4_rename_folders(plan)   # 1 filed, 1 skipped
+        assert res.renamed == 1 and res.skipped == 1
+        spent = Path("C:/photos/job-A")
+        w = _StubWindow(plan=plan, sources=[spent])
+        with _no_dialogs():
+            w._on_rename_done(res)
+        assert w.source_paths == [spent], "a half-done batch still needs its sources"
+        assert w._rename_done is False, "Step 3 must not read as done"
+        assert w.step3.status != "done"
+
+
+def test_a_filed_row_stops_looking_editable():
+    if not _have_ctk():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        plan, rows, _dest = _plan_rows(Path(td), names=("Pump Overhaul", ""))
+        res = processor.phase4_rename_folders(plan)
+        w = _StubWindow(plan=plan, sources=[Path("C:/photos/job-A")])
+        filed_row, open_row = _FakeWidget(), _FakeWidget()
+        filed_row.assignment, open_row.assignment = rows[0], rows[1]
+        w.table_scroll.children = [filed_row, open_row]
+        with _no_dialogs():
+            w._on_rename_done(res)
+        assert filed_row.filed is True, "a committed row must be marked"
+        assert filed_row.filed_folder is not None,             "and told where it went, or its thumbnail opens the folder that was renamed away"
+        assert open_row.filed is False, "a row still to file must stay editable"
+
+
+def test_the_window_can_clear_a_finished_batch():
+    """Behavioural version of the entry-point check: the button's own handler,
+    on a finished batch, leaves nothing behind."""
+    if not _have_ctk():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        plan, _rows, _dest = _plan_rows(Path(td))
+        processor.phase4_rename_folders(plan)
+        w = _StubWindow(plan=plan, sources=[Path("C:/photos/job-A")])
+        w.table_scroll.children = [_FakeWidget(), _FakeWidget()]
+        with _no_dialogs() as box:
+            w._on_new_batch()
+        assert box.asked == [], "a fully filed batch must clear without a question"
+        assert w.plan is None
+        assert w._rename_done is False
+        assert w.phase4_btn.state == "disabled"
+        # the job list is what this button clears; Step 1 has its own Clear, and
+        # a folder queued during the last commit must survive this click
+        assert w.source_paths == [Path("C:/photos/job-A")], w.source_paths
+
+
+def test_clearing_a_batch_that_is_not_filed_asks_first():
+    if not _have_ctk():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        plan, _rows, _dest = _plan_rows(Path(td))
+        w = _StubWindow(plan=plan)
+        with _no_dialogs(answer=False) as box:
+            w._on_new_batch()
+        assert box.asked, "an uncommitted batch must not vanish silently"
+        assert "__pending_" in box.asked[0][1], box.asked[0][1]
+        assert w.plan is plan, "answering No must change nothing"
+
+
+def test_the_new_batch_button_comes_alive_when_there_is_something_to_clear():
+    """The whole point of the release. Without this, main.py could hard-code
+    the button to "disabled" and every other test would still pass."""
+    if not _have_ctk():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        plan, _rows, _dest = _plan_rows(Path(td))
+
+        idle = _StubWindow()
+        idle._refresh_step_states()
+        assert idle.new_batch_btn.state == "disabled", "nothing to clear yet"
+
+        dropped = _StubWindow(sources=[Path("C:/photos/job-A")])
+        dropped._refresh_step_states()
+        assert dropped.new_batch_btn.state == "normal", "sources are clearable"
+
+        analysed = _StubWindow(plan=plan)
+        analysed._refresh_step_states()
+        assert analysed.new_batch_btn.state == "normal", "a plan is clearable"
+
+        processor.phase4_rename_folders(plan)
+        done = _StubWindow(plan=plan)
+        done._rename_done = True
+        done._refresh_step_states()
+        assert done.new_batch_btn.state == "normal", \
+            "THE reported bug: a finished batch must be clearable"
+
+
+def test_emptying_the_list_by_deleting_rows_disarms_commit():
+    """_render_plan returns early on an empty plan; that early return used to
+    jump over the commit-button sync, so the bulk-delete path left it armed."""
+    if not _have_ctk():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        plan, rows, _dest = _plan_rows(Path(td))
+        w = _StubWindow(plan=plan)
+        w._sync_commit_button()
+        assert w.phase4_btn.state == "normal"
+        plan.assignments.clear()
+        w._render_plan(plan)
+        assert w.phase4_btn.state == "disabled", w.phase4_btn.state
+
+
+def test_a_reset_is_refused_while_a_worker_is_running():
+    if not _have_ctk():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        plan, _rows, _dest = _plan_rows(Path(td))
+        w = _StubWindow(plan=plan, sources=[Path("C:/photos/job-A")], busy=True)
+        assert w._reset_batch() is False
+        assert w.plan is plan and w.source_paths
+        w._refresh_step_states()
+        assert w.new_batch_btn.state == "disabled"
+
+
+def test_the_analysis_path_resets_the_batch_but_keeps_its_sources():
+    """_start_phase12 shares one reset with the button so the two cannot drift,
+    but it must keep the sources it is about to read."""
+    if not _have_ctk():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        plan, _rows, _dest = _plan_rows(Path(td))
+        src = Path("C:/photos/job-A")
+        w = _StubWindow(plan=plan, sources=[src])
+        w.table_scroll.children = [_FakeWidget(), _FakeWidget()]
+        assert w._reset_batch(keep_sources=True) is True
+        assert w.source_paths == [src], w.source_paths
+        assert w.plan is None
+        assert w.dest_root == Path("D:/archive"), "the destination must survive"
+        assert all(getattr(c, "destroyed", False) for c in w.table_scroll.children)
+
+
+def test_phase1_never_walks_into_an_abandoned_pending_folder():
+    """A batch cleared before its commit leaves its `__pending_` folder behind.
+    Reusing that name would file the abandoned photos under the next job's
+    name, and the only sign would be a photo count that looked large.
+
+    The orphan must be dated the same day the new group will land on, or the
+    names cannot collide and the test proves nothing — which is exactly what
+    the first version of it did.
+    """
+    if not _have_pillow():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        dest = Path(td) / "dest"
+        dest.mkdir()
+        src = Path(td) / "src"
+        src.mkdir()
+        for i in range(1, 3):
+            _noisy_jpeg(src / f"new_{i}.jpg")
+
+        # what Phase 1 would have called this group, had nothing been there
+        probe = processor.phase1_resize_and_group([src], dest)
+        taken = probe.assignments[0].temp_folder
+        assert processor.PENDING_MARKER in taken.name
+        for f in taken.iterdir():
+            f.unlink()
+        taken.rmdir()
+
+        # now plant an abandoned batch under exactly that name
+        orphan = dest / taken.name
+        orphan.mkdir()
+        (orphan / "left_behind.jpg").write_bytes(b"x" * 10)
+
+        plan = processor.phase1_resize_and_group([src], dest)
+        folders = [a.temp_folder for a in plan.assignments]
+        assert orphan not in folders, (
+            f"phase 1 walked into the abandoned folder {orphan.name}")
+        assert (orphan / "left_behind.jpg").is_file(), "and must not touch it"
+        # the new batch's photos are somewhere else entirely
+        assert all(processor.PENDING_MARKER in f.name for f in folders)
+        assert not any((f / "left_behind.jpg").exists() for f in folders)
+
+
 def main() -> int:
     tests = [(n, f) for n, f in sorted(globals().items())
              if n.startswith("test_") and callable(f)]

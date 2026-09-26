@@ -9,6 +9,64 @@ Cosmetic / design / V2-scope items that survived round 6 + 7 + 8. All
 catalogued in detail at the bottom of this file under "Round 6
 deferred".
 
+## [1.056] — 2026-09-26 — You can clear a finished batch
+
+Nick: *"เวลาสร้างงานเสร็จแล้วเคลียงานจากลิสเพื่อทำใหม่ไม่ได้ ต้องปิดโปรแกรมเปิดใหม่เท่านั้น"* — after a
+batch was committed, closing and reopening the app was the only way to empty the
+review list. Writing the defect down turned up two more behind it; he said fix
+all three together. Full diagnosis in `bug/bug_v1.055.md`.
+
+### Added — "Start a new batch"
+There was no control. Not a broken one — none. The only code that emptied Step 3
+lived inside *Start AI Tagging*, so clearing was a side effect of launching the
+next run, and the button labelled *Clear* emptied Step 1's sources and touched
+nothing in the list. A restart worked because it re-runs `__init__`.
+
+The new button sits in Step 3 beside *Commit Rename*, always visible and
+disabled when there is nothing to clear. It asks first when rows are not filed
+yet, and says plainly that their working folders stay in the destination and the
+originals are untouched. One `_reset_batch()` now serves both it and the
+analysis path, so the two cannot drift; the destination, the catalog, the phone
+receiver and the usage log deliberately survive it.
+
+### Fixed — Commit stayed armed over a batch that was already filed
+It re-armed on any truthy plan, so after a finished run it sat live over folders
+that had been renamed away; pressing it reported an error for every row of a run
+that had in fact succeeded. Rows now carry `committed`, `phase4_rename_folders`
+skips those (counting them in `already_done`), and one `_sync_commit_button()`
+decides the button everywhere. The real retry — name the row that was skipped,
+commit again — is unaffected, which is why the button is not simply disabled.
+
+### Fixed — the next job re-ingested the one just filed
+The commit left its sources loaded while the drop zone appends, so dropping the
+next job collected the previous batch again: resized again, sent to Gemini
+again, filed again on another day number. Nick had never hit it **only because
+the restart he used to clear the list also emptied the source list** — so fixing
+the list without this would have removed the accident that was protecting him.
+The commit now drops the sources it actually consumed, and only once every row
+is filed.
+
+### Fixed — a batch abandoned before its commit could poison the next one
+Phase 1 created its `__pending_NN` folder with `exist_ok=True`, so a later run on
+the same day walked back into an abandoned batch's folder and would have filed
+its leftover photos under the new job's name — visible only as a photo count
+slightly larger than expected. It steps past any non-empty pending folder now.
+
+### Also
+A cancelled or errored commit no longer presents itself as finished; the receipt
+line survives the progress bar instead of being painted over by it; a filed row
+stops looking editable and its thumbnail opens the archive folder rather than the
+pending path that was renamed away; "Start a new batch" greys out while a commit
+runs; Commit refuses to start a second one.
+
+### Tests
+119 → **130**, and three rounds of independent review before any of it shipped.
+Two things the review found are worth naming: three tests reached a real Tk
+`messagebox` and would **block on a modal** when run alone while passing inside
+the full suite, and the new abandoned-folder test was **vacuous** — its orphan
+could never have collided with the folder under test. Both fixed; the second is
+now proven red against the unfixed code.
+
 ## [1.055] — 2026-09-26 — The draft's photo names now lead somewhere
 
 ### Fixed — a join between three correct programs

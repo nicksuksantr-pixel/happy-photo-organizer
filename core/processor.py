@@ -165,6 +165,11 @@ class JobAssignment:
     # name. A caller that carries a side-car file listing the photos (JobShot's
     # job.json) has no other way to follow the rename.
     photo_renames: dict[str, str] = field(default_factory=dict)
+    # True once this row's folder has actually been renamed into the archive.
+    # `temp_folder` still points at the pending path afterwards, so without this
+    # a second commit would walk a folder that is no longer there and report an
+    # error for work that in fact succeeded (bug/bug_v1.055.md BUG-2).
+    committed: bool = False
 
     @property
     def folder_name(self) -> str:
@@ -215,6 +220,10 @@ class CommitResult:
     skipped: int = 0
     errors: list[str] = field(default_factory=list)
     output_folders: list[Path] = field(default_factory=list)
+    # Rows this run left alone because a previous commit already filed them.
+    # Counted rather than ignored: "nothing happened" and "this was already
+    # done" look the same on screen, and only one of them is fine.
+    already_done: int = 0
 
 
 # ─── Date allocation helpers ───
@@ -485,9 +494,20 @@ def phase1_resize_and_group(
             break
 
         # temp folder name = "YYYY-MM-DD_session-N"
+        #
+        # Never move into a pending folder that already holds photos. A batch
+        # that was abandoned before its commit leaves its folder behind, and
+        # the name is only the date plus a per-run counter — so the next run on
+        # the same day would have walked straight back into it and filed the
+        # abandoned batch's photos under this job's name. Nobody would see it:
+        # the count in the review row would simply be larger than expected.
         date_part = g.representative_date.strftime("%Y-%m-%d")
-        temp_name = f"{date_part}{PENDING_MARKER}{idx:02d}"
-        temp_folder = dest_root / temp_name
+        seq = idx
+        while True:
+            temp_folder = dest_root / f"{date_part}{PENDING_MARKER}{seq:02d}"
+            if not temp_folder.exists() or not any(temp_folder.iterdir()):
+                break
+            seq += 1
         temp_folder.mkdir(parents=True, exist_ok=True)
 
         # source_label = the source folder most images in this group came from.
@@ -771,6 +791,17 @@ def phase4_rename_folders(
         if cancel_event and cancel_event.is_set():
             break
 
+        # Already filed by an earlier commit on this same plan. Its folder has
+        # been renamed away, so touching it again can only fail — and the row
+        # that brings Nick back here is usually a sibling that was skipped for
+        # want of a name, which he has now typed in. Let that one through and
+        # leave this one alone.
+        if a.committed:
+            result.already_done += 1
+            if progress_cb:
+                progress_cb(i, total, f"Already filed {i}/{total}")
+            continue
+
         if not a.job_name.strip() or not a.temp_folder:
             result.skipped += 1
             # Still report progress so the bar reaches 100% on skip-only runs
@@ -840,6 +871,7 @@ def phase4_rename_folders(
             if target not in result.output_folders:
                 result.output_folders.append(target)
             result.renamed += 1
+            a.committed = True
 
             # update catalog — wrap in try so a catalog failure doesn't fail the rename
             if catalog is not None:

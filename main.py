@@ -154,6 +154,10 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
                 pass
 
         self.source_paths: list[Path] = []
+        # the sources the batch on screen was built from — cleared once every
+        # one of its folders is filed, so a commit cannot drop a folder Nick
+        # queued while it was running
+        self._committed_sources: list[Path] = []
         self.dest_root: Path | None = None
         self.catalog = JobCatalog()
         self.plan: Plan | None = None
@@ -540,6 +544,25 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         )
         self.phase4_btn.pack(side="right")
 
+        # Until v1.056 there was no way to empty this list at all: the only code
+        # that cleared it ran inside "Start AI Tagging", so clearing was a side
+        # effect of launching the next batch and the only way out of a finished
+        # one was to close the app and reopen it (Nick, 2026-09-26).
+        #
+        # Always on screen, never hidden — a control that appears only in the
+        # state where it is needed is a control nobody learns about. It is
+        # disabled instead when there is nothing to clear, which says the same
+        # thing without moving.
+        self.new_batch_btn = ctk.CTkButton(
+            header_row, text="Start a new batch", height=36, width=150,
+            font=("Segoe UI", 11),
+            fg_color=COLOR_BG_INPUT, hover_color="#475569",
+            text_color=COLOR_TEXT,
+            state="disabled",
+            command=self._on_new_batch,
+        )
+        self.new_batch_btn.pack(side="right", padx=(0, 8))
+
         self.table_scroll = ctk.CTkScrollableFrame(
             body, fg_color=COLOR_BG, corner_radius=8,
             height=150,  # guaranteed minimum — keeps Step 3 usable on short screens
@@ -575,6 +598,17 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
             self.step3.set_status("ready")
         else:
             self.step3.set_status("pending")
+
+        # "Start a new batch" — live whenever there is something to clear and
+        # nothing running. Driven from here because every path that changes the
+        # batch already calls this method. (`_build_ui` runs before the first
+        # call, so the widget always exists — no guard, because a guard here
+        # would turn a future rename into a silently dead button.)
+        busy = bool(self.worker and self.worker.is_alive())
+        has_batch = bool(self.plan or self.source_paths
+                         or getattr(self, "_rename_done", False))
+        self.new_batch_btn.configure(
+            state="normal" if (has_batch and not busy) else "disabled")
 
     # ─── Log helpers ─────────────────────────────
 
@@ -1400,6 +1434,73 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         self._refresh_sources()
         self._refresh_step_states()
 
+    # ─── Starting over ───────────────────────────
+
+    def _reset_batch(self, *, keep_sources: bool = False) -> bool:
+        """Put the window back to the state a fresh start would give it.
+
+        Everything a restart used to be needed for. It restores what `__init__`
+        sets and deliberately nothing else: the destination, the catalog, the
+        phone receiver and the usage log all survive, because Nick files job
+        after job into the same folder and being asked again each time would be
+        its own bug.
+
+        Returns False and changes nothing while a worker is running — a live
+        `_phase12_worker` writes `self.plan` back a moment after it is cleared,
+        so a reset there would look like it worked and then undo itself.
+        """
+        if self.worker and self.worker.is_alive():
+            return False
+
+        self._rename_done = False
+        self.plan = None
+        self._committed_sources = []
+        for _w in self.table_scroll.winfo_children():
+            _w.destroy()
+        self.review_summary.configure(text="Not yet analyzed", text_color=COLOR_MUTED)
+        self._sync_flagged_button(0)
+        self.phase4_btn.configure(state="disabled")
+        self._phase_start = None
+        if not keep_sources:
+            self.source_paths.clear()
+            self._refresh_sources()
+        self._refresh_step_states()
+        return True
+
+    def _on_new_batch(self):
+        """The 'Start a new batch' button."""
+        if self.worker and self.worker.is_alive():
+            messagebox.showinfo(
+                "Still working",
+                "A batch is running. Wait for it to finish, or press Cancel first.")
+            return
+
+        # Rows that were never committed own a `__pending_` folder in the
+        # destination. Clearing the list does not delete it — say so plainly
+        # rather than leave Nick to find them later and wonder.
+        pending = [a for a in (self.plan.assignments if self.plan else [])
+                   if not getattr(a, "committed", False)]
+        if pending:
+            if not messagebox.askyesno(
+                "Clear this batch?",
+                f"{len(pending)} folder(s) in the list have not been committed "
+                f"yet.\n\nClearing the list does NOT delete anything: their "
+                f"working folders stay in the destination as '__pending_…' and "
+                f"your original photos are untouched. You would have to run "
+                f"the analysis again to get the names back.\n\nClear the list?",
+                icon="warning",
+            ):
+                return
+
+        # keep_sources: this button clears the JOB LIST, which is what Nick
+        # asked for. Step 1 has its own Clear, the commit already drops the
+        # sources it consumed, and a blanket clear here would throw away a
+        # folder he queued while the last commit was running — by way of the
+        # very click the "All Done" box tells him to make.
+        self._reset_batch(keep_sources=True)
+        self._set_progress(0, "Ready")
+        self._log("Cleared — ready for the next job", "ok")
+
     def _refresh_sources(self):
         if not self.source_paths:
             self.sources_label.configure(text="No source selected", text_color=COLOR_MUTED)
@@ -1470,14 +1571,25 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
                 self._log("Pre-flight: user cancelled", "warn")
                 return
 
-        self._rename_done = False
         # F6 (Tester 2026-06-04): clear the PREVIOUS run's plan + review table.
         # Without this, a second batch left the stale plan in place, so Step 3
         # showed the old run's rows + a "ready" status while the new analysis
         # was still in flight. Reset to a clean "analyzing" slate.
-        self.plan = None
-        for _w in self.table_scroll.winfo_children():
-            _w.destroy()
+        #
+        # This is the same reset the "Start a new batch" button performs — one
+        # implementation, so the two can never drift into clearing different
+        # things (they already had: this path cleared the list, the button did
+        # not exist, and nothing cleared `source_paths` at all).
+        if not self._reset_batch(keep_sources=True):
+            messagebox.showinfo(
+                "Still working",
+                "A batch is running. Wait for it to finish, or press Cancel first.")
+            return
+        # Remember exactly which sources this batch consumed. The commit clears
+        # them afterwards, and a plain .clear() would also throw away a folder
+        # Nick queued WHILE the commit was running — the drop zone has no busy
+        # guard — and then tell him it had been filed.
+        self._committed_sources = list(self.source_paths)
         self.review_summary.configure(text="Analyzing…", text_color=COLOR_MUTED)
         self.phase12_btn.configure(state="disabled")
         self.phase4_btn.configure(state="disabled")
@@ -1601,6 +1713,10 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         if not plan.assignments:
             self.review_summary.configure(text="No photos found in source", text_color=COLOR_WARN)
             self._sync_flagged_button(0)
+            # An empty plan has nothing to commit. This early return used to
+            # jump over the sync below, so emptying the list with "Delete
+            # not-work" left Commit armed over no rows at all.
+            self._sync_commit_button()
             self._refresh_step_states()
             return
 
@@ -1626,9 +1742,15 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
                 on_change=self._refresh_summary,
                 on_delete=self._delete_assignment,
             )
+            # A row that is already in the archive must come back marked. This
+            # method rebuilds every row from scratch, so without this any
+            # re-render after a partial commit (the bulk-delete path calls it)
+            # handed back an editable row whose edits are silently ignored.
+            if getattr(a, "committed", False):
+                row.mark_filed(plan.dest_root / a.folder_name)
             row.pack(fill="x", padx=4, pady=4)
 
-        self.phase4_btn.configure(state="normal")
+        self._sync_commit_button()
         self.status_detail.configure(
             text="Analysis done — review the table then click 'Commit Rename'",
             text_color=COLOR_OK,
@@ -1645,6 +1767,17 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         folder are never touched (discard_assignment enforces that).
         """
         if not self.plan:
+            return
+        # A filed row's working folder is gone, so there is nothing to delete
+        # and `discard_assignment` would quietly do nothing while the log said
+        # otherwise. The row's Delete button is disabled once it is filed; this
+        # is the guard for every other way in.
+        if getattr(assignment, "committed", False):
+            messagebox.showinfo(
+                "Already filed",
+                "This folder is already in the archive — there is no working "
+                "copy left to delete.\n\nUse 'Start a new batch' to clear the "
+                "list, or delete the folder in File Explorer.")
             return
         n_photos = len(assignment.resized_paths) or len(assignment.images)
         label = assignment.job_name.strip() or assignment.folder_date.strftime("%d-%m-%y")
@@ -1681,6 +1814,9 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
             self._refresh_step_states()
             return
         self._refresh_summary()
+        # Deleting the last row that still needed committing leaves a plan of
+        # nothing but filed folders — the button has to follow.
+        self._sync_commit_button()
 
     @staticmethod
     def _is_discardable(a) -> bool:
@@ -1775,6 +1911,11 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
     def _start_phase4(self):
         if not self.plan:
             return
+        if self.worker and self.worker.is_alive():
+            messagebox.showinfo(
+                "Still working",
+                "A batch is running. Wait for it to finish, or press Cancel first.")
+            return
         # Flagged-but-unnamed rows would silently become date-prefixed folders,
         # which is exactly what the flag exists to prevent — ask about those
         # first, and separately, so "not work" never slips through unnoticed.
@@ -1810,6 +1951,9 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
 
         self.worker = threading.Thread(target=self._phase4_worker, daemon=True)
         self.worker.start()
+        # so "Start a new batch" greys out for the duration, like every other
+        # control that must not be pressed mid-run
+        self._refresh_step_states()
 
     def _phase4_worker(self):
         try:
@@ -1833,31 +1977,98 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         ))
 
     def _on_rename_done(self, result):
-        self._rename_done = True
+        # What is LEFT decides everything below — not what this pass happened to
+        # do. A commit can end early (Cancel breaks the loop) or leave rows
+        # behind (no name, or an error), and reading `renamed` alone told Nick a
+        # half-finished run was finished: it cleared his sources, flipped Step 3
+        # to done and invited him to start a new batch while folders were still
+        # sitting un-filed (review 2026-09-26).
+        pending = self._pending_rows()
+        finished = not pending
+        already = getattr(result, "already_done", 0)
+
+        self._rename_done = finished
         self._log(
             f"Phase 4 done: renamed {result.renamed} folder(s)"
+            + (f", already filed {already}" if already else "")
             + (f", skipped {result.skipped}" if result.skipped else "")
-            + (f", errors {len(result.errors)}" if result.errors else ""),
-            "ok" if not result.errors else "warn",
+            + (f", errors {len(result.errors)}" if result.errors else "")
+            + (f", still to file {len(pending)}" if pending else ""),
+            "ok" if finished and not result.errors else "warn",
         )
         for err in result.errors[:5]:
             self._log(err, "err")
 
-        self.status_detail.configure(
-            text=f"Renamed {result.renamed} folder(s)",
-            text_color=COLOR_OK if not result.errors else COLOR_WARN,
-        )
+        # Those photos are in the archive now, so the source list has done its
+        # job. It used to survive the commit while the drop zone APPENDED to it,
+        # so dropping the next job without pressing Clear re-ingested the batch
+        # that had just been filed — resized again, sent to Gemini again, filed
+        # again on another day number (BUG-3, bug/bug_v1.055.md). Nick never hit
+        # it only because the restart he used to clear the list emptied this
+        # too; giving him a clear button without this would have removed that
+        # accident and exposed the bug.
+        #
+        # Only the paths THIS batch consumed, and only once every row is filed:
+        # anything he queued while the commit ran must survive, and a run that
+        # still has work left will need its own sources again.
+        if finished and getattr(self, "_committed_sources", None):
+            spent = {str(p) for p in self._committed_sources}
+            kept = [p for p in self.source_paths if str(p) not in spent]
+            removed = len(self.source_paths) - len(kept)
+            if removed:
+                self.source_paths[:] = kept
+                self._refresh_sources()
+                self._log(f"Sources cleared ({removed}) — those photos are filed",
+                          "info")
+            self._committed_sources = []
+
+        # A committed row is skipped by the next commit, so it must stop looking
+        # editable — typing a new name into one used to log "Learned new name"
+        # and change nothing on disk.
+        for row in self.table_scroll.winfo_children():
+            assignment = getattr(row, "assignment", None)
+            if assignment is not None and getattr(assignment, "committed", False):
+                try:
+                    # where it went, so the row's thumbnail opens the archive
+                    # folder rather than the pending path that was renamed away
+                    row.mark_filed(self.plan.dest_root / assignment.folder_name)
+                except Exception as e:
+                    # A row that silently stays editable is the defect this
+                    # loop exists to prevent, so the failure has to be audible.
+                    self._log(f"could not mark a filed row: {str(e)[:100]}", "warn")
+
+        # Progress first, receipt second: `_set_progress` writes the same label
+        # and would otherwise paint "Done" straight over the only line that says
+        # what was actually filed.
         self._set_progress(1.0, "Done")
+        self.status_detail.configure(
+            text=f"Renamed {result.renamed} folder(s)"
+            + (f" — {len(pending)} still to file" if pending else ""),
+            text_color=COLOR_OK if finished and not result.errors else COLOR_WARN,
+        )
         self._refresh_step_states()
 
         detail = (
             f"Renamed: {result.renamed}\n"
-            f"Skipped (no name): {result.skipped}\n"
+            + (f"Already filed earlier: {already}\n" if already else "")
+            + f"Skipped (no name): {result.skipped}\n"
             f"Errors: {len(result.errors)}\n\n"
             f"Output folders: {len(result.output_folders)}"
         )
         if result.errors:
             detail += "\n\nFirst errors:\n" + "\n".join(result.errors[:5])
+        if pending:
+            detail += (
+                f"\n\n{len(pending)} folder(s) are NOT filed yet and are still "
+                f"in the list. Give the unnamed ones a name, fix anything that "
+                f"errored, then press Commit Rename again."
+            )
+        else:
+            detail += (
+                "\n\nYour source list has been emptied so the next batch cannot "
+                "collect these photos again.\nPress 'Start a new batch' when you "
+                "are ready for the next job."
+            )
         messagebox.showinfo("All Done", detail)
 
     def _cancel(self):
@@ -1865,11 +2076,30 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         self._log("Cancelling...", "warn")
         self.status_detail.configure(text="Cancelling...", text_color=COLOR_WARN)
 
+    def _pending_rows(self) -> list:
+        """Rows of the current plan that are not in the archive yet."""
+        return [a for a in (self.plan.assignments if self.plan else [])
+                if not getattr(a, "committed", False)]
+
+    def _sync_commit_button(self):
+        """Commit is offered only while something still needs committing.
+
+        One place, called from every path that changes what is in the plan.
+        It used to be decided in three (`_reset_buttons` re-armed on any truthy
+        plan, `_render_plan` armed it unconditionally, the delete paths left it
+        alone), so after a finished batch the button sat live over folders that
+        had already been renamed away — pressing it reported an error for every
+        row of a run that had in fact succeeded (BUG-2, bug/bug_v1.055.md).
+        A row skipped for want of a name is still uncommitted, so the real
+        retry — type the name, commit again — keeps working.
+        """
+        self.phase4_btn.configure(
+            state="normal" if self._pending_rows() else "disabled")
+
     def _reset_buttons(self):
         self.phase12_btn.configure(state="normal")
         self.cancel_btn.configure(state="disabled")
-        if self.plan:
-            self.phase4_btn.configure(state="normal")
+        self._sync_commit_button()
         self._refresh_step_states()
         # Batch finished — release the update gate and resume anything that was deferred
         self._batch_running = False

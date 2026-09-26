@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import queue
 import threading
+from pathlib import Path
 
 import customtkinter as ctk
 from PIL import Image, ImageDraw
@@ -57,6 +58,7 @@ class JobRow(ctk.CTkFrame):
                  on_change=None, on_delete=None):
         super().__init__(master, fg_color=COLOR_BG_CARD, corner_radius=8)
         self.assignment = assignment
+        self._filed_folder = None      # set by mark_filed() after a commit
         self.catalog = catalog
         self.on_change = on_change
         self.on_delete = on_delete
@@ -368,8 +370,14 @@ class JobRow(ctk.CTkFrame):
         # instead of silently swallowing — user has no other signal that
         # the click did anything when the folder is gone.
         target = None
+        # Where it was filed wins: after a commit `temp_folder` names a path
+        # that no longer exists, and the fallback below points at the same dead
+        # place, so a perfectly filed row used to answer "folder not available".
+        filed = getattr(self, "_filed_folder", None)
         folder = self.assignment.temp_folder
-        if folder and folder.exists():
+        if filed is not None and Path(filed).exists():
+            target = Path(filed)
+        elif folder and folder.exists():
             target = folder
         else:
             pool = self.assignment.resized_paths or self.assignment.images
@@ -415,6 +423,31 @@ class JobRow(ctk.CTkFrame):
         self._update_border()
         if self.on_change:
             self.on_change()
+
+    def mark_filed(self, final_folder=None):
+        """This row's folder is in the archive; stop pretending it is editable.
+
+        A committed row is skipped by the next commit, so leaving its name box
+        live meant Nick could retype a name, watch the app say "Learned new
+        name", and have the change silently ignored — the folder on disk was
+        already called something else (bug/bug_v1.055.md, review 2026-09-26).
+
+        `final_folder` is where the photos actually went. Without it the row's
+        thumbnail still opens `temp_folder`, which the commit renamed away — so
+        the one control left alive on a filed row answered "the source folder
+        has moved or been deleted" about a row that had filed perfectly.
+        """
+        if final_folder is not None:
+            self._filed_folder = final_folder
+        for widget in (self.job_combo, self.translate_btn, self.delete_btn):
+            try:
+                widget.configure(state="disabled")
+            except Exception:
+                pass
+        try:
+            self.job_combo.configure(border_color=COLOR_MUTED)
+        except Exception:
+            pass
 
     def _update_border(self):
         color = COLOR_WARN if not self.assignment.job_name.strip() else COLOR_OK
