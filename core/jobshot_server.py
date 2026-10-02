@@ -193,6 +193,7 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(411, {"jobshot": receive.PROTOCOL, "error": "no body"})
             return
         if length > receive.MAX_SIDECAR_TOTAL * 2:
+            self._drain()
             # Refused on the header, before a byte is read. The x2 is slack for
             # JSON overhead around the bodies; the real per-file and total caps
             # are applied to the serialised content inside.
@@ -205,7 +206,14 @@ class _Handler(BaseHTTPRequestHandler):
             return                              # the phone will retry
         try:
             body = json.loads(raw.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+        except Exception:
+            # Deliberately broad. A body of 6000 nested brackets - 4 KB, under
+            # every cap - raises RecursionError, which is NOT a ValueError, so
+            # the narrow version let it escape the handler: the client got a
+            # closed socket with no status line at all and nothing reached
+            # HPO's log. The phone cannot tell that from a dropped link, which
+            # is the one distinction pairing depends on. Two reviewers
+            # reproduced it, 2026-10-02.
             self._send(422, {"jobshot": receive.PROTOCOL,
                              "error": "body is not JSON"})
             return
@@ -229,8 +237,9 @@ class _Handler(BaseHTTPRequestHandler):
                              "error": "the PC could not apply the correction"})
             return
         if result.ok:
+            note = f" ({result.error})" if result.error else ""
             r._log(f"sidecar replaced in {result.folder}: "
-                   f"{', '.join(result.replaced)}")
+                   f"{', '.join(result.replaced)}{note}")
         self._send(result.status, result.to_reply())
 
     def do_POST(self):                         # noqa: N802

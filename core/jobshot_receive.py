@@ -38,6 +38,8 @@ import re
 import secrets
 import shutil
 import socket
+import stat
+import threading
 import zipfile
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -93,7 +95,36 @@ MAX_RATIO = 200                            # unpacked / compressed, zip-bomb gua
 # nowhere near enough to be interesting to an attacker who has the token.
 MAX_SIDECAR_FILES = 4
 MAX_SIDECAR_BYTES = 1024 * 1024            # per file, serialised
-MAX_SIDECAR_TOTAL = 4 * 1024 * 1024
+# 2 MiB, not 4: at 4 the total was exactly MAX_SIDECAR_FILES x MAX_SIDECAR_BYTES,
+# so the per-file check always fired first and this one could never execute.
+# Two reviewers called it dead code and they were right - measured.
+MAX_SIDECAR_TOTAL = 2 * 1024 * 1024
+
+# One correction at a time, per process. `ThreadingHTTPServer` really does run
+# requests concurrently, and the sidecar path is a read-modify-write of a
+# manifest: two corrections to the same job interleaved and one overwrote the
+# other's `sidecar_updated_at` (a reviewer measured ~15% wrong answers under
+# concurrency). Corrections are rare and tiny, so a single lock costs nothing
+# and removes the whole class.
+_SIDECAR_LOCK = threading.RLock()
+
+
+def _discard(path: Path) -> None:
+    """Delete one of our own scratch files, and mean it.
+
+    `shutil.copy2` copies the read-only attribute along with the bytes, so a
+    backup of a read-only draft could not be unlinked on Windows and was left
+    in Nick's archive - found by this route's own rollback test. Clear the bit,
+    then delete, and never raise: this only ever runs on paths we created.
+    """
+    try:
+        os.chmod(path, stat.S_IWRITE | stat.S_IREAD)
+    except OSError:
+        pass
+    try:
+        path.unlink()
+    except OSError:
+        pass
 
 _JSON_NAME_RE = re.compile(r"^job(-[A-Za-z0-9._-]+)?\.json$")
 # A job folder may also carry sidecars the phone wrote for somebody else to
@@ -169,6 +200,12 @@ class SidecarResult:
             # The point of the reply: the phone may only stop warning the
             # engineer about a name that comes back in here.
             "replaced": list(self.replaced),
+            # The draft was replaced but a later step did not finish - the
+            # manifest note, or the receipt. Reported rather than swallowed:
+            # this branch USED to compose a careful message that `to_reply`
+            # then dropped on the floor, so a failed step 5 reached the phone
+            # as a clean 200. Found by all three reviewers, 2026-10-02.
+            "warnings": [self.error] if self.error else [],
         }
 
 
@@ -232,7 +269,15 @@ def replace_sidecars(job_id: str, files: dict, dest_root: Path | None) -> Sideca
         result.status, result.error = 409, f"cannot read the job's manifest: {str(e)[:100]}"
         return result
     block = manifest.get("filed") if isinstance(manifest, dict) else None
-    filed_extras = [str(x) for x in (block or {}).get("extras") or []]
+    if not isinstance(block, dict):
+        # A hand-edited manifest whose `filed` is a list or a string used to
+        # reach `.get` on it and raise AttributeError straight out of this
+        # function - against this module's own standard that a bad input is
+        # refused with a reason and never raises. All three reviewers.
+        result.status, result.error = 409, (
+            "the job's manifest has no usable `filed` record")
+        return result
+    filed_extras = [str(x) for x in block.get("extras") or []]
     result.extras = list(filed_extras)
 
     # ── validate every name and every body BEFORE writing anything ──
@@ -249,10 +294,13 @@ def replace_sidecars(job_id: str, files: dict, dest_root: Path | None) -> Sideca
             result.status, result.error = 409, (
                 f"this job did not file {name!r}")
             return result
-        if not isinstance(body, (dict, list)):
+        if not isinstance(body, dict):
+            # §3.5 says "the new content as a JSON object". A list was accepted
+            # here, which no sidecar has ever been and which the spec does not
+            # allow - two reviewers flagged the divergence, and the spec is the
+            # contract JobShot builds against, so the code moves.
             result.status, result.error = 422, (
-                f"{name!r} must be a JSON object or array, not "
-                f"{type(body).__name__}")
+                f"{name!r} must be a JSON object, not {type(body).__name__}")
             return result
         try:
             raw = json.dumps(body, ensure_ascii=False, indent=2).encode("utf-8")
@@ -276,57 +324,120 @@ def replace_sidecars(job_id: str, files: dict, dest_root: Path | None) -> Sideca
             return result
         staged.append((folder / name, raw))
 
-    # ── write: every temp first, then the replaces ──
-    #
-    # Honest about what this is: each `os.replace` is atomic, so no reader ever
-    # sees a half-written draft. The GROUP is not atomic — an I/O error between
-    # two replaces would leave one new and one old. Writing every temp first
-    # shrinks that window to the replaces themselves, and in the real case
-    # `files` holds exactly one entry. Claiming more than that would be a lie.
-    temps: list[tuple[Path, Path]] = []
-    try:
-        for target, raw in staged:
-            tmp = folder / f".hpo-sidecar-{secrets.token_hex(6)}"
-            with tmp.open("wb") as fh:
-                fh.write(raw)
-                fh.flush()
-                os.fsync(fh.fileno())
-            temps.append((tmp, target))
-        for tmp, target in temps:
-            os.replace(str(tmp), str(target))
-            result.replaced.append(target.name)
-    except OSError as e:
-        for tmp, _t in temps:
-            try:
-                tmp.unlink()
-            except OSError:
-                pass
-        result.status = 500
-        result.error = f"could not write the sidecar: {str(e)[:120]}"
-        result.replaced = []
+    # Refuse before writing anything if a target or the manifest cannot be
+    # written. `os.access` reads the attribute and the ACL, not a lock, so the
+    # rollback below is still needed for the surprises - but this turns the
+    # COMMON case (Nick marked a draft read-only, or the archive is on
+    # read-only media) from a rollback into a clean refusal that never touches
+    # the folder at all.
+    unwritable = [t.name for t, _r in staged
+                  if t.exists() and not os.access(t, os.W_OK)]
+    if unwritable:
+        result.status, result.error = 409, (
+            f"cannot be written on this PC: {', '.join(sorted(unwritable))}")
         return result
 
-    # ── the job's own manifest: OVERWRITE it, never a second file ──
-    stamped = datetime.now().isoformat(timespec="seconds")
-    if isinstance(block, dict):
-        block["sidecar_updated_at"] = stamped
+    # ── write: all-or-nothing, for real this time ──
+    #
+    # The first version wrote every temp and then replaced them in a loop, with
+    # a comment admitting the GROUP was not atomic. Three reviewers measured
+    # what that cost: with two sidecars and the second one read-only, the first
+    # replace succeeded, the second raised, and the reply came back 500 with
+    # `replaced` CLEARED - telling the phone nothing had happened while one
+    # draft's only copy had already been overwritten. §3.5 promises "nothing
+    # partial", and a reply that is wrong in that direction is worse than the
+    # failure it hides.
+    #
+    # So every target that exists is backed up first, and any failure rolls the
+    # whole set back. `replaced` is then honest either way.
+    with _SIDECAR_LOCK:
+        temps: list[tuple[Path, Path]] = []
+        backups: list[tuple[Path, Path]] = []
+        try:
+            for target, raw in staged:
+                tmp = folder / f".hpo-sidecar-{secrets.token_hex(6)}"
+                with tmp.open("wb") as fh:
+                    fh.write(raw)
+                    fh.flush()
+                    os.fsync(fh.fileno())
+                temps.append((tmp, target))
+            for _tmp, target in temps:
+                if target.exists():
+                    keep = folder / f".hpo-was-{secrets.token_hex(6)}"
+                    shutil.copy2(str(target), str(keep))
+                    backups.append((keep, target))
+            for tmp, target in temps:
+                os.replace(str(tmp), str(target))
+                result.replaced.append(target.name)
+        except OSError as e:
+            for keep, target in backups:            # put it all back
+                try:
+                    os.replace(str(keep), str(target))
+                except OSError:
+                    pass
+            for tmp, _t in temps:
+                _discard(tmp)
+            result.status = 500
+            # `strerror` and not `str(e)`: the OSError text carries the absolute
+            # archive path, and this reply crosses the LAN. Two reviewers.
+            result.error = ("could not write the sidecar: "
+                            f"{e.strerror or type(e).__name__}")
+            result.replaced = []
+            return result
+        finally:
+            # Unconditional: a backup is our scratch, and one left in the
+            # archive is litter in the only copy of Nick's work.
+            for keep, _t in backups:
+                if keep.exists():
+                    _discard(keep)
+
+        # ── the job's own manifest: OVERWRITE it, never a second file ──
+        #
+        # Written the same way as the drafts, which the first version did not
+        # do: `open("w")` TRUNCATES before the new bytes exist, so an
+        # interruption left job.json half-written - and a half-written manifest
+        # is unfindable, which makes the job look unfiled, which makes the phone
+        # re-upload it and duplicate every photograph. Exactly the harm this
+        # route exists to prevent. All three reviewers found it; one rated it
+        # critical and was right: the manifest matters MORE than the draft
+        # beside it, because EMR reads it and `find_manifest_path` depends on it.
+        block["sidecar_updated_at"] = datetime.now().isoformat(timespec="seconds")
         # `extras` is deliberately unchanged: the names did not change, only the
         # contents. A route that rewrote `extras` here could drop a sibling
         # job's entry, and EMR reads that list to decide which draft is this
         # job's.
+        mtmp = folder / f".hpo-manifest-{secrets.token_hex(6)}"
         try:
-            with manifest_path.open("w", encoding="utf-8", newline="") as fh:
+            with mtmp.open("w", encoding="utf-8", newline="") as fh:
                 json.dump(manifest, fh, ensure_ascii=False, indent=2)
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.replace(str(mtmp), str(manifest_path))
         except OSError as e:
-            # The draft IS replaced; only the note about it failed. Say so
-            # rather than reporting failure for work that did happen.
-            result.error = f"sidecar replaced, but the manifest note failed: {str(e)[:90]}"
+            # The draft IS replaced; only the note about it failed. Said in the
+            # reply now rather than composed and discarded.
+            result.error = ("sidecar replaced, but the manifest note failed: "
+                            f"{e.strerror or type(e).__name__}")
+        finally:
+            # The temp was written before the replace, so a failed replace used
+            # to leave `.hpo-manifest-*` sitting in the job folder for ever.
+            # Caught by this route's own test, not by review.
+            if mtmp.exists():
+                _discard(mtmp)
 
-    try:
-        jobshot_index.record(job_id, folder, int(entry.get("photos") or 0),
-                             filed_extras)
-    except Exception as e:                      # a receipt is a cache, not the truth
-        result.error = result.error or f"receipt not updated: {str(e)[:90]}"
+        try:
+            # `filed_at` preserved: this is a correction, not a filing. Passing
+            # nothing used to stamp now() and make §4 report the time of the
+            # typo fix as the time the job was filed.
+            if not jobshot_index.record(job_id, folder,
+                                        int(entry.get("photos") or 0),
+                                        filed_extras,
+                                        filed_at=str(entry.get("filed_at") or "")):
+                result.error = result.error or (
+                    f"receipt not updated in {jobshot_index.INDEX_PATH.name} - "
+                    f"lookups will scan the archive instead")
+        except Exception as e:                  # a receipt is a cache, not truth
+            result.error = result.error or f"receipt not updated: {str(e)[:90]}"
 
     result.ok = True
     result.status = 200

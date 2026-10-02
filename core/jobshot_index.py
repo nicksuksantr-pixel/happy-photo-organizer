@@ -87,7 +87,7 @@ def _save(jobs: dict) -> bool:
 
 
 def record(job_id: str, folder: Path, photos: int,
-           extras: list[str] | None = None) -> bool:
+           extras: list[str] | None = None, filed_at: str = "") -> bool:
     """Write the receipt. Called for every job filed, by every route.
 
     `extras` is here because the phone decides whether a report draft is safe
@@ -104,7 +104,14 @@ def record(job_id: str, folder: Path, photos: int,
             "folder_path": str(folder),
             "photos": int(photos),
             "extras": [str(e) for e in (extras or [])],
-            "filed_at": datetime.now().isoformat(timespec="seconds"),
+            # `filed_at` is when the JOB was filed, not when this row was
+            # last touched. The sidecar route rewrites the row to keep `extras`
+            # true after a correction, and stamping "now" there made §4 report
+            # the time Nick fixed a typo as the time the job was filed - three
+            # reviewers found that independently, 2026-10-02. Callers that are
+            # genuinely filing pass nothing and get now(), as before.
+            "filed_at": (str(filed_at) or
+                         datetime.now().isoformat(timespec="seconds")),
         }
         return _save(jobs)
 

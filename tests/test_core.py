@@ -3916,6 +3916,505 @@ def test_sidecar_leaves_the_receipt_able_to_answer_for_the_job():
             restore()
 
 
+# --- what the three-reviewer pass of 2026-10-02 found, each pinned ----------
+#
+# Every test below fails on the code as it was when the reviewers read it. They
+# are grouped here rather than beside their siblings because they share one
+# origin, and because the next person to touch this route should be able to see
+# in one place what it got wrong the first time.
+
+
+def _file_with_drafts(tmp, dest, *, job_id, names,
+                      job="Overhauled Air Compressor"):
+    """A job carrying an arbitrary set of sidecars, all of them really filed -
+    so a test about size or rollback is not quietly answered by the extras gate
+    instead. (The first version of the total-cap test was: it used names the job
+    had never filed and "passed" on a 409 that proved something else.)"""
+    from core import jobshot
+    arrival = _arrival(tmp / job_id, photos=2, job=job, plain=True,
+                       work_date="2026-09-26", job_id=job_id)
+    for n in names:
+        (arrival / n).write_text(json.dumps({"note": f"OLD-{n}"}),
+                                 encoding="utf-8")
+    r = jobshot.import_job(arrival, dest)
+    assert r.ok, r.error
+    assert sorted(r.extras) == sorted(names), (r.extras, names)
+    return r
+
+
+def _file_with_two_drafts(tmp, dest, *, job_id, job="Overhauled Air Compressor"):
+    """A job carrying TWO sidecars, so the multi-file path can be exercised at
+    all - no test ever sent more than one file, which two reviewers noted."""
+    from core import jobshot
+    arrival = _arrival(tmp / job_id, photos=2, job=job, plain=True,
+                       work_date="2026-09-26", job_id=job_id)
+    (arrival / "emr.json").write_text(json.dumps({"note": "OLD-EMR"}),
+                                      encoding="utf-8")
+    (arrival / "notes.json").write_text(json.dumps({"note": "OLD-NOTES"}),
+                                        encoding="utf-8")
+    r = jobshot.import_job(arrival, dest)
+    assert r.ok, r.error
+    assert sorted(r.extras) == ["emr.json", "notes.json"], r.extras
+    return r
+
+
+def test_sidecar_rolls_the_whole_set_back_when_one_file_cannot_be_written():
+    """§3.5 promises *"nothing partial - if any file in the request is refused,
+    nothing is written"*. The first version did not keep that promise: it wrote
+    every temp and then replaced them in a loop, so with two drafts and the
+    second unwritable the FIRST was already overwritten when the second raised -
+    and the reply came back 500 with `replaced` cleared, telling the phone
+    nothing had happened while one draft's only copy was gone.
+
+    All three reviewers found it; one reproduced it exactly like this.
+    """
+    if not _have_pillow():
+        return
+    import os as _os
+    import stat as _stat
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        restore = _sidecar_sandbox(tmp)
+        try:
+            from core import jobshot_receive as recv
+            dest = tmp / "dest"
+            dest.mkdir()
+            jid = "20260926-200000-rollbk"
+            r = _file_with_two_drafts(tmp, dest, job_id=jid)
+            folder = r.final_folder
+            locked = folder / "notes.json"
+            _os.chmod(locked, _stat.S_IREAD)       # Nick marked it, or EMR holds it
+            try:
+                res = recv.replace_sidecars(jid, {
+                    "emr.json": {"note": "NEW-EMR"},
+                    "notes.json": {"note": "NEW-NOTES"},
+                }, dest)
+            finally:
+                _os.chmod(locked, _stat.S_IWRITE | _stat.S_IREAD)
+
+            assert not res.ok, res
+            assert res.replaced == [], res.replaced
+            # BOTH drafts still hold their old contents - the rollback
+            assert json.loads((folder / "emr.json")
+                              .read_text(encoding="utf-8"))["note"] == "OLD-EMR"
+            assert json.loads((folder / "notes.json")
+                              .read_text(encoding="utf-8"))["note"] == "OLD-NOTES"
+            # no scratch left in Nick's archive
+            strays = [p.name for p in folder.iterdir() if p.name.startswith(".hpo-")]
+            assert strays == [], strays
+            # and the error does not carry the absolute archive path over the LAN
+            assert str(folder) not in res.error, res.error
+        finally:
+            restore()
+
+
+def test_sidecar_replaces_several_drafts_at_once_when_all_of_them_can_be_written():
+    """The other half of the multi-file path, which had no test either: when
+    every file CAN be written, every file is - and `replaced` names them all."""
+    if not _have_pillow():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        restore = _sidecar_sandbox(tmp)
+        try:
+            from core import jobshot_receive as recv
+            dest = tmp / "dest"
+            dest.mkdir()
+            jid = "20260926-201000-multi"
+            r = _file_with_two_drafts(tmp, dest, job_id=jid)
+            res = recv.replace_sidecars(jid, {
+                "emr.json": {"note": "NEW-EMR"},
+                "notes.json": {"note": "NEW-NOTES"},
+            }, dest)
+            assert res.ok, res
+            assert sorted(res.replaced) == ["emr.json", "notes.json"], res.replaced
+            assert json.loads((r.final_folder / "emr.json")
+                              .read_text(encoding="utf-8"))["note"] == "NEW-EMR"
+            assert json.loads((r.final_folder / "notes.json")
+                              .read_text(encoding="utf-8"))["note"] == "NEW-NOTES"
+            assert [p.name for p in r.final_folder.iterdir()
+                    if p.name.startswith(".hpo-")] == []
+        finally:
+            restore()
+
+
+def test_sidecar_keeps_the_jobs_original_filing_time_in_the_receipt():
+    """§4 answers "when was this filed". A correction is not a filing, and
+    stamping `now()` into the receipt made §4 report the moment Nick fixed a
+    typo as the moment the job was filed. All three reviewers.
+    """
+    if not _have_pillow():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        restore = _sidecar_sandbox(tmp)
+        rx = _Receiver(tmp)
+        try:
+            from core import jobshot_receive as recv
+            jid = "20260926-202000-timest"
+            _file_with_draft(tmp, rx.dest, job_id=jid)
+            _, before = rx.get(recv.JOB_PATH_PREFIX + jid)
+            original = before["filed_at"]
+            assert original, before
+
+            status, reply = rx.post(json.dumps({
+                "jobshot": 1, "job_id": jid,
+                "files": {"emr.json": {"note": "CORRECTED"}},
+            }).encode("utf-8"), path=recv.SIDECAR_PATH)
+            assert status == 200, reply
+
+            _, after = rx.get(recv.JOB_PATH_PREFIX + jid)
+            assert after["filed_at"] == original, (original, after["filed_at"])
+            assert reply["filed_at"] == original, (original, reply["filed_at"])
+        finally:
+            rx.close()
+            restore()
+
+
+def test_sidecar_says_so_when_the_draft_landed_but_the_manifest_note_did_not():
+    """The reply used to compose a careful sentence about a failed step 5 and
+    then drop it: `to_reply`'s success branch never included `error`, so a
+    half-finished correction reached the phone as a clean 200. Found by all
+    three reviewers - one called the message "unreachable", which it was.
+    """
+    if not _have_pillow():
+        return
+    import os as _os
+    import stat as _stat
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        restore = _sidecar_sandbox(tmp)
+        rx = _Receiver(tmp)
+        try:
+            from core import jobshot_receive as recv
+            jid = "20260926-203000-nonote"
+            r = _file_with_draft(tmp, rx.dest, job_id=jid)
+            man = r.final_folder / "job.json"
+            _os.chmod(man, _stat.S_IREAD)
+            try:
+                status, reply = rx.post(json.dumps({
+                    "jobshot": 1, "job_id": jid,
+                    "files": {"emr.json": {"note": "CORRECTED"}},
+                }).encode("utf-8"), path=recv.SIDECAR_PATH)
+            finally:
+                _os.chmod(man, _stat.S_IWRITE | _stat.S_IREAD)
+
+            assert status == 200, reply
+            assert reply["replaced"] == ["emr.json"], reply
+            # the draft really did land
+            assert json.loads((r.final_folder / "emr.json")
+                              .read_text(encoding="utf-8"))["note"] == "CORRECTED"
+            # ...and the phone is TOLD the note did not
+            assert reply.get("warnings"), reply
+            assert "manifest" in reply["warnings"][0].lower(), reply["warnings"]
+            # the manifest is still intact and findable - not truncated
+            block = json.loads(man.read_text(encoding="utf-8"))["filed"]
+            assert "renamed" in block and "extras" in block, block
+            assert "sidecar_updated_at" not in block, block
+            assert [p.name for p in r.final_folder.iterdir()
+                    if p.name.startswith(".hpo-")] == []
+        finally:
+            rx.close()
+            restore()
+
+
+def test_sidecar_refuses_a_manifest_whose_filed_record_is_not_an_object():
+    """This module's standard is that a bad input comes back as a plain refusal,
+    never a traceback. A hand-edited manifest whose `filed` is a list reached
+    `.get` on it and raised AttributeError straight out of the function. All
+    three reviewers."""
+    if not _have_pillow():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        restore = _sidecar_sandbox(tmp)
+        try:
+            from core import jobshot_receive as recv
+            dest = tmp / "dest"
+            dest.mkdir()
+            jid = "20260926-204000-badblk"
+            r = _file_with_draft(tmp, dest, job_id=jid)
+            man = r.final_folder / "job.json"
+            for bad in ([1, 2, 3], "a string", 7, None):
+                data = json.loads(man.read_text(encoding="utf-8"))
+                data["filed"] = bad
+                man.write_text(json.dumps(data), encoding="utf-8")
+                res = recv.replace_sidecars(jid, {"emr.json": {"x": 1}}, dest)
+                assert not res.ok, (bad, res)
+                assert res.status == 409, (bad, res.status)
+        finally:
+            restore()
+
+
+def test_sidecar_refuses_a_list_body_because_the_spec_says_object():
+    """§3.5: "the new content as a JSON object". A list was accepted, which no
+    sidecar has ever been. Two reviewers; the spec is what JobShot builds
+    against, so the code moved rather than the spec."""
+    if not _have_pillow():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        restore = _sidecar_sandbox(tmp)
+        try:
+            from core import jobshot_receive as recv
+            dest = tmp / "dest"
+            dest.mkdir()
+            jid = "20260926-205000-listbd"
+            r = _file_with_draft(tmp, dest, job_id=jid)
+            res = recv.replace_sidecars(jid, {"emr.json": [1, 2, 3]}, dest)
+            assert not res.ok and res.status == 422, res
+            assert json.loads((r.final_folder / "emr.json")
+                              .read_text(encoding="utf-8"))["note"] == "ORIGINAL"
+        finally:
+            restore()
+
+
+def test_sidecar_total_size_cap_can_actually_fire():
+    """It could not. MAX_SIDECAR_TOTAL was exactly MAX_SIDECAR_FILES x
+    MAX_SIDECAR_BYTES, so the per-file check always won and the total was dead
+    code - two reviewers called it, and the arithmetic agreed with them."""
+    if not _have_pillow():
+        return
+    from core import jobshot_receive as recv
+    assert recv.MAX_SIDECAR_FILES * recv.MAX_SIDECAR_BYTES > recv.MAX_SIDECAR_TOTAL, (
+        "the total cap is unreachable again")
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        restore = _sidecar_sandbox(tmp)
+        try:
+            dest = tmp / "dest"
+            dest.mkdir()
+            jid = "20260926-206000-totcap"
+            # the job must really have filed all three, or the extras gate
+            # refuses first and the size check is never reached - which is what
+            # the first version of this test actually proved
+            _file_with_drafts(tmp, dest, job_id=jid,
+                              names=("emr.json", "a.json", "b.json"))
+            # three bodies each UNDER the per-file cap, together over the total
+            each = {"pad": "x" * (recv.MAX_SIDECAR_BYTES - 4096)}
+            res = recv.replace_sidecars(jid, {
+                "emr.json": each, "a.json": each, "b.json": each}, dest)
+            assert res.status == 413, (res.status, res.error)
+        finally:
+            restore()
+
+
+def test_sidecar_survives_a_body_designed_to_blow_the_json_parser():
+    """6000 nested brackets is 4 KB and passes every size cap, and `json.loads`
+    answers it with RecursionError - which is not a ValueError, so the narrow
+    `except` let it escape the handler entirely: no status line, no log line,
+    a bare closed socket. The phone cannot tell that from a dropped link, which
+    is the one distinction pairing depends on. Two reviewers reproduced it."""
+    if not _have_pillow():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        restore = _sidecar_sandbox(tmp)
+        rx = _Receiver(tmp)
+        try:
+            from core import jobshot_receive as recv
+            rx.dest.mkdir(parents=True, exist_ok=True)
+            depth = 6000
+            body = ('{"jobshot":1,"job_id":"20260101-000000-aaaaaa","files":'
+                    '{"emr.json":' + "[" * depth + "]" * depth + "}}")
+            status, reply = rx.post(body.encode("utf-8"), path=recv.SIDECAR_PATH)
+            assert status == 422, (status, reply)
+            assert reply.get("error"), reply
+        finally:
+            rx.close()
+            restore()
+
+
+def test_two_corrections_at_once_do_not_lose_each_others_work():
+    """`ThreadingHTTPServer` runs requests concurrently and this route is a
+    read-modify-write of a manifest. A reviewer measured ~15% wrong answers
+    under concurrency before the lock. Corrections are rare and tiny, so one
+    lock removes the class rather than narrowing it."""
+    if not _have_pillow():
+        return
+    import threading as _th
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        restore = _sidecar_sandbox(tmp)
+        try:
+            from core import jobshot_receive as recv
+            dest = tmp / "dest"
+            dest.mkdir()
+            jid = "20260926-207000-concur"
+            r = _file_with_two_drafts(tmp, dest, job_id=jid)
+            results = []
+            start = _th.Barrier(2)
+
+            def go(name, note):
+                start.wait()
+                results.append(recv.replace_sidecars(jid, {name: {"note": note}},
+                                                     dest))
+
+            ts = [_th.Thread(target=go, args=("emr.json", "A")),
+                  _th.Thread(target=go, args=("notes.json", "B"))]
+            for t in ts:
+                t.start()
+            for t in ts:
+                t.join(timeout=30)
+
+            assert len(results) == 2 and all(x.ok for x in results), results
+            # both drafts landed, and the manifest is still valid JSON with its
+            # load-bearing keys - not a half-written casualty of the race
+            assert json.loads((r.final_folder / "emr.json")
+                              .read_text(encoding="utf-8"))["note"] == "A"
+            assert json.loads((r.final_folder / "notes.json")
+                              .read_text(encoding="utf-8"))["note"] == "B"
+            block = json.loads((r.final_folder / "job.json")
+                               .read_text(encoding="utf-8"))["filed"]
+            assert sorted(block["extras"]) == ["emr.json", "notes.json"], block
+            assert block["renamed"], block
+            assert block["sidecar_updated_at"], block
+            assert [p.name for p in r.final_folder.iterdir()
+                    if p.name.startswith(".hpo-")] == []
+        finally:
+            restore()
+
+
+def test_a_dying_manifest_write_does_not_destroy_the_manifest():
+    """The critical finding of the 2026-10-02 review, with the fault injected
+    rather than reasoned about.
+
+    The first version wrote the manifest with `open("w")`, which TRUNCATES
+    before the new bytes exist. Three reviewers traced what an interruption
+    there costs - ENOSPC, a power cut on the vessel, HPO killed, a network
+    archive dropping - and it is the worst outcome in this whole route:
+
+      a half-written job.json is unfindable -> the job looks UNFILED ->
+      §4 answers 404 -> the phone re-uploads -> every photograph duplicates
+
+    which is precisely the harm the sidecar route exists to prevent.
+
+    So: make the write die halfway, and require that the manifest on disk is
+    still the real one. Nothing about the fix can be proven by a happy path.
+    """
+    if not _have_pillow():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        restore = _sidecar_sandbox(tmp)
+        try:
+            from core import jobshot, jobshot_receive as recv
+            dest = tmp / "dest"
+            dest.mkdir()
+            jid = "20260926-208000-dyingw"
+            r = _file_with_draft(tmp, dest, job_id=jid)
+            man = r.final_folder / "job.json"
+            before = man.read_bytes()
+
+            real_dump = recv.json.dump
+            calls = {"n": 0}
+
+            def dying(obj, fh, **kw):
+                # Fire ONLY on the manifest write, and match BOTH shapes - the
+                # old code dumped straight into job.json, the new one into a
+                # .hpo-manifest-* temp. Matching both is what makes this a
+                # red-first proof rather than a test of the new code's shape.
+                name = str(getattr(fh, "name", ""))
+                if name.endswith("job.json") or ".hpo-manifest-" in name:
+                    calls["n"] += 1
+                    fh.write('{"jobshot": 1, "job_id": "' + jid + '", "pho')
+                    raise OSError(28, "No space left on device")
+                return real_dump(obj, fh, **kw)
+
+            recv.json.dump = dying
+            try:
+                res = recv.replace_sidecars(jid, {"emr.json": {"note": "NEW"}}, dest)
+            finally:
+                recv.json.dump = real_dump
+
+            assert calls["n"] == 1, calls
+            # the draft landed - that half really did succeed
+            assert res.ok, res
+            assert res.replaced == ["emr.json"], res.replaced
+            assert json.loads((r.final_folder / "emr.json")
+                              .read_text(encoding="utf-8"))["note"] == "NEW"
+            # ...and the MANIFEST IS UNTOUCHED, byte for byte
+            assert man.read_bytes() == before, "the manifest was damaged"
+            # it still parses, is still findable, and still carries what EMR reads
+            assert jobshot.find_manifest_path(r.final_folder, jid) == man
+            block = json.loads(man.read_text(encoding="utf-8"))["filed"]
+            assert block["extras"] == ["emr.json"] and block["renamed"], block
+            # the phone is told the note did not land
+            assert res.error, res
+            # and no scratch is left in Nick's archive
+            assert [q.name for q in r.final_folder.iterdir()
+                    if q.name.startswith(".hpo-")] == []
+        finally:
+            restore()
+
+
+def test_a_replace_that_fails_midway_rolls_the_earlier_ones_back():
+    """The rollback path, which had NO test until this was written - and I only
+    found that out by reverting the backup logic and watching the test named
+    for it stay green.
+
+    The reason it stayed green is the writability pre-check added in the same
+    pass: it refuses a read-only target before anything is written, so the
+    read-only test never reaches the rollback. That pre-check is right for the
+    common case, but `os.access` reads attributes and ACLs, NOT locks - EMR
+    holding a file open on Windows, or the disk filling between two replaces,
+    still gets here. So the failure is injected at the second `os.replace`,
+    which is the real shape of the surprise.
+
+    Same lesson as the vacuous test of 2026-09-26: a test whose premise is
+    satisfied somewhere else proves nothing about the code it is named after.
+    """
+    if not _have_pillow():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        restore = _sidecar_sandbox(tmp)
+        try:
+            from core import jobshot_receive as recv
+            dest = tmp / "dest"
+            dest.mkdir()
+            jid = "20260926-209000-midway"
+            r = _file_with_two_drafts(tmp, dest, job_id=jid)
+            folder = r.final_folder
+
+            real_replace = recv.os.replace
+            seen = []
+
+            def flaky(src, dst, *a, **kw):
+                # Scoped by destination, so this patch cannot affect anything
+                # else in the process - the lesson from the json.dump patch
+                # earlier in this same session, which fired four times.
+                if str(dst).endswith("notes.json"):
+                    seen.append(str(dst))
+                    raise OSError(28, "No space left on device")
+                return real_replace(src, dst, *a, **kw)
+
+            recv.os.replace = flaky
+            try:
+                res = recv.replace_sidecars(jid, {
+                    "emr.json": {"note": "NEW-EMR"},
+                    "notes.json": {"note": "NEW-NOTES"},
+                }, dest)
+            finally:
+                recv.os.replace = real_replace
+
+            assert seen, "the injected failure never fired"
+            assert not res.ok and res.status == 500, res
+            assert res.replaced == [], res.replaced
+            # THE POINT: emr.json was already replaced when notes.json failed,
+            # and it has been put back. Without the backups it would hold
+            # NEW-EMR while the reply said nothing was replaced.
+            assert json.loads((folder / "emr.json")
+                              .read_text(encoding="utf-8"))["note"] == "OLD-EMR", \
+                "the earlier replace was not rolled back"
+            assert json.loads((folder / "notes.json")
+                              .read_text(encoding="utf-8"))["note"] == "OLD-NOTES"
+            assert [q.name for q in folder.iterdir()
+                    if q.name.startswith(".hpo-")] == []
+        finally:
+            restore()
+
+
 def main() -> int:
     tests = [(n, f) for n, f in sorted(globals().items())
              if n.startswith("test_") and callable(f)]
