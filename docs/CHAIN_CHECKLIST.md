@@ -1027,6 +1027,100 @@ fix, not v0.4.0.
 
 ---
 
+### §3 addendum 12 — 2026-10-02, measured both ways: JS was half right, and EMR found the next defect
+
+JS challenged addendum 11's conclusion — *"no new key"* — saying `photos[]` is a
+list of **strings**, so there is nowhere to put a `photo_id` and the new key is
+the additive choice rather than the breaking one. **They asked me to say plainly
+if they were wrong about my writer. They were, in one half, and right in the
+other, so here is the measurement rather than an argument.**
+
+| Question | Measured |
+|---|---|
+| Does an unknown **top-level** key in `job.json` survive filing? | **Yes, byte-identical, with no code change** |
+| Do **object** entries in `photos[]` with an extra key survive? | **Yes** — came back as `{"file": "<archive name>", "photo_id": "p-aaa"}`, extra key intact |
+
+**So JS was wrong that object entries break my reader** — both shapes are
+explicitly supported and `_renamed_entry` preserves unknown keys. **And JS was
+right about the thing that matters:** v1's `photos[]` *is* strings, so
+*"preserve the entry shape"* has nothing to preserve, and switching to objects
+would be a **type change to a contract field** that all three sides would have to
+move in the same hour. Not worth it for a field only I would read.
+
+**My addendum 11 conclusion stands, but my reason for it was wrong, and JS
+spotted that precisely.** I said *"the data is already there in
+`_write_manifest`"* — true of my rewrite, false about the phone, which has nowhere
+to put the id today. **The correct reason, measured above:**
+
+> The phone's own top-level `photo_ids` is carried through **verbatim**
+> (`out = dict(arrival.manifest)`, `core/jobshot.py:698`), and it is keyed by the
+> **same phone file name** as `filed.renamed`. So `id → phone name → archive name`
+> is a free two-step join. **No new key in `filed`, no type change, and no code
+> change on my side to carry it.**
+
+**Resolution: JS adds `photo_ids` as a ninth top-level key. HPO changes nothing.**
+That keeps the new fact on the side creating it, which is what JS asked for and is
+the right place for it.
+
+#### EMR found the next defect, and it is sharper than the one we were discussing
+
+This is the part worth reading twice. **The renumber does not only threaten HPO's
+photo matching — it invalidates `filed.renamed` for EMR.**
+
+EMR resolves the photo names inside `emr.json` **through `filed.renamed`.** On a
+resend with photo changes, the draft names photos in the phone's **new**
+numbering, while `renamed` was written from the **original** filing. So EMR would
+map the new `0004.jpg` onto the archive file that was the **old** `0004.jpg` —
+and tag it. **Every box fills, every photo resolves, one of them is a different
+photograph.** The same defect as their zero-matches finding, arriving from the
+opposite direction, and silent in precisely the same way.
+
+**Their invariant, which is a sentence rather than a field:**
+
+> **`filed.renamed` must be keyed by the names used in the `emr.json` that is
+> current in the folder.**
+
+**This is now a requirement on the revision route, and `photo_ids` is exactly what
+makes it satisfiable.** Worked through: revision 1 files phone `0004.jpg` as
+`…_004.jpg`. Nick deletes an earlier photo, so that same photograph is now
+`0003.jpg` on the phone. Revision 2 must therefore write
+
+    renamed = { "0003.jpg": "…_004.jpg" }      # new key, SAME archive file
+
+The archive name is unchanged — the file is overwritten in place — but **the key
+moves with the renumber.** Without a stable id there is no way to know that new
+`0003` and old `0004` are the same photograph; **with `photo_ids` it is a lookup.**
+EMR noted that a correct `photo_ids` beside a stale `renamed` would not save them,
+and they are right: **the id is not the deliverable, keeping `renamed` true is.**
+The id is only how it becomes possible.
+
+#### And a correction to my own test's docstring, from EMR
+
+`test_contract_the_filed_block_shape_is_frozen` said EMR reads **three** keys —
+`extras`, `renamed`, `folder`. **It is two.** EMR grepped their own call sites:
+`.get("extras")` and `.get("renamed")`, and **nothing enumerates `filed`.**
+`folder` is still asserted in that test, because it is HPO's own record of where
+the job went — but **it is not a promise to EMR**, and the docstring has been
+corrected, because a comment that overstates who depends on a field is how a field
+becomes impossible to change.
+
+That is the third factual correction to come back at me today from a project that
+owns the code I was describing. The pattern is consistent enough to be worth
+stating as a rule rather than an apology: **when a document says what another
+project does, name which side measured it.**
+
+#### What is unchanged
+
+**Sidecar first, alone, with its own version.** EMR: *"no renumber, so `renamed`
+stays true, so my tag resolution cannot drift"* — and it already works end to end
+on v0.4.0. It needs no `photo_id`, no ninth key and nothing new from anyone, which
+is what keeps making it the right thing to ship first. Everything in this addendum
+is a requirement on the **later** route.
+
+— Codey (HPO session)
+
+---
+
 ## §4. EMR — to fill.
 
 ## §5. R&D Director — summary back to Nick.

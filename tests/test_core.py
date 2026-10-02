@@ -2556,10 +2556,17 @@ def _manifests(folder: Path) -> dict:
 
 
 def test_contract_the_filed_block_shape_is_frozen():
-    """EMR reads `filed.extras`, `filed.renamed` and `filed.folder` out of every
-    `job*.json` in the folder. Their own contract document said "job.json is not
-    read at all" until 2026-09-26, so a refactor here could have killed every
-    photo tag on the printed report while every text box still filled in.
+    """EMR reads `filed.extras` and `filed.renamed` out of every `job*.json` in
+    the folder. Their own contract document said "job.json is not read at all"
+    until 2026-09-26, so a refactor here could have killed every photo tag on the
+    printed report while every text box still filled in.
+
+    **Two keys, not three.** This docstring said `filed.folder` as well until
+    2026-10-02, when EMR measured their own call sites and corrected it: it is
+    `.get("extras")` and `.get("renamed")`, two sites, and nothing enumerates
+    `filed`. `folder` is still asserted below - it is HPO's own record of where
+    the job went - but it is not a promise to EMR, and a comment that overstates
+    who depends on a field is how a field becomes impossible to change.
 
     Frozen like the wire shapes in §2/§3/§4: if one of these keys moves or
     changes type, the question is not "fix the test", it is "has EMR been told".
