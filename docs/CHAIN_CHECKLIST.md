@@ -1341,7 +1341,9 @@ this end.
 
 ### §3.5 — **LAN_PROTOCOL v1.1 · the sidecar route.** Spec, on the sheet, versioned
 
-**Status: PROPOSED, version 1.1, 2026-10-02.** This is the entry the three of us
+**Status: IMPLEMENTED on the HPO side, version 1.1, 2026-10-02** — built, reviewed
+by three independent reviewers before release, 7 findings fixed and each proven
+red-first. Shipped in **v1.060**. **Awaiting JobShot's side.** This is the entry the three of us
 agreed had to exist before a line is written. It is written to be implementable
 without asking me a question; where it is ambiguous, that is a defect and I want
 to hear it.
@@ -1375,14 +1377,24 @@ never as an error worth retrying.
 |---|---|
 | `jobshot` | integer, must equal `PROTOCOL`. A mismatch is **409**, same as §3. |
 | `job_id` | the id of a job **already filed by this PC**. Validated against `^[A-Za-z0-9._-]{1,128}$` — the same check `jobshot_index.valid_job_id` already applies. |
-| `files` | object, **1 to 4 entries**. Key = the sidecar's file name **as the phone sent it originally**. Value = the new content as a JSON **object** (not a string). |
+| `files` | object, **1 to 4 entries**. Key = the sidecar's file name **AS FILED**. Value = the new content as a JSON **object** - not a string, and **not an array**. |
+
+> ⚠️ **CORRECTED 2026-10-02, and this one changes what JobShot must send.** This
+> row used to say *"as the phone sent it originally"*. **That is wrong whenever a
+> job merged**: a second phone's `emr.json` is filed as `emr-<job_id>.json`, so a
+> phone sending its original name would be refused with 409. **The name to send
+> is the one the PC reported** - from the §3 reply's `extras`, or §4's. A
+> reviewer caught the divergence between this sentence and the gate that
+> enforces it; the gate is right and the sentence was wrong.
 
 **Only `*.json` names are accepted**, matching the existing `_SIDECAR_NAME_RE`
 (`^[A-Za-z0-9._-]{1,64}\.json$`). No path separators, no `..`, no other
 extension — a name is a name here, never a path.
 
-**Size cap: 1 MB per file, 4 MB total.** A report draft is a few KB; anything near
-this is not a draft.
+**Size cap: 1 MB per file, 2 MB total.** A report draft is a few KB; anything near
+this is not a draft. (The total was 4 MB until 2026-10-02, which was exactly
+4 x 1 MB - so the per-file check always fired first and the total could never
+execute. Two reviewers called it dead code and the arithmetic agreed.)
 
 ---
 
@@ -1429,6 +1441,18 @@ engineer about a name that comes back in it.** Nothing partial — if any file i
 the request is refused, **nothing is written** and the whole request fails. A
 half-applied correction is the one outcome worse than a refused one.
 
+**`warnings` may be present on a 200** (added 2026-10-02 after three reviewers
+found the message was being composed and discarded). It means *the drafts in
+`replaced` really did land, and a later step did not* — the manifest note, or the
+receipt. The correction is applied; something about recording it is not.
+
+**How "nothing partial" is actually kept**, since promising it is easy and
+keeping it is not: every target that already exists is copied aside first, every
+new body is written to a temp and fsynced, and only then are the replaces done —
+any failure restores every backup and answers 500 with `replaced` empty. A
+writability pre-check refuses the common case (a draft marked read-only, or
+read-only media) before the folder is touched at all.
+
 | Status | Meaning |
 |---|---|
 | **200** | every file replaced; `replaced` lists them |
@@ -1449,6 +1473,11 @@ half-applied correction is the one outcome worse than a refused one.
 - **It does not keep the superseded draft.** EMR measured that an unclaimed file is
   invisible to them, so history here would be litter at best; and a second draft is
   the exact shape that costs Nick a usable one.
+- **It will re-create a draft the user deleted from the folder**, if that name is
+  still in the job's `filed.extras`. Deliberate: the engineer is correcting that
+  draft, and refusing because he tidied the old one away would be a worse answer
+  than writing it. Flagged by a reviewer against step 4's wording, which said
+  *"to the name already on disk"* - the name has to be **filed**, not present.
 - **It does not accept a `revision`.** Nothing about the job changed but three
   lines of text. `revision`, `removed` and `photo_id` belong to the photo route —
   **LAN_PROTOCOL v1.2, not this.**
