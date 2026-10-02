@@ -441,6 +441,109 @@ Everything else in the suite fails loudly on screen when you run it.
 
 ---
 
+### §3 addendum 7 — 2026-10-02, JS's resend question, measured
+
+**JS asked three questions** before writing anything, about Nick's *"แก้ไขตัวใบงาน
+ในมือถือแล้วยิงใหม่ได้ไหมให้มันเข้าโฟลเดอร์เดิม"* — edit the report draft on the
+phone, fire the job again, same folder. All three are answerable only by doing it,
+so I did it rather than reading the code and predicting.
+
+**The harness:** file a 7-photo job with an `emr.json`, then file **the same
+`job_id`** again with a corrected `emr.json`, into a scratch destination with the
+receipt book redirected out of Nick's config dir. Both uploads go through
+`jobshot.import_batch`, which is the same path the LAN, the drop zone and the
+script all use — so this answers for every route at once, which is the thing JS
+was unsure of.
+
+| JS's question | Measured answer |
+|---|---|
+| **1 · the photos** | **Duplicated. 7 became 14**, the resend's copies filed as `…_008.jpg` … `…_014.jpg` |
+| **2 · the `emr.json`** | **A SECOND file.** `emr.json` (old) stays; the correction lands as `emr-20260926-230647-917eb2.json` |
+| **3 · is a full re-upload the right shape** | **No** — see below. The shape is the root cause of 1 and 2, not a side effect |
+
+**Answering JS's uncertainty about which route they were told about:** it was this
+one. Both the manual-import route and the Wi-Fi route go through `_file_group`, so
+*"merges into the same folder and duplicates the photos"* is the answer for both.
+
+**Why the photos duplicate, exactly.** Nothing on the filing path ever compares a
+`job_id` to one already filed. `job_id` is used for three things only — naming a
+collision, writing the receipt, and `grouped_with` — never for recognition. What
+decides the folder is `find_filed_job()`, keyed on `job_name` + `work_date`. A
+resend matches **its own folder**, `merged` becomes true, and
+`rename_photos_for_folder` continues the numbering from what the folder already
+holds (`_next_photo_seq`). Every step is behaving as designed; the design was
+never shown this case.
+
+**JS's sharp edge on question 2 is right, and sharper than they put it.** Before
+the resend the folder holds **one** usable draft. After it, EMR sees two, and EMR's
+own rule is to prefill nothing and say so. **So the correction is what destroys the
+working state** — the folder goes from one good draft to zero, and Nick's reason
+for sending was to improve it. Worse, the `emr-<job_id>.json` rule cannot help
+here by construction: it disambiguates **by `job_id`**, and in this case both files
+carry the *same* one. JS's instinct that this is a different case from two jobs
+merging is correct, and the file name is the proof — `emr-<the same id>.json`
+distinguishes nothing.
+
+**A fourth thing, which neither of us asked about and which is mine.** The receipt
+book is keyed by `job_id`, so the resend **silently replaced the first receipt**.
+After the run, `GET /jobshot/v1/job/<id>` answers:
+
+    photos: 7      extras: ["emr-20260926-230647-917eb2.json"]
+
+about a folder holding **14 photos and 2 drafts**. The first upload's receipt is
+gone, so §4 — the route that exists precisely to recover from a lost reply —
+cannot be used to notice that any of this happened. It is true of the second
+upload and false about the folder.
+
+**The root cause in one sentence, and it is why question 3 is the real one.** A
+full upload is the message *"here is a job"*. What Nick is doing is *"here is a
+correction to a job I already sent"*. Those are different messages, the merge path
+can only hear the first, and every defect above is what it does when it hears the
+wrong one. Bandwidth is a real argument too — a few KB of typed text versus 20 MB
+of photographs over a vessel link — but it is the second argument, not the first.
+
+**What I would build, and it goes on the sheet with a version, not into code.**
+Additive to protocol 1:
+
+    POST /jobshot/v1/sidecar     X-JobShot-Token
+    { "jobshot": 1, "job_id": "…", "files": { "emr.json": {…} } }
+
+- Unknown `job_id` → **404 `filed:false`**, the phone keeps its copy. Same
+  direction of safety as §4: better a question than a lost draft.
+- Known → **replace that one file in place**, so the folder never holds two
+  drafts. That is the entire point of the route.
+- **The name it replaces comes from that job's own `filed.extras`, not from a
+  listing of the folder.** This is what makes it safe in a merged folder: a job
+  can only overwrite a file it filed itself, can never invent a new name, and can
+  never touch the other job's draft.
+- Reply: the §4 receipt shape plus `replaced: ["emr.json"]`.
+
+**One open question for the sheet, with my answer:** should the superseded draft
+be kept? **No.** A second file in the job folder is the exact failure mode this
+route exists to avoid, and EMR finds drafts by name. If history is wanted it
+belongs somewhere EMR does not look.
+
+**Not shipped, and nothing shipped today.** Two changes are now sitting here and
+they are entangled, which is why neither goes in on my say-so:
+
+1. **Should the PC refuse a `job_id` it has already filed?** I think yes — it
+   closes the double-drop as well as the resend, and the legitimate recovery case
+   (*"my reply was lost"*) is exactly the case where resending is pointless,
+   because §4 already answers it. But it changes what the phone is told on the
+   receive path, and JS's UX sits on top of that.
+2. **The receipt-book replacement above.** If (1) refuses the resend, this never
+   arises; patching it alone would harden a path we may be about to close.
+
+Same discipline as the vessel guard (§6.1): measured, written down, waiting for
+Nick and JS. **JS's own fix — the phone saying *"this report was changed after it
+was sent; the PC still has the old one"* — is right and is not blocked on any of
+this.** On today's behaviour the phone must not resend, and after the measurement
+above I would say that twice.
+
+— Codey (HPO session)
+
+---
+
 ## §4. EMR — to fill.
 
 ## §5. R&D Director — summary back to Nick.
