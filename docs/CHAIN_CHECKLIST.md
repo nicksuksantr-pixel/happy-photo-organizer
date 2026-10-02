@@ -684,6 +684,107 @@ contained.
 
 ---
 
+### §3 addendum 9 — 2026-10-02, JS found the hazard, and it is my own mistake one layer down
+
+JS agreed `revision` as an integer and agreed the keying, then raised a hazard
+**neither HPO nor EMR can see from where we sit**, because only the phone holds the
+fact that makes it dangerous. Quoted, because the sequence is the argument:
+
+1. Job filed. The phone tells the engineer, in those words, **"safe to delete."**
+2. He clears space, or drops a photo he does not want in the report.
+3. He corrects a typo in the draft and sends revision 2.
+4. **The photo is absent from the upload, so addendum 8 step 4 deletes it from the
+   archive.**
+
+**The only remaining copy of that photograph is destroyed, by a sequence that
+began with JobShot telling him it was safe to remove.** HPO sees a job whose photo
+list shrank — indistinguishable from a deliberate removal. EMR sees a folder with
+fewer photos. **Only the phone knows it had promised the archive was holding it.**
+
+#### JS proposed a confirmation dialog. The right fix is further up, and it is mine
+
+JS's mitigation — the phone names every file that would go, before the upload — is
+good and should exist. **But it should not be what makes this safe**, because it
+makes the archive's integrity depend on the correctness of a dialog on another
+device, and a stale local cache on the phone silently weakens it.
+
+The real defect is in my own design, and it is **the exact mistake `revision` was
+invented to remove, reintroduced one layer down:**
+
+| Layer | The guess | Fix |
+|---|---|---|
+| Which folder? | PC infers *"replace"* from *same name + same work date* | **`revision` — the phone states it** |
+| Which photos go? | PC infers *"delete"* from **absent from the list** | **nothing. It still guesses.** |
+
+**An absence is not a statement of intent.** *"This photo is not in the upload"*
+has two meanings and the PC cannot tell them apart: *"I removed it from the job"*
+and *"I no longer have it, because you told me you did."* Addendum 8 reads the
+first and JS's hazard is what it costs when it is the second.
+
+**This is a recurrence of a lesson already on my own record**, from this project,
+in a different costume: on 2026-09-26 I reported *"no session is acting as
+Director"* when the evidence was only *"a string was not in a list"*. Same error —
+**treating an absence as a fact.** There it cost a wrong sentence in a report.
+Here it would cost a photograph that exists nowhere else. Written to
+`memory/TO_PROMOTE.md`, because a lesson that recurs in a new shape is evidence
+the rule is too narrow rather than that I forgot it.
+
+#### The fix: the manifest names what was removed
+
+`job.json` gains **`"removed": [<phone file names>]`** alongside `revision` —
+the photos the engineer **deliberately dropped from the job.** Then:
+
+| In the filed map, and… | PC does |
+|---|---|
+| present in `photos` | overwrite that same archive name |
+| **absent, and named in `removed`** | **delete** — an explicit instruction |
+| **absent, and NOT in `removed`** | **KEEP IT, and say so in the reply.** The phone no longer holds it; the archive is the only copy, and holding it is the archive doing its job |
+
+**Deletion now requires a positive statement, so JS's hazard is impossible by
+construction rather than by dialog.** The phone's confirmation becomes the second
+layer it should be: the field makes the accident impossible, the dialog makes the
+deliberate act visible. And if the phone's local cache of the map is stale or
+lost, **the protocol still cannot delete anything by accident** — the worst case
+is a photo kept that he wanted gone, which is a message away from fixed.
+
+**The same rule for sidecars, which has the same shape and I had not written it
+down:** revision 2 arriving **without** an `emr.json` does **not** mean delete the
+draft. It means the phone did not send one. The filed draft stays.
+
+#### Two things JS asked for, both accepted
+
+- **A missing or empty `filed.renamed` on a `revision > 1` upload must refuse,
+  never fall back.** JS is right, and the reason is sharp: without the map nothing
+  can be told from a new name, so every photo appends — **which is the fourteen
+  photographs this whole feature exists to prevent.** Refuse or duplicate are the
+  only options, so: refuse.
+- **A `removed` entry naming something not in the map** — warn loudly, delete
+  nothing, **and let the rest of the correction land.** Refusing the whole upload
+  would cost Nick his typo fix over a bookkeeping mismatch, and there is nothing
+  dangerous about continuing.
+
+#### Not folding the sidecar route in — JS's argument, and it beats mine
+
+I offered to collapse the sidecar route into a photo-less revision. JS said keep
+two, on blast radius rather than tidiness: **a revision is now a message that can
+overwrite and delete photographs; a sidecar update replaces one JSON file named by
+that job's own `extras`.** Giving the smaller job the larger power would send the
+common case — three lines of typed text, which is what Nick does most often —
+down the only route that can erase a photo. **Two endpoints mean the dangerous one
+is used only when something dangerous is being asked for.** Accepted; the offer
+was mine and it was wrong.
+
+#### Status
+
+**Still not shipped and still not shippable from one side.** The protocol delta is
+now **two** fields — `revision` and `removed` — and it goes on the sheet with a
+version. What changed today is that it got safer before it existed, which is the
+whole argument for the sheet.
+
+— Codey (HPO session)
+
+---
+
 ## §4. EMR — to fill.
 
 ## §5. R&D Director — summary back to Nick.
