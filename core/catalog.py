@@ -71,7 +71,9 @@ class JobCatalog:
                 self._rebuild_index()
                 return
             try:
-                self.data = json.loads(self.path.read_text(encoding="utf-8"))
+                # utf-8-sig: a BOM silently emptied the whole catalog —
+                # `except Exception` below hands back zero jobs. See auth.py.
+                self.data = json.loads(self.path.read_text(encoding="utf-8-sig"))
                 if "jobs" not in self.data:
                     self.data["jobs"] = []
             except Exception:

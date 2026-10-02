@@ -157,7 +157,12 @@ def _load_config_unlocked() -> dict:
     if not CONFIG_FILE.exists():
         return {}
     try:
-        return json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+        # utf-8-sig, not utf-8: a BOM here used to be quarantined as "corrupt"
+        # and returned {} — silently un-pairing the phone and forgetting the
+        # destination. PowerShell's `Out-File -Encoding utf8` writes one on
+        # this machine (measured), so this is reachable, not theoretical.
+        # Same fix as version.py/jobshot.py (v1.044); it had never reached here.
+        return json.loads(CONFIG_FILE.read_text(encoding="utf-8-sig"))
     except json.JSONDecodeError:
         # Quarantine the corrupt file so the next save doesn't overwrite the
         # only forensic evidence. The next call returns {} → user starts fresh.

@@ -3368,6 +3368,56 @@ def test_phase1_never_walks_into_an_abandoned_pending_folder():
         assert not any((f / "left_behind.jpg").exists() for f in folders)
 
 
+def test_a_bom_does_not_wipe_the_config_or_the_catalog():
+    """v1.044 taught this project that a JSON file can arrive with a BOM, and the
+    fix was `encoding="utf-8-sig"`. It was applied to the three readers that had
+    been bitten - jobshot, jobshot_index, version - and **stopped there.**
+
+    The two it did not reach hold the pairing token, the remembered destination
+    and all 174 catalog jobs, and both of them swallow the failure and return a
+    default. So a BOM silently un-pairs the phone, forgets the folder Nick just
+    asked us to remember, and empties the catalog - with no error anywhere.
+
+    Not hypothetical on this machine: PowerShell `Out-File -Encoding utf8`
+    writes a BOM, measured. Found by applying JobShot's question to my own code
+    on 2026-10-02 - *where else does this happen, and did I fix it there?*
+    """
+    import json as _json
+    from core import auth
+    from core.catalog import JobCatalog
+
+    bom = b"\xef\xbb\xbf"
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+
+        # --- the config: the token and the destination live here ---
+        cfg = tmp / "auth.json"
+        wanted = {"api_key": "k", "jobshot_token": "tok123", "dest_root": "D:/Jobs"}
+        cfg.write_bytes(bom + _json.dumps(wanted).encode("utf-8"))
+        real = auth.CONFIG_FILE
+        try:
+            auth.CONFIG_FILE = cfg
+            got = auth._load_config_unlocked()
+        finally:
+            auth.CONFIG_FILE = real
+        assert got.get("jobshot_token") == "tok123", (
+            "a BOM un-paired the phone: " + repr(got))
+        assert got.get("dest_root") == "D:/Jobs", (
+            "a BOM forgot the destination: " + repr(got))
+        assert not any("corrupt" in p.name for p in cfg.parent.iterdir()), (
+            "a readable file was quarantined as corrupt")
+
+        # --- the catalog: 174 jobs ---
+        cat = tmp / "job_catalog.json"
+        jobs = {"version": 1, "jobs": [{"name": "Overhauled Air Compressor"},
+                                       {"name": "Inspected Tumble Dryer"}]}
+        cat.write_bytes(bom + _json.dumps(jobs).encode("utf-8"))
+        c = JobCatalog(cat)
+        c.load()
+        assert len(c.data.get("jobs", [])) == 2, (
+            "a BOM emptied the catalog: " + repr(c.data))
+
+
 def main() -> int:
     tests = [(n, f) for n, f in sorted(globals().items())
              if n.startswith("test_") and callable(f)]
