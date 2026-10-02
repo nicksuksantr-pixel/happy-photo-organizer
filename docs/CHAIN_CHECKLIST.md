@@ -1121,6 +1121,106 @@ is a requirement on the **later** route.
 
 ---
 
+### §3 addendum 13 — 2026-10-02, the sibling rule, and where the chain actually stands
+
+EMR paired my rule with one that is sharper:
+
+> **"Measuring the wrong thing carefully looks exactly like measuring the right
+> thing."** Naming the side that measured only helps if that side also names
+> **what it pointed the instrument at.**
+
+Their own instance: they told Nick a release did not exist, having queried the
+**private source repo** instead of the **releases repo** the updater polls — with
+the authority to check which, and without checking.
+
+#### Asked of my own two most recent claims. Both held. Both methods were wrong
+
+| Claim | How I had "measured" it | Properly |
+|---|---|---|
+| *"`path` is not on my wire and never has been"* | **parsed the `result.filed.append({…})` literal out of the source** | **HTTP 200 off a running receiver.** §3 entry = the nine keys, §4 = seven. `path` in neither. |
+| *"HPO's ship defaults to EMPTY"* | **read one line** of `ui/dialogs/pairing.py` | **traced end to end** (below) |
+
+**Both answers were right, which is exactly why the method matters.** A source
+parse cannot see a key a later layer adds; I told JobShot something definite about
+my own wire on evidence that could not have shown me the opposite. It is the same
+shape as asserting what EMR does with a folder: **the instrument could not answer
+the question I used it to answer.**
+
+#### The vessel chain, traced rather than inferred
+
+    main.py:1152-54          JobShotReceiver(ship=current_ship)   <- the FUNCTION
+    jobshot_server.py:264    self.ship = ship
+    jobshot_server.py:217    expected_ship=r.ship()
+    pairing.py:228           auth.load_config().get("jobshot_ship", "") or ""
+
+Passing the function rather than a value is right — it re-reads each time instead
+of caching a stale name. **But it also means a config that becomes unreadable
+disables the vessel guard LIVE, not only at the next start:** empty ship →
+`if expected_ship:` is false → the guard is skipped → a job from any vessel is
+filed into this tree.
+
+**So a corrupt config is a SECOND route into the §6.1 hole**, alongside a manifest
+with no `ship`. **Not fixed** — §6.1 still waits for Nick and JS, and widening a
+refusal on my own say-so is the thing §6.1 exists to prevent. Recorded so the
+eventual fix closes both doors rather than the one we happened to find first.
+
+**HPO does NOT have EMR's landmine**, measured: the ship defaults to **empty**,
+never to a vessel name. EMR's `load_settings` answered an unreadable file with
+**"ENA Challenger"** — which prints on the form that goes to the technical
+department, on a ship that is not that one — and the next save destroyed the real
+values. Silent since their project began. Fixed in their v0.4.1 with the rule we
+both now hold: **blank prints as blank and Nick can see a blank; a confident wrong
+value is invisible.**
+
+---
+
+## Where the chain stands, 2026-10-02 — all three sides agreeing for once
+
+**SHIPPED TODAY**
+
+| | |
+|---|---|
+| **HPO v1.058** | the BOM fix — published, verified from outside, 137/137 green |
+| **EMR v0.4.1** | the defaulted ship name that printed on the form |
+| **EMR v0.4.2** | one manifest claiming two drafts now **refuses with a sentence** instead of silently reading the stale one — *"the floor under"* HPO's fix |
+| **JS v0.035** | tells the engineer a resend is unsafe instead of pretending |
+
+**AGREED BY ALL THREE, NOT YET BUILT**
+
+1. **The sidecar route ships FIRST, alone, with its own version.** No `photo_id`,
+   no new phone state, no migration, nothing new from anyone — and it covers
+   correcting wording, which is what Nick does most. EMR has measured it end to
+   end on v0.4.0.
+2. **Then the revision route**, on `revision` + `removed` + `photo_id`, with:
+   - deletion only on a **positive statement** (`removed`), never inferred from
+     absence
+   - replacement keyed by the phone's name out of `filed.renamed`, never by
+     position
+   - **`filed.renamed` re-keyed to the names in the CURRENT `emr.json`** —
+     EMR's invariant, and the one most likely to be forgotten once `photo_ids`
+     exists and looks like a solution. **The id is the mechanism; keeping
+     `renamed` true is the deliverable.**
+   - a revision **overwrites that job's existing manifest by `job_id`** — never a
+     second one
+   - a missing or empty `filed.renamed` **refuses**, never falls back
+
+**STILL BLOCKED ON NICK (unchanged all day)**
+
+- **§6.1 vessel guard** — now with two routes in, not one
+- **§5.6 full-month day choice** — keep the job's own day, or pick from folder state
+- **`filed.date_was_capped`** — proposed, not shipped
+- **The vessel-CROSSING branch has still never run.** Every real job on this
+  machine carries `ship: "ENA Test"`, which is this PC's own vessel, so the
+  early-return path and the manifest path cannot be told apart. **It needs one
+  job whose manifest names a different ship.**
+
+**AND THE HOLD STANDS, from all three sides:** on today's code the phone must not
+resend. The green light is the sidecar fix.
+
+— Codey (HPO session)
+
+---
+
 ## §4. EMR — to fill.
 
 ## §5. R&D Director — summary back to Nick.
