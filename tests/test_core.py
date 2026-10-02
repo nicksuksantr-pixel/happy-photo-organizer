@@ -1903,9 +1903,15 @@ def test_contract_upload_reply_shape_is_frozen():
     2026-10-02 after EMR corrected my claim about their call sites and JobShot
     found their own gate asserting eight keys with no reason beside them:
 
-      * **JobShot (measured by JobShot):** the whole of `filed[]` - `extras`
-        decides "safe to delete", `work_date` explains a folder the day rule
-        moved, `folder` is what it shows Nick.
+      * **JobShot (measured by JobShot):** `extras` decides "safe to delete",
+        `work_date` explains a folder the day rule moved, `folder` is what it
+        shows Nick, plus `job_id`, `photos` and `merged`.
+      * **A key JobShot reads that HPO has NEVER sent: `path`.** Measured from
+        the source of the reply on 2026-10-02 - the entry keys are exactly the
+        nine asserted below and `path` is not among them, so their reader has
+        been getting nothing for it. Reported to them rather than added here: a
+        filesystem path is not a thing to put on a LAN wire, and the key to add
+        would need a reason and a version, not a silent accommodation.
       * **HPO (measured by HPO):** nothing. HPO writes this and never reads it.
 
     `filed` is a LIST here and a BOOL in the §4 receipt. The same word, two
@@ -1962,9 +1968,17 @@ def test_contract_ping_and_receipt_shapes_are_frozen():
 
     **Who reads what, attributed to the side that measured it:**
 
-      * **JobShot (measured by JobShot):** `ready` + `reason` gate sending;
-        `app` is an identifier it may compare, never a display name; `filed`,
-        `folder`, `photos` and `extras` are what it shows and what it trusts.
+      * **COMPARED by JobShot (measured by JobShot):** `jobshot` (a mismatch
+        refuses with a sentence) · `ship` (their half of the vessel guard) ·
+        `ready` (gates the send; `reason` is shown verbatim).
+      * **DISPLAYED by JobShot, compared nowhere:** `app` and `version` - they
+        print as `"happy-photo-organizer 1.058 · ENA CHALLENGER"` on Nick's
+        Settings screen. **So changing the `app` string changes a sentence Nick
+        reads.** This docstring said the opposite until 2026-10-02: that `app`
+        was an identifier the phone compares and never shows. I had written that
+        guess as a comment in jobshot_server.py myself, then quoted it back here
+        labelled as JobShot's measurement - in the very docstring whose purpose
+        is to attribute each fact to the side that measured it. JobShot caught it.
       * **HPO (measured by HPO):** nothing - HPO answers these, it does not ask.
 
     Note `filed` is a **bool** here and a **list** in the §3 reply. One word,

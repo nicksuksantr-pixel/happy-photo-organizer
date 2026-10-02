@@ -118,9 +118,16 @@ class _Handler(BaseHTTPRequestHandler):
         ready = r.dest_root() is not None
         body = {
             "jobshot": receive.PROTOCOL,
-            # The identifier from LAN_PROTOCOL §2, not a display name: the
-            # phone may compare it. A prose title here would be a difference
-            # nobody notices until pairing quietly refuses.
+            # **Displayed, not compared** - corrected 2026-10-02 when JobShot
+            # measured their own reader. This comment used to say the phone "may
+            # compare it", which I had guessed and never checked; I then quoted
+            # my own guess into a test docstring as JobShot's measurement.
+            #
+            # What actually happens to it: `'$app $version · $ship'` is printed
+            # to Nick in three places on JobShot's Settings screen. Nothing
+            # compares it. So changing this string changes a sentence NICK READS,
+            # which is the opposite of the licence the old comment gave.
+            # (What JobShot does compare: `jobshot`, `ship`, and `ready`.)
             "app": "happy-photo-organizer",
             "version": read_version(),
             "ship": r.ship(),
