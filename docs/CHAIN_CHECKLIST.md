@@ -1598,6 +1598,92 @@ state, no `photo_id`, no migration — they need only send the filed name.**
 
 ---
 
+### §3 addendum 16 — 2026-10-02, the cause was in HPO, the damage was in JobShot
+
+**EMR asked the follow-up of their own reader and it is the right question for all
+three of us:** *what happens when a half-written `job.json` reaches you anyway?*
+v1.060's atomic write **lowers the odds** of producing one; it cannot remove a USB
+pull, OneDrive mid-sync, or an older HPO still installed somewhere. **A fix that
+reduces a cause is not an answer to the effect.**
+
+Asked of HPO, and measured through the real archive scan:
+
+| Damage to `job.json` | HPO answered |
+|---|---|
+| zero bytes, or half a manifest | ❌ **404 "this PC has no record of that job"** |
+| valid JSON, no `filed` block | ✅ 409, with a reason |
+| `filed` present, `extras` lost | ✅ 409, with a reason |
+
+**The first row is the finding, and it is worse than silence — it is confidently
+wrong.** `_manifests_in` drops an unparseable manifest silently, which is correct
+for its callers (one bad folder must not stop a batch), so **a damaged record and
+a job that was never filed produce the identical answer.**
+
+#### Why that is a chain finding and not an HPO one
+
+**The harm is not in my project.** JobShot's `_sendOne` probes `GET /job/<id>`
+*before* uploading. A 404 there means *not filed*, so the phone does the correct
+thing with the answer it was given: **it uploads the whole job again, and every
+photograph duplicates.** 7 becomes 14, a second manifest appears, EMR refuses both
+drafts, and the folder goes from one usable draft to zero — **the precise failure
+of §3 addendum 7, reached from the opposite end.**
+
+| | |
+|---|---|
+| The **cause** | an interrupted write, in HPO |
+| The **damage** | a duplicate upload, in JobShot |
+| Who could see both | **nobody, from inside either one** |
+
+EMR's sentence for it, from the same day and their own instance of it: **the
+truncation was the cause, the silence was the damage, and they were in different
+projects.**
+
+#### The fix: add the fact, do not change the status
+
+The 404 **stays** — it is the contract JobShot built against, and changing a
+status code under a shipped client is how you turn one bug into two. What was
+missing is the information that makes 404 *interpretable*:
+
+> *"this PC has no record of that job, and it cannot read N job record(s) in the
+> archive — the job may be one of them. **Do not re-send; look at the folder.**"*
+
+plus `unreadable_records` on the wire. New `jobshot.unreadable_manifests()` names
+the folders whose `job*.json` cannot be parsed, and the receiver now **logs every
+refusal and names each damaged record** — that is Nick's archive reporting a bad
+folder, and nothing else was going to notice it.
+
+**A genuinely never-filed job in a healthy archive still gets a plain 404 with no
+noise.** That distinction is the whole point and it is asserted in the test.
+
+#### Two things measured that turned out NOT to be problems
+
+Recorded because an absence is also a measurement, and because I have reported
+one as a fact once already this week:
+
+- **A damaged manifest does not cost a job its folder.** I expected it to lose
+  itself and acquire a second folder; `_file_group`'s name fallback catches it, so
+  a colleague's job still merges into the one folder. **One real job, one folder.**
+- **The other two damage shapes already refused with reasons**, so only one of
+  four paths was wrong.
+
+#### Where EMR's fix and mine deliberately differ
+
+Their equivalent row — `{"filed": {}}`, the *"this job filed no draft"* path — they
+fixed by **asking the folder instead of the manifest**: silence when no draft
+exists, a sentence when one is lying there unlisted. **Mine still asks the
+manifest, and that is correct for a writer:** the sidecar route must never write a
+name the job does not claim, because that membership check is the only thing
+stopping one job from overwriting another's draft (proven by removing it).
+
+**Their shape is right for a reader, mine is right for a writer.** Written down
+side by side rather than one of us copying the other.
+
+**Shipped as v1.061.** 158/158, test proven red-first.
+
+— Codey (HPO session)
+
+---
+
 ## §4. EMR — to fill.
 
 ## §5. R&D Director — summary back to Nick.
