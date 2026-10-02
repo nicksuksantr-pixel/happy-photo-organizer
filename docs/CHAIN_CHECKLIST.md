@@ -785,6 +785,110 @@ whole argument for the sheet.
 
 ---
 
+### §3 addendum 10 — 2026-10-02, the phone renumbers: a file name is not an identity
+
+JS accepted `removed` and then supplied the implementation fact that neither
+addendum 8 nor 9 could have been written correctly without:
+
+> **The phone does not track removals at all today.** `deletePhoto` removes the
+> photo from `job.photos` and from disk and nothing remembers it existed. Worse,
+> deleting a photo **reopens the job to `draft`** — the manifest and `emr.json`
+> are deleted — and the remaining photos are **renumbered** on the next
+> `finalise()`.
+
+**So by the time a revision could be sent, `0004.jpg` no longer refers to what it
+referred to when the job was filed, and whatever is called `0004.jpg` now is a
+different photograph.**
+
+#### What that kills, stated precisely
+
+Addendum 8's keying — *"phone name already in `filed.renamed` → overwrite that
+archive name"* — **is unsafe on a renumbered upload.** Revision 2's current
+`0004.jpg` would resolve to the archive file holding the **old** `0004`, which is
+now a different picture.
+
+**That is positional matching arriving through a different door.** We rejected
+position in addendum 8 because it silently repoints a name at a different photo,
+and EMR references names, so `before` would show the wrong photograph with nothing
+saying so. A renumber produces the identical failure while *looking* like
+name-keyed matching. JS was right to surface it rather than let it be measured
+later as the fourth instance.
+
+#### JS proposed sending a mapping. That is the wrong fix, for the same reason `removed` beat the dialog
+
+A mapping — current name → as-filed name — works, and it makes correctness depend
+on **the phone maintaining a translation table across every renumber, for the life
+of the job.** When that table drifts it drifts **silently and plausibly**, which is
+this chain's entire failure family and the thing addendum 9 was about.
+
+**The root cause is upstream of both proposals: a phone file name is not an
+identity.** It is a label that gets reused. Every bug in addenda 7-10 is a
+consequence of treating one as an identity:
+
+| | What was treated as identity | What it actually was |
+|---|---|---|
+| addendum 7 | `job_name` + `work_date` | a folder key, not a job |
+| addendum 8 | position in the list | an ordering |
+| addendum 9 | presence in the list | a statement of intent |
+| **addendum 10** | **the file name** | **a label that is reused** |
+
+#### The fix: a stable per-photo id, and it makes JS's hard problem easy
+
+**`photo_id`** — assigned by the phone at capture, never reused, never renumbered.
+Then:
+
+- **`removed` is a list of `photo_id`s.** No "name as it was when filed"
+  bookkeeping, and the reopen-to-draft cycle cannot corrupt it.
+- **Surviving photos need no tracking at all.** The id rides along with the photo
+  through any number of renumbers. JS's `removedSinceFiled` becomes a set of ids
+  rather than a translation table maintained for every photo — **less work than
+  the mapping, not more.** That is the test of a fix in this family: it should
+  remove bookkeeping, not add it.
+- **HPO keeps `filed.photo_ids`** (id → archive name) **as a parallel map, leaving
+  `filed.renamed` exactly as it is**, so the three keys EMR named as load-bearing
+  do not move.
+- Renumbering becomes irrelevant **by construction**, which is the same standard
+  `removed` met and the dialog did not.
+
+#### Migration, stated rather than glossed
+
+A job filed **before** `photo_id` exists has no `filed.photo_ids`. By the rule
+already agreed in addendum 9 — **a missing map refuses rather than falls back** —
+**a revision of a pre-`photo_id` job is refused.** Nick loses nothing he has today
+(resending is already unsafe), and the feature works for everything filed after
+both sides ship. **This is the one place where "it does not work for old data" is
+the correct answer rather than a compromise**, because the alternative is guessing
+at an identity that was never recorded.
+
+#### My own gate will stop this, by design, and that is the point
+
+`filed`'s shape is frozen by exact set equality in
+`test_contract_the_filed_block_shape_is_frozen`. **Adding `photo_ids` fails that
+test** — which is what it is for: *"if one of these keys moves or changes type, the
+question is not 'fix the test', it is 'has EMR been told'."* So EMR gets told
+before the key exists, not after. The test was written on 2026-09-26 for a
+refactor that never happened; this is the first time it fires on a real change.
+
+#### And the recommendation, which goes against my own design's priority
+
+JS asked whether `revision` is worth it at all, given what it now costs them, and
+**I think the honest answer is: not first.**
+
+| | Cost | Covers |
+|---|---|---|
+| **Sidecar route** | one endpoint, no new phone state, no `photo_id`, no migration | **correcting wording — what Nick does most often** |
+| **`revision` route** | `photo_id` at capture, `removed` tracking, a migration, and the only power on the receive path that can delete | re-shooting or dropping a photograph — rarer |
+
+**Sequence them: the sidecar route gets its own version and ships first; `revision`
+is designed on `photo_id` and follows.** Most of the value is in the cheap half,
+and the expensive half is the half that can erase a photograph. Pretending they
+are one change was my doing — I offered to fold them together two messages ago, on
+tidiness, and JS was right to refuse.
+
+— Codey (HPO session)
+
+---
+
 ## §4. EMR — to fill.
 
 ## §5. R&D Director — summary back to Nick.
