@@ -172,7 +172,71 @@ class _Handler(BaseHTTPRequestHandler):
             "filed_at": entry.get("filed_at", ""),
         })
 
+
+    def _sidecar(self):
+        """`POST /jobshot/v1/sidecar` — LAN_PROTOCOL v1.1.
+
+        Replace a sidecar on a job already filed, without re-sending a photo.
+        Every decision lives in `receive.replace_sidecars`, including which HTTP
+        code to answer with: this method is the socket and nothing else, which
+        is the same split the upload path uses and for the same reason.
+        """
+        if not self._authorised():
+            self._drain()
+            self._send(401, {"jobshot": receive.PROTOCOL, "error": "pair first"})
+            return
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            length = -1
+        if length <= 0:
+            self._send(411, {"jobshot": receive.PROTOCOL, "error": "no body"})
+            return
+        if length > receive.MAX_SIDECAR_TOTAL * 2:
+            # Refused on the header, before a byte is read. The x2 is slack for
+            # JSON overhead around the bodies; the real per-file and total caps
+            # are applied to the serialised content inside.
+            self._send(413, {"jobshot": receive.PROTOCOL,
+                             "error": "too big for a sidecar update"})
+            return
+        try:
+            raw = self.rfile.read(length)
+        except OSError:
+            return                              # the phone will retry
+        try:
+            body = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+            self._send(422, {"jobshot": receive.PROTOCOL,
+                             "error": "body is not JSON"})
+            return
+        if not isinstance(body, dict):
+            self._send(422, {"jobshot": receive.PROTOCOL,
+                             "error": "body is not a JSON object"})
+            return
+        if body.get("jobshot") != receive.PROTOCOL:
+            self._send(409, {"jobshot": receive.PROTOCOL,
+                             "error": f"this PC speaks jobshot "
+                                      f"{receive.PROTOCOL}"})
+            return
+
+        r = self.server.receiver                # type: ignore[attr-defined]
+        try:
+            result = receive.replace_sidecars(
+                str(body.get("job_id", "")), body.get("files"), r.dest_root())
+        except Exception as e:                  # never let a request kill the app
+            r._log(f"sidecar failed: {type(e).__name__}: {str(e)[:160]}")
+            self._send(500, {"jobshot": receive.PROTOCOL,
+                             "error": "the PC could not apply the correction"})
+            return
+        if result.ok:
+            r._log(f"sidecar replaced in {result.folder}: "
+                   f"{', '.join(result.replaced)}")
+        self._send(result.status, result.to_reply())
+
     def do_POST(self):                         # noqa: N802
+        if self.path == receive.SIDECAR_PATH:
+            self._sidecar()
+            return
         if self.path != receive.UPLOAD_PATH:
             self._drain()
             self._not_found()

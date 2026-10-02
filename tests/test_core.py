@@ -3594,6 +3594,328 @@ def test_two_capped_jobs_share_a_day_without_sharing_a_folder():
         assert len(photos) == 2, sorted(p.name for p in photos)
 
 
+# --- LAN_PROTOCOL v1.1: the sidecar route (chain sheet §3.5) ----------------
+#
+# The route exists because the alternative was measured and was worse than doing
+# nothing: re-uploading a job to fix three lines of typed text duplicated every
+# photograph (7 became 14) and left the folder with two manifests, which EMR
+# refuses to choose between - so a CORRECTION took the folder from one usable
+# draft to zero (§3 addendum 7, 2026-10-02).
+
+
+def _sidecar_sandbox(tmp):
+    """Redirect the receipt book out of Nick's real config dir.
+
+    `jobshot_index.INDEX_PATH` is computed from `auth.CONFIG_DIR` at import, so a
+    test that files a job writes a receipt into the real one unless this is done.
+    Returns a restore callable.
+    """
+    from core import jobshot_index
+    real = jobshot_index.INDEX_PATH
+    jobshot_index.INDEX_PATH = tmp / "jobshot_filed.json"
+
+    def restore():
+        jobshot_index.INDEX_PATH = real
+    return restore
+
+
+def _file_with_draft(tmp, dest, *, job_id, job="Overhauled Air Compressor",
+                     work_date="2026-09-26", draft=None, photos=2):
+    """File one job that carries an `emr.json`, the way a real arrival does."""
+    from core import jobshot
+    arrival = _arrival(tmp / job_id, photos=photos, job=job, plain=True,
+                       work_date=work_date, job_id=job_id)
+    body = draft if draft is not None else {"note": "ORIGINAL", "job_id": job_id}
+    (arrival / "emr.json").write_text(json.dumps(body), encoding="utf-8")
+    r = jobshot.import_job(arrival, dest)
+    assert r.ok, r.error
+    return r
+
+
+def test_sidecar_replaces_a_draft_in_place_and_touches_no_photograph():
+    """The whole point of v1.1: a corrected draft reaches the filed folder
+    without a single photograph moving, and the folder still holds exactly one
+    draft and exactly one manifest afterwards.
+
+    Driven over real HTTP rather than by calling the function, because the route
+    is the deliverable - a correct function behind an unrouted path is nothing.
+    """
+    if not _have_pillow():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        restore = _sidecar_sandbox(tmp)
+        rx = _Receiver(tmp)
+        try:
+            from core import jobshot_receive as recv
+            r = _file_with_draft(tmp, rx.dest, job_id="20260926-230647-aaaaaa")
+            folder = r.final_folder
+            before = sorted((p.name, p.stat().st_size) for p in folder.iterdir()
+                            if p.suffix.lower() == ".jpg")
+            assert r.extras == ["emr.json"], r.extras
+
+            status, reply = rx.post(json.dumps({
+                "jobshot": 1, "job_id": "20260926-230647-aaaaaa",
+                "files": {"emr.json": {"note": "CORRECTED", "serial": "0806032164"}},
+            }).encode("utf-8"), path=recv.SIDECAR_PATH)
+
+            assert status == 200, reply
+            assert reply["filed"] is True, reply
+            assert reply["replaced"] == ["emr.json"], reply
+            assert reply["folder"] == folder.name, reply
+
+            # the draft on disk is the corrected one
+            got = json.loads((folder / "emr.json").read_text(encoding="utf-8"))
+            assert got["note"] == "CORRECTED", got
+            assert got["serial"] == "0806032164", got
+
+            # ONE draft, ONE manifest - EMR's guarantee, which counts manifests
+            drafts = [p.name for p in folder.iterdir() if p.name.startswith("emr")]
+            assert drafts == ["emr.json"], drafts
+            manifests = sorted(p.name for p in folder.iterdir()
+                               if p.name == "job.json" or p.name.startswith("job-"))
+            assert manifests == ["job.json"], manifests
+
+            # not one photograph moved, renamed, or changed size
+            after = sorted((p.name, p.stat().st_size) for p in folder.iterdir()
+                           if p.suffix.lower() == ".jpg")
+            assert after == before, (before, after)
+
+            # and the manifest says when, without disturbing `extras`
+            block = json.loads((folder / "job.json")
+                               .read_text(encoding="utf-8"))["filed"]
+            assert block["extras"] == ["emr.json"], block["extras"]
+            assert block["sidecar_updated_at"], block
+        finally:
+            rx.close()
+            restore()
+
+
+def test_sidecar_refuses_a_job_this_pc_never_filed():
+    """404 and `filed: false` - §4's word and the same direction of safety. The
+    phone keeps its copy and tells the engineer. A PC too old to have this route
+    answers 404 as well, which is why the phone must read it as "fall back",
+    never as an error worth retrying."""
+    if not _have_pillow():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        restore = _sidecar_sandbox(tmp)
+        rx = _Receiver(tmp)
+        try:
+            from core import jobshot_receive as recv
+            rx.dest.mkdir(parents=True, exist_ok=True)
+            status, reply = rx.post(json.dumps({
+                "jobshot": 1, "job_id": "20260101-000000-nothere",
+                "files": {"emr.json": {"note": "x"}},
+            }).encode("utf-8"), path=recv.SIDECAR_PATH)
+            assert status == 404, (status, reply)
+            assert reply.get("filed") is False, reply
+        finally:
+            rx.close()
+            restore()
+
+
+def test_sidecar_cannot_reach_another_jobs_draft_in_a_merged_folder():
+    """**The safety test.** Two engineers photograph one job from two phones, so
+    both drafts live in one folder - the second as `emr-<job_id>.json`. A
+    correction from phone A must not be able to name phone B's file.
+
+    This is why the name is resolved against **that job's own `filed.extras`**
+    and never against a listing of the folder. A listing would hand job A the
+    name of job B's draft, and the route would overwrite work that is not its
+    own with no error anywhere.
+    """
+    if not _have_pillow():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        restore = _sidecar_sandbox(tmp)
+        try:
+            from core import jobshot_receive as recv
+            dest = tmp / "dest"
+            dest.mkdir()
+            a = _file_with_draft(tmp, dest, job_id="20260926-100000-aaaaaa",
+                                 draft={"note": "NICK"})
+            b = _file_with_draft(tmp, dest, job_id="20260926-110000-bbbbbb",
+                                 draft={"note": "SOMCHAI"})
+            # one real job = one folder, so B merged into A's
+            assert b.final_folder == a.final_folder, (a.final_folder, b.final_folder)
+            assert a.extras == ["emr.json"], a.extras
+            b_name = b.extras[0]
+            assert b_name != "emr.json" and b_name.startswith("emr-"), b.extras
+
+            # A tries to replace B's draft, by its real name on disk
+            res = recv.replace_sidecars("20260926-100000-aaaaaa",
+                                        {b_name: {"note": "HIJACKED"}}, dest)
+            assert not res.ok, res
+            assert res.status == 409, res.status
+            # refused WITH what A did file, so the phone can say something useful
+            assert res.extras == ["emr.json"], res.extras
+            # and B's draft is untouched
+            still = json.loads((a.final_folder / b_name).read_text(encoding="utf-8"))
+            assert still["note"] == "SOMCHAI", still
+
+            # A replacing its OWN draft in that same merged folder still works
+            ok = recv.replace_sidecars("20260926-100000-aaaaaa",
+                                       {"emr.json": {"note": "FIXED"}}, dest)
+            assert ok.ok, ok
+            assert json.loads((a.final_folder / "emr.json")
+                              .read_text(encoding="utf-8"))["note"] == "FIXED"
+            # B's is STILL untouched
+            assert json.loads((a.final_folder / b_name)
+                              .read_text(encoding="utf-8"))["note"] == "SOMCHAI"
+        finally:
+            restore()
+
+
+def test_sidecar_refuses_every_name_that_is_not_its_own_sidecar():
+    """A name off the wire is a string, never a path. Each of these is refused
+    before anything is written, and the job's own draft is left alone."""
+    if not _have_pillow():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        restore = _sidecar_sandbox(tmp)
+        try:
+            from core import jobshot_receive as recv
+            dest = tmp / "dest"
+            dest.mkdir()
+            r = _file_with_draft(tmp, dest, job_id="20260926-120000-cccccc")
+            hostile = [
+                "../evil.json",            # traversal
+                "..\\evil.json",
+                "sub/evil.json",
+                "C:/Windows/evil.json",
+                "job.json",                # a real file in the folder, not a draft
+                "emr.txt",                 # not json
+                "emr.json.exe",
+                "",
+            ]
+            for name in hostile:
+                res = recv.replace_sidecars("20260926-120000-cccccc",
+                                            {name: {"x": 1}}, dest)
+                assert not res.ok, (name, res)
+                assert res.status in (409, 422), (name, res.status)
+            # the job's real draft never changed
+            assert json.loads((r.final_folder / "emr.json")
+                              .read_text(encoding="utf-8"))["note"] == "ORIGINAL"
+            # and nothing was created anywhere in the destination
+            strays = [p.name for p in dest.rglob("*")
+                      if p.is_file() and "evil" in p.name]
+            assert strays == [], strays
+        finally:
+            restore()
+
+
+def test_sidecar_refuses_an_oversized_or_malformed_body():
+    """The caps are applied to the SERIALISED content, not to a claim in a
+    header - and a body that is not the documented shape is 422, not a
+    traceback."""
+    if not _have_pillow():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        restore = _sidecar_sandbox(tmp)
+        try:
+            from core import jobshot_receive as recv
+            dest = tmp / "dest"
+            dest.mkdir()
+            jid = "20260926-130000-dddddd"
+            _file_with_draft(tmp, dest, job_id=jid)
+
+            big = {"pad": "x" * (recv.MAX_SIDECAR_BYTES + 1000)}
+            assert recv.replace_sidecars(jid, {"emr.json": big}, dest).status == 413
+
+            for files, expect in [
+                    ({}, 422),                              # empty
+                    (None, 422),                            # not an object
+                    ("emr.json", 422),                      # a string
+                    ({"emr.json": "a string body"}, 422),   # body not an object
+                    ({"emr.json": 42}, 422),
+                    ({f"emr{i}.json": {} for i in
+                      range(recv.MAX_SIDECAR_FILES + 2)}, 422),   # too many
+            ]:
+                res = recv.replace_sidecars(jid, files, dest)
+                assert res.status == expect, (files, res.status, res.error)
+                assert not res.ok
+
+            # a job_id that is not a job id never reaches the archive
+            assert recv.replace_sidecars("../../etc/passwd",
+                                         {"emr.json": {}}, dest).status == 409
+        finally:
+            restore()
+
+
+def test_sidecar_refuses_a_protocol_mismatch_and_an_unpaired_caller():
+    """Two gates in front of everything else: the token, and the version."""
+    if not _have_pillow():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        restore = _sidecar_sandbox(tmp)
+        rx = _Receiver(tmp)
+        try:
+            from core import jobshot_receive as recv
+            _file_with_draft(tmp, rx.dest, job_id="20260926-140000-eeeeee")
+            body = {"jobshot": 1, "job_id": "20260926-140000-eeeeee",
+                    "files": {"emr.json": {"note": "X"}}}
+
+            status, _ = rx.post(json.dumps(body).encode("utf-8"),
+                                path=recv.SIDECAR_PATH, token="wrong-token")
+            assert status == 401, status
+
+            wrong = dict(body, jobshot=99)
+            status, reply = rx.post(json.dumps(wrong).encode("utf-8"),
+                                    path=recv.SIDECAR_PATH)
+            assert status == 409, (status, reply)
+
+            status, reply = rx.post(b"not json at all", path=recv.SIDECAR_PATH)
+            assert status == 422, (status, reply)
+
+            # and the draft survived all of that untouched
+            folder = rx.dest / "26-09-26 Overhauled Air Compressor"
+            assert json.loads((folder / "emr.json")
+                              .read_text(encoding="utf-8"))["note"] == "ORIGINAL"
+        finally:
+            rx.close()
+            restore()
+
+
+def test_sidecar_leaves_the_receipt_able_to_answer_for_the_job():
+    """§4 must keep telling the truth after a correction: same folder, same
+    photo count, same extras - the photos did not change and neither did the
+    names of the drafts, only one draft's contents."""
+    if not _have_pillow():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        restore = _sidecar_sandbox(tmp)
+        rx = _Receiver(tmp)
+        try:
+            from core import jobshot_receive as recv
+            jid = "20260926-150000-ffffff"
+            r = _file_with_draft(tmp, rx.dest, job_id=jid, photos=3)
+            before_status, before = rx.get(recv.JOB_PATH_PREFIX + jid)
+            assert before_status == 200, before
+
+            status, _ = rx.post(json.dumps({
+                "jobshot": 1, "job_id": jid,
+                "files": {"emr.json": {"note": "CORRECTED"}},
+            }).encode("utf-8"), path=recv.SIDECAR_PATH)
+            assert status == 200
+
+            after_status, after = rx.get(recv.JOB_PATH_PREFIX + jid)
+            assert after_status == 200, after
+            assert after["folder"] == before["folder"], (before, after)
+            assert after["photos"] == before["photos"] == 3, (before, after)
+            assert after["extras"] == before["extras"] == ["emr.json"], (before, after)
+            assert after["filed"] is True
+        finally:
+            rx.close()
+            restore()
+
+
 def main() -> int:
     tests = [(n, f) for n, f in sorted(globals().items())
              if n.startswith("test_") and callable(f)]

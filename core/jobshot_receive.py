@@ -40,6 +40,7 @@ import shutil
 import socket
 import zipfile
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
@@ -62,6 +63,21 @@ PING_PATHS = (PING_PATH, HELLO_PATH)
 # GET /jobshot/v1/job/<job_id> — "did you already file this?", so a lost reply
 # costs a question instead of a re-upload, and a resend can be skipped entirely.
 JOB_PATH_PREFIX = "/jobshot/v1/job/"
+# POST /jobshot/v1/sidecar — LAN_PROTOCOL v1.1. Replace a sidecar on a job that
+# is ALREADY FILED, in place, without re-sending a single photograph.
+#
+# It exists because the alternative measured badly: re-uploading the whole job to
+# fix three lines of typed text duplicated every photo (7 became 14) and left the
+# folder with two drafts, which EMR refuses to choose between — so a correction
+# took the folder from one usable draft to none. Measured 2026-10-02, chain sheet
+# §3 addendum 7.
+#
+# Kept as a SEPARATE route rather than a flag on the upload, on JobShot's
+# argument: an upload can overwrite and delete photographs, this replaces one
+# JSON file named by that job's own record. Two endpoints mean the dangerous one
+# is used only when something dangerous is being asked for — and the common case,
+# correcting wording, is the one Nick does most often.
+SIDECAR_PATH = "/jobshot/v1/sidecar"
 TOKEN_HEADER = "X-JobShot-Token"
 DEFAULT_PORT = 8765
 
@@ -72,6 +88,12 @@ MAX_ZIP_BYTES = 512 * 1024 * 1024          # what we will read off the socket
 MAX_UNPACKED_BYTES = 1024 * 1024 * 1024    # what it may become
 MAX_ENTRIES = 5000
 MAX_RATIO = 200                            # unpacked / compressed, zip-bomb guard
+
+# A report draft is a few KB of typed text. These caps are generous for that and
+# nowhere near enough to be interesting to an attacker who has the token.
+MAX_SIDECAR_FILES = 4
+MAX_SIDECAR_BYTES = 1024 * 1024            # per file, serialised
+MAX_SIDECAR_TOTAL = 4 * 1024 * 1024
 
 _JSON_NAME_RE = re.compile(r"^job(-[A-Za-z0-9._-]+)?\.json$")
 # A job folder may also carry sidecars the phone wrote for somebody else to
@@ -104,6 +126,214 @@ class ReceiveResult:
             "skipped": self.skipped,
             "warnings": self.warnings,
         }
+
+
+@dataclass
+class SidecarResult:
+    """The answer to a sidecar replacement. `status` is the HTTP code the server
+    should send, so the decision lives here with the rest of the dangerous
+    thinking rather than in the socket layer."""
+    ok: bool = False
+    status: int = 500
+    error: str = ""
+    job_id: str = ""
+    replaced: list[str] = field(default_factory=list)
+    folder: str = ""
+    photos: int = 0
+    extras: list[str] = field(default_factory=list)
+    filed_at: str = ""
+
+    def to_reply(self) -> dict:
+        if not self.ok:
+            body = {"jobshot": PROTOCOL, "error": self.error,
+                    "job_id": self.job_id}
+            if self.status == 404:
+                # §4's word, and the same direction of safety: the phone keeps
+                # its copy and tells the engineer, rather than treating this as
+                # an error worth retrying. A PC too old to have this route at
+                # all answers 404 as well, which is deliberate.
+                body["filed"] = False
+            if self.extras:
+                # A name this job did not file is refused WITH the names it did,
+                # so the phone can say something useful instead of "rejected".
+                body["extras"] = list(self.extras)
+            return body
+        return {
+            "jobshot": PROTOCOL,
+            "filed": True,
+            "job_id": self.job_id,
+            "folder": self.folder,
+            "photos": self.photos,
+            "extras": list(self.extras),
+            "filed_at": self.filed_at,
+            # The point of the reply: the phone may only stop warning the
+            # engineer about a name that comes back in here.
+            "replaced": list(self.replaced),
+        }
+
+
+def replace_sidecars(job_id: str, files: dict, dest_root: Path | None) -> SidecarResult:
+    """Replace one or more sidecars on a job this PC has already filed.
+
+    Every check runs before a single byte is written. The order is the spec's
+    (§3.5) and each step is a refusal, never a best effort:
+
+      1. the job must be one THIS PC filed — `jobshot_index.lookup`, which
+         answers from the receipt book and falls back to scanning the archive,
+         so it still works after a rename, a reinstall or a lost index;
+      2. every name must appear in **that job's own `filed.extras`** — not in a
+         listing of the folder. This is the whole safety argument: a job can
+         only replace a file it filed itself, can never invent a new name, and
+         **can never touch another job's draft in a merged folder**;
+      3. the job's manifest is found by `job_id` and OVERWRITTEN — never a
+         second one, because EMR's guard counts manifests.
+
+    It does not touch a photograph. Not one, ever. That is why it is separate
+    from the upload path.
+    """
+    from . import jobshot_index          # local: jobshot_index imports us
+
+    result = SidecarResult(job_id=str(job_id or ""))
+
+    if not jobshot_index.valid_job_id(job_id):
+        result.status, result.error = 409, "job_id is not a job id"
+        return result
+    if not isinstance(files, dict) or not files:
+        result.status, result.error = 422, "files must be a non-empty object"
+        return result
+    if len(files) > MAX_SIDECAR_FILES:
+        result.status, result.error = 422, (
+            f"at most {MAX_SIDECAR_FILES} files per request, got {len(files)}")
+        return result
+
+    entry = jobshot_index.lookup(job_id, dest_root)
+    if entry is None:
+        result.status = 404
+        result.error = "this PC has no record of that job"
+        return result
+
+    folder = Path(str(entry.get("folder_path") or ""))
+    if not folder.is_dir():
+        # lookup only returns an entry whose folder exists, so this is a race
+        # (Nick moved it between the two calls) rather than a stale index.
+        result.status, result.error = 404, "the filed folder is no longer there"
+        return result
+
+    # The job's OWN record of what it filed. Not a listing of the folder — in a
+    # merged folder a listing would include the other job's draft.
+    manifest_path = jobshot.find_manifest_path(folder, job_id)
+    if manifest_path is None:
+        result.status, result.error = 409, (
+            "the filed folder holds no manifest for that job")
+        return result
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError, ValueError) as e:
+        result.status, result.error = 409, f"cannot read the job's manifest: {str(e)[:100]}"
+        return result
+    block = manifest.get("filed") if isinstance(manifest, dict) else None
+    filed_extras = [str(x) for x in (block or {}).get("extras") or []]
+    result.extras = list(filed_extras)
+
+    # ── validate every name and every body BEFORE writing anything ──
+    staged: list[tuple[Path, bytes]] = []
+    total = 0
+    for name, body in files.items():
+        name = str(name)
+        if not _SIDECAR_NAME_RE.match(name):
+            result.status, result.error = 409, f"{name!r} is not a sidecar name"
+            return result
+        if name not in filed_extras:
+            # The gate. A name this job did not file is refused even though the
+            # file may well be sitting in the folder — it belongs to another job.
+            result.status, result.error = 409, (
+                f"this job did not file {name!r}")
+            return result
+        if not isinstance(body, (dict, list)):
+            result.status, result.error = 422, (
+                f"{name!r} must be a JSON object or array, not "
+                f"{type(body).__name__}")
+            return result
+        try:
+            raw = json.dumps(body, ensure_ascii=False, indent=2).encode("utf-8")
+        except (TypeError, ValueError) as e:
+            result.status, result.error = 422, f"{name!r} is not serialisable: {str(e)[:80]}"
+            return result
+        if len(raw) > MAX_SIDECAR_BYTES:
+            result.status, result.error = 413, (
+                f"{name!r} is {len(raw) // 1024} KB, over the "
+                f"{MAX_SIDECAR_BYTES // 1024} KB limit")
+            return result
+        total += len(raw)
+        if total > MAX_SIDECAR_TOTAL:
+            result.status, result.error = 413, "the request is over the total limit"
+            return result
+        target = (folder / name).resolve()
+        # Belt and braces over the name regex: wherever the name claimed to go,
+        # the resolved destination must still be in the job's own folder.
+        if target.parent != folder.resolve():
+            result.status, result.error = 409, f"{name!r} does not resolve inside the folder"
+            return result
+        staged.append((folder / name, raw))
+
+    # ── write: every temp first, then the replaces ──
+    #
+    # Honest about what this is: each `os.replace` is atomic, so no reader ever
+    # sees a half-written draft. The GROUP is not atomic — an I/O error between
+    # two replaces would leave one new and one old. Writing every temp first
+    # shrinks that window to the replaces themselves, and in the real case
+    # `files` holds exactly one entry. Claiming more than that would be a lie.
+    temps: list[tuple[Path, Path]] = []
+    try:
+        for target, raw in staged:
+            tmp = folder / f".hpo-sidecar-{secrets.token_hex(6)}"
+            with tmp.open("wb") as fh:
+                fh.write(raw)
+                fh.flush()
+                os.fsync(fh.fileno())
+            temps.append((tmp, target))
+        for tmp, target in temps:
+            os.replace(str(tmp), str(target))
+            result.replaced.append(target.name)
+    except OSError as e:
+        for tmp, _t in temps:
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+        result.status = 500
+        result.error = f"could not write the sidecar: {str(e)[:120]}"
+        result.replaced = []
+        return result
+
+    # ── the job's own manifest: OVERWRITE it, never a second file ──
+    stamped = datetime.now().isoformat(timespec="seconds")
+    if isinstance(block, dict):
+        block["sidecar_updated_at"] = stamped
+        # `extras` is deliberately unchanged: the names did not change, only the
+        # contents. A route that rewrote `extras` here could drop a sibling
+        # job's entry, and EMR reads that list to decide which draft is this
+        # job's.
+        try:
+            with manifest_path.open("w", encoding="utf-8", newline="") as fh:
+                json.dump(manifest, fh, ensure_ascii=False, indent=2)
+        except OSError as e:
+            # The draft IS replaced; only the note about it failed. Say so
+            # rather than reporting failure for work that did happen.
+            result.error = f"sidecar replaced, but the manifest note failed: {str(e)[:90]}"
+
+    try:
+        jobshot_index.record(job_id, folder, int(entry.get("photos") or 0),
+                             filed_extras)
+    except Exception as e:                      # a receipt is a cache, not the truth
+        result.error = result.error or f"receipt not updated: {str(e)[:90]}"
+
+    result.ok = True
+    result.status = 200
+    result.folder = folder.name
+    result.photos = int(entry.get("photos") or 0)
+    result.filed_at = str(entry.get("filed_at") or "")
+    return result
 
 
 # ─── pairing ───

@@ -273,6 +273,37 @@ def _manifests_in(folder: Path) -> list[dict]:
     return found
 
 
+def find_manifest_path(folder: Path, job_id: str) -> Path | None:
+    """The path of the manifest in `folder` that belongs to `job_id`.
+
+    `_manifests_in` hands back the parsed dicts, which is enough to MATCH a job
+    but not to rewrite its record. The sidecar route has to rewrite exactly one
+    manifest and never create a second: EMR's guard counts the manifests in a
+    folder and refuses when two of them claim a draft, so a second file turns
+    one usable draft into none (their measurement, 2026-10-02).
+    """
+    try:
+        entries = sorted(folder.iterdir())
+    except OSError:
+        return None
+    want = str(job_id or "")
+    if not want:
+        return None
+    for f in entries:
+        if f.suffix.lower() != ".json":
+            continue
+        if f.name != MANIFEST_NAME and not f.name.startswith("job-"):
+            continue
+        try:
+            data = json.loads(f.read_text(encoding="utf-8-sig"))
+        except (OSError, json.JSONDecodeError, ValueError):
+            continue
+        if isinstance(data, dict) and data.get("jobshot") and \
+                str(data.get("job_id", "")) == want:
+            return f
+    return None
+
+
 def find_filed_job(dest_root: Path, job_name: str,
                    work_date: datetime) -> Path | None:
     """The folder this job already lives in, if it has been filed before.
