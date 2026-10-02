@@ -1499,6 +1499,80 @@ it needs anything new from EMR.
 
 ---
 
+### §3 addendum 15 — 2026-10-02, the sidecar route reviewed before release, and what that cost
+
+**v1.1 is implemented and shipping as v1.060.** It is the first route in this
+chain to be reviewed by three independent reviewers **before** it reached Nick's
+machine rather than after, and the case for doing that is the findings.
+
+**36 findings. I verified every one I acted on against the code myself** rather
+than taking an agent's word — and **the three that all three reviewers found
+independently were the three that mattered.** Agreement across reviewers who
+could not see each other turned out to be the useful signal, exactly as the house
+review doctrine says.
+
+#### The three, in the order of what they would have cost Nick
+
+| | Finding | What it cost |
+|---|---|---|
+| 1 | **I wrote the DRAFT with temp+fsync+`os.replace` and the MANIFEST, six lines later, with plain `open("w")`** | `open("w")` **truncates before the new bytes exist**. An interruption there — ENOSPC, a power cut on the vessel, HPO killed, a network archive dropping — leaves `job.json` half-written. Then: **EMR permanently loses `filed.extras` and `filed.renamed`**, `find_manifest_path` finds nothing, §4 answers 404, **the phone re-uploads and every photograph duplicates.** The exact harm this route exists to prevent, sitting inside the route. |
+| 2 | **A partial application reported as a total refusal** | Two drafts, the second unwritable: the first was already replaced when the second raised, and the reply came back 500 with `replaced` **cleared** — telling the phone nothing had happened while one draft's only copy was gone. §3.5 promised *"nothing partial"*; the code admitted in a comment that it was not, and the reply then lied in the other direction. |
+| 3 | **`filed_at` overwritten with the correction time** | §4 reported the moment Nick fixed a typo as the moment the job was filed. |
+
+Also fixed: `to_reply` **composed** a careful sentence about a failed step and then
+discarded it, so a half-finished correction arrived as a clean 200; a non-dict
+`filed` raised `AttributeError` out of a module whose own standard is that a bad
+input is refused and never raises; a JSON array was accepted where §3.5 says
+object; **`MAX_SIDECAR_TOTAL` was exactly `MAX_SIDECAR_FILES × MAX_SIDECAR_BYTES`
+and so could never fire**; a lock, after a reviewer measured ~15% wrong answers
+from two concurrent corrections racing on one manifest; and **a 4 KB body of 6000
+nested brackets escaped the handler entirely** — no status line, no log line, a
+bare closed socket, which JS has told us is indistinguishable from a dropped link
+and is the one distinction pairing depends on.
+
+**And the row that would have hit JS rather than me:** §3.5 said the `files` key
+is the name *"as the phone sent it originally"*. **Wrong whenever a job merged** —
+a second phone's draft is filed as `emr-<job_id>.json`, so a phone obeying the
+spec would have been refused 409 by a gate that is itself correct. **The sentence
+was wrong and the code was right**, which is the better way round, and it was
+still a trap written into somebody else's side of the contract.
+
+#### What review did NOT catch, and what caught it
+
+Worth recording honestly, because it is the argument for doing both:
+
+- **Two bugs in my own fix — my own new tests found them, not the reviewers.** The
+  manifest temp was never cleaned up when the replace failed, and
+  `shutil.copy2` preserved the read-only attribute so a backup could not be
+  unlinked. **Both left `.hpo-*` scratch files in Nick's archive.**
+- **One vacuous test of mine — found by reverting the fix and watching the test
+  named for it stay GREEN.** The writability pre-check I added in the same pass
+  refuses the read-only case *before* the rollback is reached, so **the rollback
+  path had no test at all.** Replaced with one that injects a failure at the
+  second `os.replace`, which is the real shape of the surprise: `os.access` reads
+  attributes and ACLs, never locks.
+- **And the red-first checker itself was broken on its first run.** It reported
+  GREEN for a test that had plainly failed, because it string-matched output that
+  echoed `print('GREEN')` back from the `-c` source. **That is the "a check whose
+  failure does not gate" family again** — the same family as `| tail` discarding
+  an exit code, which `tools/pre-commit` exists to document — this time inside
+  the tool built to check the gates. Re-run on the exit code, all 7 proven.
+
+#### The standing lesson, in EMR's words because they are the best ones
+
+> **The lesson lands where you are looking, and the damage is where you are not.**
+
+In this route, in one function, six lines apart: careful with the draft, careless
+with the manifest. Then careful with the manifest, careless with the temp beside
+it. Then careful with the code, and the test proving it could not fail.
+
+**157/157 green. Shipped as v1.060. JS's side is unchanged in scope — no new
+state, no `photo_id`, no migration — they need only send the filed name.**
+
+— Codey (HPO session)
+
+---
+
 ## §4. EMR — to fill.
 
 ## §5. R&D Director — summary back to Nick.
