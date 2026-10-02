@@ -4580,6 +4580,199 @@ def test_a_dying_sidecar_write_never_leaves_a_readable_half_draft():
             restore()
 
 
+# --- tools/publish_release.py: every gate driven to REFUSE ------------------
+#
+# EMR's addition, which is the half that makes a gate real: **a gate whose
+# failure path has never run is itself only a claim.** Proving the no-asset
+# check works must not require publishing a broken release - so each gate is
+# driven with fakes, and the exact failure of 2026-10-02 is a named test.
+
+
+_RELEASE_TOOL = []
+
+
+def _release_tool():
+    """Loaded ONCE and cached.
+
+    The first version re-executed the module on every call, which gave every
+    caller its own `Refused` CLASS - so `except mod.Refused` in the helper could
+    not catch the exception a gate had raised from a different instance, and all
+    seven tests failed with the refusal they were asserting. The gates were
+    right; the harness was comparing two identities of the same name. Exactly
+    the day's theme, in the test file for the tool built because of the day's
+    theme."""
+    if not _RELEASE_TOOL:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "publish_release",
+            Path(__file__).resolve().parents[1] / "tools" / "publish_release.py")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        _RELEASE_TOOL.append(mod)
+    return _RELEASE_TOOL[0]
+
+
+def _refuses(fn, *a, **kw):
+    """Run a gate and return its refusal message, or fail if it allowed."""
+    mod = _release_tool()
+    try:
+        fn(*a, **kw)
+    except mod.Refused as e:
+        return str(e)
+    raise AssertionError(f"{getattr(fn, '__name__', fn)} ALLOWED what it must refuse")
+
+
+def test_a_release_with_NO_ASSET_is_refused():
+    """**The exact failure of 2026-10-02**, and the reason this tool exists.
+
+    The v1.061 upload died with HTTP 408, the command reported success because
+    it was piped through `tail -1`, and the release was published with no asset
+    - so `latest` pointed at a version the auto-updater could not download. It
+    was caught by eye about a minute later, which is not a gate.
+
+    Named after the failure, so that deleting this test is an obvious act.
+    """
+    mod = _release_tool()
+    published_but_empty = {"tag_name": "v1.061", "draft": False, "assets": []}
+    msg = _refuses(mod.gate_published, "1.061", expect_bytes=91_607_441,
+                   fetch=lambda: published_but_empty)
+    assert "NO " in msg and "updater cannot download" in msg, msg
+    # and it must say what to DO, because the person reading it is mid-incident
+    assert "draft" in msg.lower(), msg
+    assert "delete the tag" in msg.lower(), msg
+
+
+def test_the_published_gate_refuses_every_shape_of_not_really_there():
+    """A release can look published on the page and be unusable six ways."""
+    mod = _release_tool()
+    good = {"name": "HappyPhotoOrganizerSetup.exe", "state": "uploaded", "size": 100}
+    cases = {
+        "still a draft":
+            {"tag_name": "v1.062", "draft": True, "assets": [good]},
+        "latest names another tag":
+            {"tag_name": "v1.059", "draft": False, "assets": [good]},
+        "asset still uploading":
+            {"tag_name": "v1.062", "draft": False,
+             "assets": [dict(good, state="starter")]},
+        "two assets with the one name":
+            {"tag_name": "v1.062", "draft": False, "assets": [good, dict(good)]},
+        "a different file of the same name":
+            {"tag_name": "v1.062", "draft": False, "assets": [dict(good, size=99)]},
+        "the asset is named something else":
+            {"tag_name": "v1.062", "draft": False,
+             "assets": [dict(good, name="Setup.exe")]},
+    }
+    for label, body in cases.items():
+        msg = _refuses(mod.gate_published, "1.062", expect_bytes=100,
+                       fetch=lambda b=body: b)
+        assert msg, label
+    # ...and it ALLOWS the one shape that is actually correct
+    mod.gate_published("1.062", expect_bytes=100, fetch=lambda: {
+        "tag_name": "v1.062", "draft": False, "assets": [good]})
+
+
+def test_the_version_gate_refuses_a_binary_that_is_behind_its_source():
+    """v1.061's other half: a code fix landed AFTER the build, so the bytes on
+    their way to GitHub predated the commit they were supposed to carry. The
+    version inside the frozen bundle is the only thing that knows."""
+    mod = _release_tool()
+    with tempfile.TemporaryDirectory() as td:
+        bundled = Path(td) / "VERSION"
+        bundled.write_text("1.061", encoding="utf-8")
+        msg = _refuses(mod.gate_version_agrees, "1.062", bundled=bundled)
+        assert "1.061" in msg and "rebuild" in msg, msg
+        # a BOM-tolerant read, because this repo learned that twice
+        bundled.write_bytes(b"\xef\xbb\xbf1.062")
+        mod.gate_version_agrees("1.062", bundled=bundled)
+        # and an absent bundle is "build first", not a traceback
+        missing = Path(td) / "nope" / "VERSION"
+        assert "build first" in _refuses(mod.gate_version_agrees, "1.062",
+                                         bundled=missing)
+
+
+def test_the_staleness_gate_refuses_an_installer_older_than_the_source():
+    mod = _release_tool()
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        inst = tmp / "HappyPhotoOrganizerSetup.exe"
+        assert "not there" in _refuses(mod.gate_bundle_is_not_stale, installer=inst)
+        inst.write_bytes(b"x")
+        bundled = tmp / "VERSION"
+        bundled.write_text("1.062", encoding="utf-8")
+        import os as _os
+        import time as _t
+        # the frozen bundle newer than the installer = the installer was not
+        # rebuilt from it
+        _os.utime(bundled, (_t.time() + 60, _t.time() + 60))
+        msg = _refuses(mod.gate_bundle_is_not_stale, installer=inst, bundled=bundled)
+        assert "not rebuilt" in msg, msg
+
+
+def test_the_asset_name_gate_protects_the_one_string_the_updater_matches():
+    """`updater.py` matches the asset by exact name. A renamed asset is a
+    release nobody can install and it looks perfectly fine on the page."""
+    mod = _release_tool()
+    from core import updater
+    assert mod.ASSET == updater.INSTALLER_ASSET_NAME, (
+        "the tool and the updater disagree about the asset name, which is the "
+        "only thing either of them matches on")
+    msg = _refuses(mod.gate_asset_is_named_correctly, installer=Path("Setup.exe"))
+    assert updater.INSTALLER_ASSET_NAME in msg, msg
+    mod.gate_asset_is_named_correctly(installer=Path("x") / mod.ASSET)
+
+
+def test_the_tree_gate_refuses_uncommitted_or_unpushed_work():
+    """A tag that does not describe what was built is worse than no tag."""
+    mod = _release_tool()
+    calls = []
+
+    def dirty(args, **kw):
+        calls.append(args)
+        return " M core/jobshot.py\n" if args[:2] == ["git", "status"] else ""
+
+    assert "uncommitted" in _refuses(mod.gate_tree_is_clean, runner=dirty)
+
+    def diverged(args, **kw):
+        if args[:2] == ["git", "status"]:
+            return ""
+        if "rev-list" in args:
+            return "1 2\n"
+        return ""
+
+    msg = _refuses(mod.gate_tree_is_clean, runner=diverged)
+    assert "ahead 1" in msg and "behind 2" in msg, msg
+
+    def clean(args, **kw):
+        return "0\t0\n" if "rev-list" in args else ""
+
+    mod.gate_tree_is_clean(runner=clean)
+
+
+def test_the_runner_never_swallows_a_failure_and_never_pipes():
+    """The one function the whole file turns on. A pipe takes the exit code of
+    its LAST stage, which is how an HTTP 408 reported success."""
+    mod = _release_tool()
+    out = mod.run([sys.executable, "-c", "print('ok')"])
+    assert out.strip() == "ok", out
+    try:
+        mod.run([sys.executable, "-c",
+                 "import sys; sys.stderr.write('boom'); sys.exit(3)"])
+    except mod.Refused as e:
+        assert "exited 3" in str(e) and "boom" in str(e), str(e)
+    else:
+        raise AssertionError("run() swallowed a non-zero exit")
+    # No shell anywhere, because a shell is what reintroduces the pipe. Checked
+    # against the CODE, not the prose: the docstring quotes `cmd | tail` on
+    # purpose, and the first version of this assertion scanned the whole file
+    # and tripped over the explanation of the bug it exists to prevent.
+    src = (Path(__file__).resolve().parents[1] / "tools" / "publish_release.py"
+           ).read_text(encoding="utf-8")
+    code = [ln for ln in src.splitlines()
+            if ln.strip() and not ln.lstrip().startswith("#")]
+    for bad in ("shell=True", "os.system", "subprocess.getoutput"):
+        assert not any(bad in ln for ln in code), bad
+
+
 def main() -> int:
     tests = [(n, f) for n, f in sorted(globals().items())
              if n.startswith("test_") and callable(f)]
