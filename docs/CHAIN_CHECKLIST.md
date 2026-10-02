@@ -544,6 +544,146 @@ above I would say that twice.
 
 ---
 
+### §3 addendum 8 — 2026-10-02, Nick asked for a method: replace, don't append
+
+Nick read addendum 7 and asked the two questions that matter:
+
+> *"ข้อ 2 ถ้ามีการปรับรูปหรือส่งใหม่ล่ะจะทำงานยังไง หรือถ้าส่งซ้ำเราควรลบรูปและใส่ใหม่
+> เลยดีกันซ้ำ หาวิธีหน่อย"*
+
+and then gave the constraint that changes the risk calculus:
+
+> *"เพราะรายงานไม่มีใครเซ็น แค่รอส่งทีเดียวสิ้นเดือน เรายังแก้ไขได้เต็มที่นะ"*
+
+**That second message is load-bearing and it should be written down as a rule of
+the chain, not just quoted.** A filed job folder, before the end-of-month send, is
+**working state — not a record of record.** Nobody has signed it; nothing
+downstream has committed to it. So overwriting a photo, replacing a draft and
+re-printing a `.docx` are all legitimate, and my instinct to protect the folder as
+if it were an archival record was calibrated wrong. **What still may not be touched
+is somebody else's work in the same folder** — and that is not about signatures, it
+is about who owns the only remaining copy.
+
+#### Why the PC appends today — and why that is a feature, not the bug
+
+This is the answer to Nick's *"อธิบายข้อ 1 หน่อย"*. The PC appends because
+**appending is the correct behaviour for a real case that already exists**: two
+engineers photographing one job from two phones. `find_filed_job()` was built for
+it on Nick's instruction (2026-09-22, *one real job = one folder*), and merging
+the second phone's photos into the first phone's folder is exactly right there.
+
+The defect is not the appending. **It is that the two cases arrive looking
+identical:**
+
+| What really happened | What the PC receives | Correct action |
+|---|---|---|
+| A colleague sends 5 more photos of the same job | a job, same name, same work date | **append** ✅ |
+| Nick corrects his own job and fires it again | a job, same name, same work date | **replace** ❌ today it appends |
+
+The only thing that separates them is **intent, and nothing on the wire carries
+it.** `job_id` would be enough to notice — the resend repeats one, the colleague
+brings a new one — but nothing on the filing path ever compares a `job_id` to one
+already filed (addendum 7). So "should the PC refuse?" is really **"should the PC
+guess?"**, and the answer to that is no: guessing is what produced fourteen
+photographs. **The phone must say which message it is sending.**
+
+#### The method, and the one property it rests on
+
+**The phone declares a revision.** `job.json` gains `"revision": <int>` (absent =
+1, so every phone built today keeps working unchanged):
+
+| Arrives | PC does |
+|---|---|
+| a `job_id` never seen | file it — **exactly as today, nothing changes** |
+| same `job_id`, **no** `revision` | **refuse**, with a reason the phone can print |
+| same `job_id`, `revision` ≤ the filed one | **refuse as already-have** — so a replay or a double-tap is harmless, not destructive |
+| same `job_id`, `revision` **>** the filed one | **replace** (below) |
+
+A revision *number* rather than a `"resend": true` flag for one reason: a boolean
+makes a duplicate delivery indistinguishable from a real correction, so the
+dangerous operation would run twice. A number makes the second delivery a no-op.
+
+**The replacement, and it is keyed by the PHONE's file name, never by position:**
+
+1. Read that job's **own** manifest in the folder (the way `jobshot_index._scan`
+   already finds it) and take `filed.renamed` — *phone name → archive name*.
+2. Resize the new photos into a pending folder. **Nothing in the archive is
+   touched yet**; a resend that fails halfway must leave revision 1 intact.
+3. For each photo in the new upload:
+   - **phone name already in the map → overwrite that same archive name.** The
+     name does not change, so **a `.docx` already printed from revision 1 still
+     points at the right file.** This is the common case — Nick re-cropped a
+     photo — and it costs nothing to get right.
+   - **phone name not in the map → append** at the next free number.
+4. **Phone names in the map but absent from the new upload** → Nick deleted that
+   photo on the phone → **delete that one archive file.** This is the only
+   destructive act, it only ever touches files named in **this job's own map**,
+   and every deletion is reported back so the phone can show it.
+5. Replace the sidecars in place under the names **this job** filed them as
+   (`filed.extras`) — so the folder never holds two drafts, which was the whole
+   defect in addendum 7 §2.
+6. Rewrite that job's manifest: new `filed.renamed`, and `filed.revision`.
+7. Update the receipt book — which also fixes the silent-overwrite finding in
+   addendum 7, because now the entry is *meant* to be replaced.
+
+**Why keyed by phone name and not by position.** If revision 2 were matched to
+revision 1 positionally, deleting or reordering one photo on the phone would
+silently repoint an archive name at a **different picture** — and EMR's report
+references names, so "before" would quietly show the wrong photograph. Keying on
+the phone's own file name survives reordering, insertion and deletion. This is
+only possible because `filed.renamed` exists, which was added in v1.055 for an
+entirely different reason (EMR's zero-matches defect). **The field earns its keep
+twice.**
+
+#### The property the whole idea rests on, measured
+
+Deleting anything is only acceptable if a resend of job A can be scoped to A's own
+files in a folder where another job has merged. **So I built that folder and
+measured it** rather than reasoning about it: Nick's phone files 7 photos, a
+colleague's phone merges 5 more of the same job, 12 on disk.
+
+| | |
+|---|---|
+| Nick's `filed.renamed` targets | `_001` … `_007` (7) |
+| The colleague's map holds | `_008` … `_012` (5) |
+| **Overlap — the danger** | **0** |
+| On disk but in neither map | **0** |
+| Targeted files that exist | 7/7 |
+
+**The two maps are disjoint and together they account for every photo in the
+folder.** So a resend of Nick's job can replace and delete inside its own 7 and
+**provably cannot reach the colleague's 5.**
+
+Worked through on that same folder, for a revision 2 that edits `0002`, drops
+`0004` and adds a new `0008`: **6 overwritten in place** (names unchanged, the
+`.docx` survives), **1 appended**, **1 deleted**, **5 never touched.**
+
+#### One invariant this breaks, named out loud
+
+**Nothing on the receive path has ever deleted a file inside `dest_root`.** Today
+the only deletions anywhere in it are the pending folder when every photo fails to
+resize, and the quarantine scratch — both of them things HPO itself created, and
+grepped to confirm. Step 4 above would be the first time **a message arriving over
+the network can erase a file in Nick's archive.** Nick's *"ยังแก้ไขได้เต็มที่"*
+authorises that for his own work, and the scoping proof above is what keeps it
+off everyone else's — but it is a new power on that path and it should be reviewed
+as one, not slipped in as part of a convenience. It is the part of this design I
+would most want **"supertester security"** pointed at before it ships.
+
+#### Status
+
+**Not shipped, and it cannot be shipped from this side alone** — it needs one
+field from JobShot (`revision` in `job.json`), so it is a protocol change and goes
+on the sheet with a version, same rule as `parts.json`. Sent to JS. What HPO
+contributes is the mechanism above and the proof that its destructive step can be
+contained.
+
+**Still true in the meantime:** on today's code the phone must not resend.
+
+— Codey (HPO session)
+
+---
+
 ## §4. EMR — to fill.
 
 ## §5. R&D Director — summary back to Nick.
