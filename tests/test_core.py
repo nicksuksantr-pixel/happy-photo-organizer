@@ -3533,6 +3533,67 @@ def test_a_full_month_says_so_in_the_filed_block():
         assert result.final_folder.name.startswith("02-10-26"), result.final_folder.name
 
 
+def test_two_capped_jobs_share_a_day_without_sharing_a_folder():
+    """The property that makes a full month SAFE, and it was reasoned rather
+    than measured until 2026-10-02.
+
+    When the month is full, every job keeps its own work day - so two different
+    jobs done on the same day both land on that day number. That is only safe
+    because **merging keys on the folder NAME, which is day AND job name.**
+    Nick put it as *"ชื่อก็ไม่ตรงกันอยู่แล้ว"*, and it is load-bearing: if the
+    merge key were the day alone, a full month would silently pour unrelated
+    jobs into one folder, with one name, and one `filed` block describing the
+    wrong work.
+
+    EMR asked the question from their side first - whether `date_was_capped`
+    raised the collision exposure in their export folder - and found it did not,
+    because their file name also carries the job name. This is the same check on
+    this side, which nobody had run.
+
+    The second half matters just as much: the case that MUST merge still does.
+    Capping must not break "one real job = one folder" (Nick, 2026-09-22).
+    """
+    if not _have_pillow():
+        return
+    from calendar import monthrange
+    from core import jobshot
+
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        dest = tmp / "dest"
+        dest.mkdir()
+        days = monthrange(2026, 10)[1]
+        for d in range(1, days + 1):
+            (dest / f"{d:02d}-10-26 Placeholder {d:02d}").mkdir()
+
+        def file_one(job, job_id):
+            arr = _arrival(tmp / job_id, photos=1, job=job, plain=True,
+                           work_date="2026-10-02", job_id=job_id)
+            r = jobshot.import_job(arr, dest)
+            assert r.ok, r.error
+            return r
+
+        a = file_one("Overhauled Air Compressor", "20261002-090000-aaaaaa")
+        b = file_one("Inspected Tumble Dryer", "20261002-100000-bbbbbb")
+
+        # both capped onto their own work day, 02
+        assert a.date_was_capped and b.date_was_capped, (a.date_was_capped,
+                                                         b.date_was_capped)
+        assert a.final_folder.name.startswith("02-10-26"), a.final_folder.name
+        assert b.final_folder.name.startswith("02-10-26"), b.final_folder.name
+        # ...and into DIFFERENT folders, because the name differs
+        assert a.final_folder != b.final_folder, a.final_folder
+        assert not a.merged_into_existing and not b.merged_into_existing
+
+        # the other half: same job name, same day -> ONE folder, photos appended
+        c = file_one("Overhauled Air Compressor", "20261002-110000-cccccc")
+        assert c.final_folder == a.final_folder, (c.final_folder, a.final_folder)
+        assert c.merged_into_existing, "one real job must stay one folder"
+        photos = [p for p in a.final_folder.iterdir()
+                  if p.suffix.lower() == ".jpg"]
+        assert len(photos) == 2, sorted(p.name for p in photos)
+
+
 def main() -> int:
     tests = [(n, f) for n, f in sorted(globals().items())
              if n.startswith("test_") and callable(f)]
