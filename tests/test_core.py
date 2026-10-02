@@ -4487,6 +4487,99 @@ def test_a_damaged_job_record_does_not_look_like_a_job_never_filed():
             restore()
 
 
+def test_a_dying_sidecar_write_never_leaves_a_readable_half_draft():
+    """EMR's point, turned into a test rather than an assurance.
+
+    They hardened their reader against a DAMAGED draft and observed that
+    `emr.json` is the file this route rewrites on every correction - so "an
+    interrupted replacement lands precisely there. Your route's own failure
+    mode, waiting in my reader."
+
+    The claim I would otherwise have made back is that temp+fsync+os.replace
+    cannot produce a half-written draft. That is the whole reason it is written
+    that way, but an untested claim about somebody else's exposure is exactly
+    what I have had to retract four times today. So: kill the write at three
+    different points and require the draft on disk to be byte-identical each
+    time.
+
+    What this bounds for EMR: the damaged-draft shapes they now handle can come
+    from a USB pull, OneDrive mid-sync, an older HPO, or Nick editing by hand -
+    but NOT from a correction sent through this route.
+    """
+    if not _have_pillow():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        restore = _sidecar_sandbox(tmp)
+        try:
+            from core import jobshot_receive as recv
+            dest = tmp / "dest"
+            dest.mkdir()
+            jid = "20260926-211000-halfdr"
+            r = _file_with_draft(tmp, dest, job_id=jid)
+            draft = r.final_folder / "emr.json"
+            before = draft.read_bytes()
+
+            # (1) die while writing the temp body
+            real_dumps = recv.json.dumps
+
+            def dying_dumps(obj, **kw):
+                if isinstance(obj, dict) and obj.get("note") == "KILL-AT-DUMPS":
+                    raise OSError(28, "No space left on device")
+                return real_dumps(obj, **kw)
+
+            recv.json.dumps = dying_dumps
+            try:
+                res = recv.replace_sidecars(jid, {"emr.json": {"note": "KILL-AT-DUMPS"}}, dest)
+            except OSError:
+                res = None                      # even an escape must not corrupt
+            finally:
+                recv.json.dumps = real_dumps
+            assert draft.read_bytes() == before, "the draft was damaged at dumps"
+
+            # (2) die at the os.replace that would swap the temp in
+            real_replace = recv.os.replace
+            fired = []
+
+            def dying_replace(src, dst, *a, **kw):
+                if str(dst).endswith("emr.json"):
+                    fired.append(1)
+                    raise OSError(28, "No space left on device")
+                return real_replace(src, dst, *a, **kw)
+
+            recv.os.replace = dying_replace
+            try:
+                res2 = recv.replace_sidecars(jid, {"emr.json": {"note": "KILL-AT-REPLACE"}}, dest)
+            finally:
+                recv.os.replace = real_replace
+            assert fired, "the injected replace failure never fired"
+            assert not res2.ok and res2.status == 500, res2
+            assert res2.replaced == [], res2.replaced
+            assert draft.read_bytes() == before, "the draft was damaged at replace"
+
+            # (3) die at the fsync, after bytes are in the temp
+            real_fsync = recv.os.fsync
+
+            def dying_fsync(fd):
+                raise OSError(5, "Input/output error")
+
+            recv.os.fsync = dying_fsync
+            try:
+                res3 = recv.replace_sidecars(jid, {"emr.json": {"note": "KILL-AT-FSYNC"}}, dest)
+            finally:
+                recv.os.fsync = real_fsync
+            assert not res3.ok, res3
+            assert draft.read_bytes() == before, "the draft was damaged at fsync"
+
+            # the draft still parses and still says what it always said
+            assert json.loads(draft.read_text(encoding="utf-8"))["note"] == "ORIGINAL"
+            # and no scratch is left behind by any of the three
+            assert [q.name for q in r.final_folder.iterdir()
+                    if q.name.startswith(".hpo-")] == []
+        finally:
+            restore()
+
+
 def main() -> int:
     tests = [(n, f) for n, f in sorted(globals().items())
              if n.startswith("test_") and callable(f)]

@@ -376,11 +376,18 @@ def replace_sidecars(job_id: str, files: dict, dest_root: Path | None) -> Sideca
         try:
             for target, raw in staged:
                 tmp = folder / f".hpo-sidecar-{secrets.token_hex(6)}"
+                # Registered BEFORE the write, not after. Appending afterwards
+                # left a window: a failure inside the `with` - os.fsync raising
+                # on a failing disk is the real one - propagated before the
+                # append, so cleanup never knew the temp existed and it stayed
+                # in Nick's archive. Third temp leak of the day in this
+                # function, and the first two were fixed without anyone asking
+                # whether a THIRD window existed.
+                temps.append((tmp, target))
                 with tmp.open("wb") as fh:
                     fh.write(raw)
                     fh.flush()
                     os.fsync(fh.fileno())
-                temps.append((tmp, target))
             for _tmp, target in temps:
                 if target.exists():
                     keep = folder / f".hpo-was-{secrets.token_hex(6)}"
