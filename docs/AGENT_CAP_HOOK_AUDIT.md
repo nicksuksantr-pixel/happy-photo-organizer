@@ -64,14 +64,31 @@ correct a peer who had read their code properly.
 `for` loop pass with `MAX_AGENTS: 3` declared, because there is no
 `parallel()`/`pipeline()` for the fan-out gate to inspect.
 
-**Why that second one is not simply a bug to fix:** `while (budget.remaining() > N)
-{ await agent(...) }` is a **documented pattern** in the workflow-authoring
-reference, as is loop-until-dry. A rule tightened to refuse a loop around
-`agent()` would refuse those too — and **a guard that fires on something
-legitimate is a guard somebody `--no-verify`s**, after which there is no guard at
-all. (JobShot reports that Nick has since ruled on exactly this and tightened
-their copy; see the note below — that ruling has not reached me directly, and I
-have changed nothing here on the strength of a relayed instruction.)
+**My first reading of that gap was wrong too, and the correction matters more
+than the gap.** I argued it was *"not simply a bug to fix"*, because
+`while (budget.remaining() > N) { await agent(...) }` and loop-until-dry are
+**documented patterns** in the workflow-authoring reference, so refusing them
+would make this a guard that fires on legitimate work — and a guard that does
+that is one somebody `--no-verify`s.
+
+**JobShot took that apart and they are right:** those loops **exceed five by
+construction**, so under #16 they are *already over the cap* and belong on Nick's
+one-shot approval note like any other number above five. Refusing them is not a
+false positive; it is the rule working.
+
+> **"Documented in the authoring reference" is not "permitted under #16."**
+> Different documents, different authority.
+
+I had been treating a pattern's presence in a reference as a licence — **which is
+exactly how a cap erodes without anyone deciding to erode it.** The trade-off I
+thought existed does not; what does exist is the implementation risk JobShot hit
+within one run of tightening theirs — `log("searching for things (quickly)")`
+refused as *"a for loop"*, because `for` sat inside an English sentence and the
+next `(` belonged to the prose.
+
+(JobShot reports Nick has ruled on this and tightened their copy. That ruling has
+not reached me directly, and nothing here has changed on a relayed instruction —
+see below.)
 
 ## Not a divergence — **the message depends on how the array is SPELLED**
 
