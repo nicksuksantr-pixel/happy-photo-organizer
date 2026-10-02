@@ -178,4 +178,74 @@ names a different ship, hand-dropped after a restart.** Nothing on this machine
 has ever produced one, which is also why the earlier confusion in section 9 was
 possible.
 
+## A new clause for CHAIN_ALIGNMENT, from Nick today — **how freely may a filed folder be changed?**
+
+Added 2026-10-02. **This is not a response to a clause; it is a clause I think the
+document is missing**, and all three of us have been making decisions against an
+assumption none of us had checked.
+
+Asked whether a resend may replace photos already filed, Nick ruled:
+
+> *"เพราะรายงานไม่มีใครเซ็น แค่รอส่งทีเดียวสิ้นเดือน เรายังแก้ไขได้เต็มที่นะ"*
+> — nobody signs the report; it waits for one send at the end of the month; we may
+> still edit it fully.
+
+**So a filed job folder, before the month-end send, is working state — not a record
+of record.** Overwriting a photo, replacing a draft and re-printing a `.docx` are
+all legitimate. I had been refusing designs on the basis that a filed folder was
+archival, and **that was calibrated wrong** — only Nick could have corrected it,
+which is the argument for writing it down where all three read it.
+
+What the ruling does **not** license: **another job's files in the same folder.**
+That limit is not about signatures, it is about who holds the only remaining copy.
+
+---
+
+## The resend finding, and why it is not the appending that is broken
+
+A resend of the same `job_id` today **duplicates the photos (7 became 14) and
+leaves two drafts in the folder**, which EMR correctly refuses to choose between —
+so a correction takes the folder from one usable draft to **zero**. Measured, with
+the harness, in `docs/CHAIN_CHECKLIST.md` §3 addenda 7 and 8.
+
+**The part worth the Director's attention is the diagnosis, not the defect.**
+Appending is **correct** for a case that really exists — two engineers
+photographing one job from two phones, which is what `find_filed_job` was built
+for on Nick's 2026-09-22 ruling. What is broken is that a colleague's extra photos
+and Nick's corrected copy **arrive looking identical**: same job name, same work
+date, and nothing on the wire carrying the intent. `job_id` would be enough to
+separate them, and nothing on the filing path has ever compared one against an
+already-filed job.
+
+So *"should the PC refuse a resend?"* is really *"should the PC guess?"* — and the
+answer to that is no, in the same way and for the same reason as §6.1's vessel
+guard. **The phone has to say which message it is sending.** The design (`revision`
+in `job.json`, replacement keyed by the phone's own file name out of
+`filed.renamed`) is in addendum 8, sent to JS, and **not shipped**: it is a
+protocol change, so it goes on the sheet with a version.
+
+### A fourth finding, mine, and §4 is the clause it touches
+
+The receipt book is keyed by `job_id`, so a resend **silently replaced the first
+receipt**. After the run, `GET /jobshot/v1/job/<id>` answers `photos: 7` and
+`extras: [the second draft]` about a folder holding **14 photos and 2 drafts** —
+true of the second upload, false about the folder. **The route that exists to make
+a lost reply survivable cannot see that any of this happened.** Not patched on its
+own: if the receive path ends up refusing an already-filed `job_id`, the case
+disappears, and hardening a path we may be about to close is the wrong order.
+
+### One power this would add, declared before it ships rather than after
+
+**Nothing on the receive path has ever deleted a file inside `dest_root`** —
+grepped to confirm: the only deletions today are HPO's own pending folder and the
+quarantine scratch, both things HPO created. The replacement design would be **the
+first time a message arriving over the network can erase a file in Nick's
+archive.** Nick's ruling above authorises it for his own work, and the scoping
+proof in addendum 8 (two merged jobs, maps disjoint, overlap 0) keeps it off
+everybody else's. **It is still a new power on that path, and I would want
+`supertester security` pointed at it before it ships — Nick's trigger to type,
+never mine.**
+
+---
+
 — Codey (Happy-Photo-Organizer)
