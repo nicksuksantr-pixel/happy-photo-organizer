@@ -456,16 +456,38 @@ def test_no_source_file_carries_a_bom_or_cr():
     in one session: a BOM in VERSION made the updater read version 0.x, and a
     BOM in this very file made `ast.parse` refuse it. .gitattributes pins LF in
     the repo, but the working tree is what runs."""
-    skip = {"dist", "build", ".git", "__pycache__", ".venv", "_trash"}
+    skip = {"dist", "build", ".git", "__pycache__", ".venv", "_trash",
+            "node_modules"}
     offenders = []
-    for path in ROOT.rglob("*.py"):
-        if skip & set(path.relative_to(ROOT).parts):
-            continue
-        raw = path.read_bytes()
-        if raw.startswith(b"\xef\xbb\xbf"):
-            offenders.append(f"BOM: {path.relative_to(ROOT)}")
-        if b"\r" in raw:
-            offenders.append(f"CR:  {path.relative_to(ROOT)}")
+    # Driven BOTH WAYS on 2026-10-02, after JobShot found their own manifest
+    # guard was satisfied by a COMMENTED-OUT permission. Asked of this one: it
+    # fires correctly on .py - proven by planting a BOM and a CR - and it
+    # scanned NOTHING ELSE. Measured: a BOM planted in a .spec, .json, .mjs or
+    # .js went straight through, GREEN. Two of those are parsed by a machine and
+    # fail silently:
+    #
+    #   *.spec   PyInstaller executes it; a BOM breaks the build
+    #   *.json   `data/job_catalog.json` - a BOM emptied all 174 jobs until
+    #            v1.058 made the reader tolerant - and **`.claude/settings.json`,
+    #            the TRACKED hook config that enforces the agent cap, cloud
+    #            instances included. A BOM stops that config parsing, and
+    #            CLAUDE.md #16.1 says the hook "fails OPEN if it cannot run":
+    #            an invisible byte would silently disarm the cap.**
+    #   *.mjs    `tools/workflow-agent-cap.mjs` IS that hook's script
+    #
+    # So BOM is checked on all of them. CR stays scoped to .py: it matters there
+    # for the reasons in the docstring, and `.claude/settings.json` carries CRLF
+    # today (measured) - a guard that fails on something harmless is a guard
+    # somebody switches off.
+    for pattern in ("*.py", "*.spec", "*.json", "*.mjs", "*.js"):
+        for path in ROOT.rglob(pattern):
+            if skip & set(path.relative_to(ROOT).parts):
+                continue
+            raw = path.read_bytes()
+            if raw.startswith(b"\xef\xbb\xbf"):
+                offenders.append(f"BOM: {path.relative_to(ROOT)}")
+            if path.suffix == ".py" and b"\r" in raw:
+                offenders.append(f"CR:  {path.relative_to(ROOT)}")
     assert not offenders, "invisible bytes in source:\n  " + "\n  ".join(offenders)
 
 
