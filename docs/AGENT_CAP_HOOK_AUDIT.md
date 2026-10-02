@@ -21,7 +21,7 @@ stdin, so every gate can be driven for free.
 | `parallel(items.map(...))` — fan-out over runtime data | 2 | **blocked** |
 | `MAX_AGENTS: 9`, literal array of nine | 2 | **blocked** — because 9 > 5, **not** because 9 ≠ the fan-out |
 | `MAX_AGENTS: 8`, no approval note | 2 | **blocked** — because 8 > 5 |
-| `MAX_AGENTS: 3`, literal array of **ten** | 2 | **blocked** — the message says *"has 10 items, over 5"*. **Over 5, not over 3.** I first read this row as a cross-check against the declaration; it is not one. See the corrected section below |
+| `MAX_AGENTS: 3`, literal array of **ten**, written **inline** | 2 | **blocked** — *"has 10 items, over 5"*. **Over 5, not over 3**; this is not a cross-check against the declaration. And the message differs if the array is **named** first — see below |
 | `MAX_AGENTS: 3`, literal array of three | 0 | allowed *(correct)* |
 | **`MAX_AGENTS: 3`, then `for (let i=0;i<40;i++) await agent(i)`** | **0** | ⚠️ **ALLOWED** |
 | **`MAX_AGENTS: 3`, then `while (budget.remaining()>N) await agent()`** | **0** | ⚠️ **ALLOWED** |
@@ -73,11 +73,40 @@ all. (JobShot reports that Nick has since ruled on exactly this and tightened
 their copy; see the note below — that ruling has not reached me directly, and I
 have changed nothing here on the strength of a relayed instruction.)
 
-**One divergence worth recording rather than smoothing over:** JobShot found their
-copy blamed *"runtime data via `.map()`"* for an array literal — a correct refusal
-with a false reason. **Mine says `has 10 items, over 5`, which is correct**, so
-either the copies differ or theirs is older. Measured, not assumed, and not
-reconciled.
+## Not a divergence — **the message depends on how the array is SPELLED**
+
+I recorded a suspected divergence here, because JobShot's copy blamed *"runtime
+data via `.map()`"* for an array literal while mine said `has 10 items, over 5`.
+**There is no divergence.** JobShot ran both spellings through one binary and
+found the third explanation neither of us had considered; measured again here, on
+this copy:
+
+| The same logical script | exit | reason given |
+|---|---|---|
+| `parallel([1..10].map(...))` — **inline** | 2 | `parallel([...]) has 10 items, over 5` ✅ true |
+| `const L=[1..10]; parallel(L.map(...))` — **named** | 2 | `fans out over runtime data via .map() … count unknown until it runs` ❌ **false** |
+
+**Same decision, different reason, decided by where the array was written.** The
+branch that consults the literal counter is skipped whenever `.map(` appears, so
+the named spelling falls through to the catch-all. **My probe happened to write
+the array inline, which is the only reason I saw the honest message** — so the
+"divergence" was an artifact of my own probe's shape, on top of the inference it
+had already produced.
+
+**So this hook has a second defect, on this copy, independent of the loop gap: a
+refusal whose stated reason is false.** The decision is right; the sentence sends
+the reader hunting for runtime data in a literal array two lines above. JobShot's
+framing is the one to keep: **a refusal whose reason nobody reads can be false
+indefinitely at no cost — until somebody reads it and believes it.** Mine cost
+one wrong correction of a peer; theirs would eventually have cost somebody an
+afternoon.
+
+**Not fixed here, and bundled with the loop gap rather than treated as separate.**
+It is a change to the same guard, and this file already says that guard waits for
+Nick. JobShot has fixed theirs and reports the shape that cost them a round: blank
+strings and comments **before** matching anything, keep template `${...}` holes
+because an `agent()` can live in one, and **test the stripper itself** — a guard's
+guard. That scoping is here so the work is ready rather than being started twice.
 
 ## Not changed, and not mine to change
 
