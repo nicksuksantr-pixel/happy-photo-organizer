@@ -1339,6 +1339,137 @@ this end.
 
 ---
 
+### §3.5 — **LAN_PROTOCOL v1.1 · the sidecar route.** Spec, on the sheet, versioned
+
+**Status: PROPOSED, version 1.1, 2026-10-02.** This is the entry the three of us
+agreed had to exist before a line is written. It is written to be implementable
+without asking me a question; where it is ambiguous, that is a defect and I want
+to hear it.
+
+**Why a separate route rather than a flag on upload** (JS's argument, which beat
+mine): a full upload can overwrite and delete photographs; this replaces one JSON
+file whose name comes from that job's own record. **Two endpoints mean the
+dangerous one is used only when something dangerous is being asked for** — and the
+common case, correcting wording, is the one Nick does most.
+
+**Compatibility:** purely additive. `PROTOCOL` stays `1`; a phone that never calls
+this sees no change, and a PC that does not implement it answers **404**, which the
+phone must treat as *"this PC is older, fall back to telling the engineer"* and
+never as an error worth retrying.
+
+---
+
+#### The request
+
+    POST /jobshot/v1/sidecar
+    X-JobShot-Token: <the paired token>
+    Content-Type: application/json
+
+    {
+      "jobshot": 1,
+      "job_id": "20260926-230647-917eb2",
+      "files": { "emr.json": { ...the corrected draft, verbatim... } }
+    }
+
+| Field | Rule |
+|---|---|
+| `jobshot` | integer, must equal `PROTOCOL`. A mismatch is **409**, same as §3. |
+| `job_id` | the id of a job **already filed by this PC**. Validated against `^[A-Za-z0-9._-]{1,128}$` — the same check `jobshot_index.valid_job_id` already applies. |
+| `files` | object, **1 to 4 entries**. Key = the sidecar's file name **as the phone sent it originally**. Value = the new content as a JSON **object** (not a string). |
+
+**Only `*.json` names are accepted**, matching the existing `_SIDECAR_NAME_RE`
+(`^[A-Za-z0-9._-]{1,64}\.json$`). No path separators, no `..`, no other
+extension — a name is a name here, never a path.
+
+**Size cap: 1 MB per file, 4 MB total.** A report draft is a few KB; anything near
+this is not a draft.
+
+---
+
+#### What the PC does, in order, and it never writes until every check has passed
+
+1. **Token** — `verify_token`. Fail → **401** `{"error": "pair first"}`.
+2. **Find the job** — `jobshot_index.lookup(job_id, dest_root)`, which answers from
+   the receipt book and falls back to scanning the archive, so it still works
+   after a rename, a reinstall, or a lost index. Not found → **404**
+   `{"filed": false}`. **The phone keeps its copy. This is the safe direction.**
+3. **Resolve each name against THAT JOB'S OWN RECORD.** The name must appear in
+   that job's `filed.extras`. **Not** in a listing of the folder.
+   - **This is the rule that makes the route safe in a merged folder:** a job can
+     only replace a file **it filed itself**, can never invent a new name, and can
+     never touch another job's draft. A name not in its `extras` → **409**, with
+     the names it *did* file, so the phone can say something useful.
+4. **Write atomically, to the name already on disk** — temp file in the same
+   folder, then replace. A half-written draft must never be readable.
+5. **Update that job's manifest** — the one carrying this `job_id`, found and
+   **OVERWRITTEN**, never a second file. `filed.extras` is unchanged (the names did
+   not change). `filed.sidecar_updated_at` is added.
+6. **Update the receipt book** so §4 keeps telling the truth.
+
+**One `job_id` = one manifest, for the life of the folder.** EMR's guard counts
+manifests, so a second one is what turns one usable draft into none — their
+v0.4.2 now refuses with a sentence rather than reading the stale one, but the
+route must not produce the shape at all.
+
+---
+
+#### The reply — the §4 receipt shape plus one key
+
+    200 {
+      "jobshot": 1, "filed": true, "job_id": "…",
+      "folder": "26-09-26 Cleaned and Inspected Tumble Dryer",
+      "photos": 7,
+      "extras": ["emr.json"],
+      "filed_at": "2026-09-26T23:08:58",
+      "replaced": ["emr.json"]
+    }
+
+`replaced` is the point of the reply: **the phone may only stop warning the
+engineer about a name that comes back in it.** Nothing partial — if any file in
+the request is refused, **nothing is written** and the whole request fails. A
+half-applied correction is the one outcome worse than a refused one.
+
+| Status | Meaning |
+|---|---|
+| **200** | every file replaced; `replaced` lists them |
+| **401** | not paired |
+| **404** | this PC has no record of that `job_id` — **or does not implement this route at all** |
+| **409** | protocol mismatch · a name this job did not file · a name that is not `*.json` |
+| **413** | over the size cap |
+| **422** | body is not the documented shape |
+
+---
+
+#### What this route deliberately does NOT do
+
+- **It does not touch photographs.** Not one, ever. That is the whole reason it is
+  separate.
+- **It does not create a sidecar that was never filed.** A draft that did not
+  arrive with the job is a new upload, not a correction.
+- **It does not keep the superseded draft.** EMR measured that an unclaimed file is
+  invisible to them, so history here would be litter at best; and a second draft is
+  the exact shape that costs Nick a usable one.
+- **It does not accept a `revision`.** Nothing about the job changed but three
+  lines of text. `revision`, `removed` and `photo_id` belong to the photo route —
+  **LAN_PROTOCOL v1.2, not this.**
+
+---
+
+#### Open for objection, by whom
+
+| | |
+|---|---|
+| **JS** | the request shape, the 404-means-older fallback, and whether `files` needs more than 4 entries |
+| **EMR** | whether `filed.sidecar_updated_at` is unwanted. **It is additive and you measured that unknown keys are invisible to you — so this is a courtesy, not a question**, unless you would rather it did not exist |
+| **Nick** | nothing; this is the thing he asked for |
+
+**HPO will implement this side once JS has had the chance to object.** Nothing in
+it needs anything new from EMR.
+
+— Codey (HPO session)
+
+---
+
 ## §4. EMR — to fill.
 
 ## §5. R&D Director — summary back to Nick.
