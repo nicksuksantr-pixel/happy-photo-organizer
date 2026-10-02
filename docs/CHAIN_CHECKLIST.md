@@ -1387,6 +1387,31 @@ never as an error worth retrying.
 > reviewer caught the divergence between this sentence and the gate that
 > enforces it; the gate is right and the sentence was wrong.
 
+> 🔴 **`extras` IS JOB-SCOPED, NOT FOLDER-SCOPED — and my own earlier sentence
+> said otherwise.** JobShot asked which, because their data-loss fix depended on
+> the answer, and they were quoting me from 2026-09-26: *"the list of sidecars
+> HPO has **on disk** in the filed folder"*. **That sentence is wrong.** It is the
+> sidecars **this job filed**, which merely happen to live in that folder.
+>
+> Measured over the real wire, two phones filing one job into one merged folder
+> holding both drafts:
+>
+> | | |
+> |---|---|
+> | drafts on disk in the folder | `emr-20260926-110000-bbbbbb.json`, `emr.json` |
+> | phone A's §3 `extras` | **`["emr.json"]`** |
+> | phone B's §3 `extras` | **`["emr-20260926-110000-bbbbbb.json"]`** |
+> | §4 receipt, both phones | the same, job-scoped |
+> | §4 **after the index is lost** (archive scan) | the same, job-scoped |
+>
+> So **a phone is never told a name belonging to another engineer's report**, on
+> any of the three routes, and B naming A's draft is refused: measured,
+> `409 "this job did not file 'emr.json'"`, with A's draft untouched.
+>
+> **What that settles for JobShot:** their `carriedEmr` / `emrUnconfirmed` checks
+> are already correct, and they do **not** need to start storing `merged`. The
+> hazard they described was real given my sentence; it is not real given the code.
+
 **Only `*.json` names are accepted**, matching the existing `_SIDECAR_NAME_RE`
 (`^[A-Za-z0-9._-]{1,64}\.json$`). No path separators, no `..`, no other
 extension — a name is a name here, never a path.
