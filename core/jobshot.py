@@ -273,6 +273,49 @@ def _manifests_in(folder: Path) -> list[dict]:
     return found
 
 
+def unreadable_manifests(dest_root: Path) -> list[str]:
+    """Folders holding a `job*.json` this PC cannot parse.
+
+    `_manifests_in` drops those silently, which is right for its callers - one
+    damaged folder must not stop a batch. But the silence has a consequence
+    nobody could see from inside this module: a damaged manifest makes
+    `jobshot_index.lookup` answer "no record of that job", the phone's
+    pre-upload probe reads that as "never filed", and **it uploads the whole job
+    again and duplicates every photograph** - the exact harm the sidecar route
+    exists to prevent, arriving through the RESPONSE to the damage rather than
+    through the damage itself.
+
+    So the fact is made available instead of inferred. EMR asked the same
+    question of their own reader on 2026-10-02 and found the same shape: the
+    truncation is the cause, the silence is the damage.
+    """
+    hurt: list[str] = []
+    try:
+        folders = sorted(f for f in dest_root.iterdir() if f.is_dir())
+    except OSError:
+        return hurt
+    for folder in folders:
+        if PENDING_MARKER in folder.name:
+            continue
+        try:
+            entries = sorted(folder.iterdir())
+        except OSError:
+            continue
+        for f in entries:
+            if f.suffix.lower() != ".json":
+                continue
+            if f.name != MANIFEST_NAME and not f.name.startswith("job-"):
+                continue
+            try:
+                data = json.loads(f.read_text(encoding="utf-8-sig"))
+            except (OSError, json.JSONDecodeError, ValueError):
+                hurt.append(f"{folder.name}/{f.name}")
+                continue
+            if not (isinstance(data, dict) and data.get("jobshot")):
+                hurt.append(f"{folder.name}/{f.name}")
+    return hurt
+
+
 def find_manifest_path(folder: Path, job_id: str) -> Path | None:
     """The path of the manifest in `folder` that belongs to `job_id`.
 

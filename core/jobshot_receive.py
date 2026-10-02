@@ -173,6 +173,9 @@ class SidecarResult:
     photos: int = 0
     extras: list[str] = field(default_factory=list)
     filed_at: str = ""
+    # Job folders whose `job*.json` this PC cannot parse. Only ever set beside a
+    # 404, to say whether that 404 means "never filed" or "I cannot tell".
+    unreadable: list[str] = field(default_factory=list)
 
     def to_reply(self) -> dict:
         if not self.ok:
@@ -188,6 +191,8 @@ class SidecarResult:
                 # A name this job did not file is refused WITH the names it did,
                 # so the phone can say something useful instead of "rejected".
                 body["extras"] = list(self.extras)
+            if self.unreadable:
+                body["unreadable_records"] = len(self.unreadable)
             return body
         return {
             "jobshot": PROTOCOL,
@@ -247,6 +252,21 @@ def replace_sidecars(job_id: str, files: dict, dest_root: Path | None) -> Sideca
     if entry is None:
         result.status = 404
         result.error = "this PC has no record of that job"
+        # ...but say whether that 404 can be TRUSTED. A manifest this PC cannot
+        # parse is dropped silently by `_manifests_in`, so a damaged record
+        # answers exactly like a job that was never filed - and the phone's
+        # pre-upload probe then re-uploads and duplicates every photograph.
+        # The status stays 404 (the contract) and the reason to doubt it is
+        # added beside it, so the phone can tell the engineer to look rather
+        # than silently send twenty megabytes again.
+        if dest_root is not None:
+            hurt = jobshot.unreadable_manifests(Path(dest_root))
+            if hurt:
+                result.unreadable = hurt
+                result.error = (
+                    "this PC has no record of that job, and it cannot read "
+                    f"{len(hurt)} job record(s) in the archive - the job may be "
+                    f"one of them. Do not re-send; look at the folder.")
         return result
 
     folder = Path(str(entry.get("folder_path") or ""))

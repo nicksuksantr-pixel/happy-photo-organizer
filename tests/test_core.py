@@ -4415,6 +4415,78 @@ def test_a_replace_that_fails_midway_rolls_the_earlier_ones_back():
             restore()
 
 
+def test_a_damaged_job_record_does_not_look_like_a_job_never_filed():
+    """EMR asked this of their own reader on 2026-10-02 and found the same shape,
+    so I asked it of mine: what happens when a manifest HPO cannot parse reaches
+    it anyway? My atomic-write fix lowers the odds; it cannot remove a USB pull,
+    OneDrive mid-sync, or an older HPO.
+
+    Measured: `_manifests_in` drops an unparseable manifest silently - correct
+    for its callers, one bad folder must not stop a batch - and the consequence
+    was invisible from inside that module:
+
+        damaged manifest -> lookup() says "no record" -> §4 answers 404
+        -> the phone's pre-upload probe reads "never filed"
+        -> IT UPLOADS THE WHOLE JOB AGAIN and duplicates every photograph
+
+    which is the exact harm the sidecar route exists to prevent, arriving
+    through the RESPONSE to the damage instead of the damage itself.
+
+    The status stays 404 - that is the contract - and the reason to doubt it is
+    put beside it. **The cause was the truncation; the damage was the silence.**
+    """
+    if not _have_pillow():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        restore = _sidecar_sandbox(tmp)
+        try:
+            from core import jobshot, jobshot_receive as recv
+            dest = tmp / "dest"
+            dest.mkdir()
+            jid = "20260926-210000-damage"
+            r = _file_with_draft(tmp, dest, job_id=jid)
+            man = r.final_folder / "job.json"
+
+            # a healthy archive reports nothing
+            assert jobshot.unreadable_manifests(dest) == []
+
+            for payload in (b"", b'{"jobshot": 1, "job_id": "2026', b"not json"):
+                man.write_bytes(payload)
+                from core import jobshot_index
+                jobshot_index.INDEX_PATH.unlink(missing_ok=True)   # force the scan
+
+                hurt = jobshot.unreadable_manifests(dest)
+                assert hurt == [f"{r.final_folder.name}/job.json"], hurt
+
+                res = recv.replace_sidecars(jid, {"emr.json": {"x": 1}}, dest)
+                assert res.status == 404, res.status
+                # the 404 now carries WHY it cannot be trusted
+                assert res.unreadable == hurt, res.unreadable
+                assert "cannot read" in res.error, res.error
+                assert "Do not re-send" in res.error, res.error
+                body = res.to_reply()
+                assert body["filed"] is False, body
+                assert body["unreadable_records"] == 1, body
+
+            # and a genuinely-never-filed job in a HEALTHY archive still gets the
+            # plain 404 with no noise - the distinction is the whole point
+            man.write_text(json.dumps({"jobshot": 1, "job_id": jid,
+                                       "job_name": "Overhauled Air Compressor",
+                                       "work_date": "2026-09-26",
+                                       "filed": {"extras": ["emr.json"],
+                                                 "renamed": {}}}),
+                           encoding="utf-8")
+            res = recv.replace_sidecars("20260101-000000-neverxx",
+                                        {"emr.json": {"x": 1}}, dest)
+            assert res.status == 404, res.status
+            assert res.unreadable == [], res.unreadable
+            assert "cannot read" not in res.error, res.error
+            assert "unreadable_records" not in res.to_reply(), res.to_reply()
+        finally:
+            restore()
+
+
 def main() -> int:
     tests = [(n, f) for n, f in sorted(globals().items())
              if n.startswith("test_") and callable(f)]

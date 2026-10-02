@@ -240,6 +240,13 @@ class _Handler(BaseHTTPRequestHandler):
             note = f" ({result.error})" if result.error else ""
             r._log(f"sidecar replaced in {result.folder}: "
                    f"{', '.join(result.replaced)}{note}")
+        else:
+            # Logged, not swallowed - and the unreadable-record case especially,
+            # because that one is Nick's archive telling him something is wrong
+            # with a folder and nobody else is going to notice.
+            r._log(f"sidecar refused ({result.status}): {result.error}")
+            for bad in result.unreadable:
+                r._log(f"  unreadable job record: {bad}")
         self._send(result.status, result.to_reply())
 
     def do_POST(self):                         # noqa: N802
