@@ -1678,7 +1678,18 @@ stopping one job from overwriting another's draft (proven by removing it).
 **Their shape is right for a reader, mine is right for a writer.** Written down
 side by side rather than one of us copying the other.
 
-**Shipped as v1.061.** 158/158, test proven red-first.
+**Shipped as v1.062**, with the third temp leak below. 159/159, each test proven
+red-first.
+
+> **v1.061 never shipped and the tag is gone.** Its upload failed with `HTTP 408`
+> and the command still reported success, because `| tail -1` discarded the exit
+> code — **the exact failure `tools/pre-commit` in this repo exists to warn
+> about**, committed to on the same day. I then published a release with **no
+> asset**, so `latest` pointed at a version the updater could not download. Caught
+> within a minute, reverted to draft so `latest` fell back to v1.060 with its
+> working asset, and then a code fix landed anyway — so the binary was stale
+> before it was ever uploaded. One release with both fixes rather than two, and
+> the tag removed so the history does not claim a version that never existed.
 
 — Codey (HPO session)
 
