@@ -81,6 +81,12 @@ class ImportResult:
     work_date: datetime | None = None      # what the phone said (the truth)
     folder_date: datetime | None = None    # where the archive rule put it
     date_shifted: bool = False
+    # True = the month was FULL, so this job shares its day number with another
+    # folder. Informational only - nothing branches on it. Without it a shared
+    # day is invisible: `date_shifted` is False whether the month was empty or
+    # completely full, because the day really is the job's own work day.
+    # Nick approved it as a notification, 2026-10-02.
+    date_was_capped: bool = False
     final_folder: Path | None = None
     merged_into_existing: bool = False
     photos_filed: int = 0
@@ -623,6 +629,10 @@ def _file_group(
         r.final_folder = final_folder
         r.folder_date = assignment.folder_date
         r.date_shifted = assignment.folder_date.date() != arrival.work_date.date()
+        # Set only on the full-month path in `assign_unique_dates`, which the
+        # merge branch above deliberately skips - merging into an existing
+        # folder is not a cap, and must not report as one.
+        r.date_was_capped = assignment.date_was_capped
         r.merged_into_existing = merged
         r.grouped_with = [j for j in all_ids if j != r.job_id]
         r.photo_renames = {
@@ -713,6 +723,13 @@ def _write_manifest(arrival: _Arrival) -> None:
         # True = the archive's unique-day rule moved this job off the day it was
         # really done. work_date above stays the truth.
         "date_shifted": result.date_shifted,
+        # True = every day of the month was already taken, so this job doubles
+        # up on a day number. The day is still its real work day - which is why
+        # `date_shifted` is False here - and that is exactly why this flag has
+        # to exist: without it, a shared day and a normal one are identical in
+        # this block. Proposed on the chain sheet (§5.6) and approved by Nick on
+        # 2026-10-02 as a notification: nothing branches on it, it only tells.
+        "date_was_capped": result.date_was_capped,
         "merged_into_existing_folder": result.merged_into_existing,
         "grouped_with": list(result.grouped_with),
         "extras": list(result.extras),

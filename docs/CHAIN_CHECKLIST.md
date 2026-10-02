@@ -1221,6 +1221,124 @@ resend. The green light is the sidecar fix.
 
 ---
 
+### §3 addendum 14 — 2026-10-02, Nick ruled on all four. Three close, one ships
+
+All four items that had been "blocked on Nick" since this morning are answered.
+**Three of them close, and one was already satisfied** — which means I had been
+holding open a question my own code had answered before I asked it.
+
+---
+
+#### 1 · The vessel guard — **CLOSED. Nick is right, and the risk was mine, not the system's**
+
+> *"มันจะข้ามเรือได้ไง ก็สเกนจับคู่อยู่แล้ว และทำงานในวงแลนเท่านั้น"*
+> — How could it cross vessels? It is QR-paired, and it only works on the LAN.
+
+**Measured, and he is right on both counts:**
+
+| | |
+|---|---|
+| **The token is per-PC** | `get_token()` mints it into *this* PC's config; `verify_token` is a `compare_digest` against *that* value. A phone paired with another vessel's PC presents that PC's token and gets **401**. |
+| **The server binds to the LAN interface** | `ThreadingHTTPServer((host, port))` where `host = local_ip()` — not `0.0.0.0`. It is reachable from the vessel's own network and nowhere else. |
+
+So a job photographed on another vessel **cannot arrive over Wi-Fi at all**: it
+would need this PC's token *and* to be on this PC's LAN, which is the definition
+of being on this vessel. **The ship field in the manifest is belt-and-braces over
+a guarantee the pairing already provides** — which makes the §6.1 hole (a manifest
+with no `ship` skipping the check) harmless on the route that actually carries
+jobs.
+
+**So the stricter guard does not ship, and should not.** It would refuse input
+accepted today in exchange for closing a door that pairing already holds shut —
+and the cost of being wrong lands on a real job of Nick's. **That was my own
+instinct when I found it ("I am not shipping the fix and I do not want to"), and
+his ruling is the answer the Director's §6.1 was waiting for.** The second route I
+found this afternoon — a corrupt config emptying the ship and disabling the guard
+— closes with it, for the same reason.
+
+**What remains true and now has a name rather than a worry:** the hand-drop path
+has no pairing behind it, so it is the only way a foreign-vessel folder could ever
+reach this tree. Nick's answer is that this does not happen in his operation, and
+he is the one who knows it. **Recorded as a known, accepted, documented gap rather
+than an open risk.**
+
+---
+
+#### 2 · The full-month day — **already satisfied, and I should have measured before asking**
+
+> *"ก็ดูตามปฏิทินสิเดือนนี้มีกี่วัน"* — just go by the calendar, how many days this
+> month has.
+
+**`core/processor.py:386` is `last_day = monthrange(tgt_year, tgt_month)[1]`.** The
+real calendar, per month, since long before today:
+
+| | |
+|---|---|
+| Feb 2026 | **28** |
+| Feb 2028 | **29** |
+| Apr 2026 | **30** |
+| Oct 2026 | **31** |
+
+No constant, no assumption of 30-or-31. **The question I put to him had already
+been answered by the code**, and one grep would have told me. That is the
+afternoon's own lesson arriving a third time: *the lesson lands where you are
+looking, and the damage is where you are not* — here the damage was Nick's time.
+
+---
+
+#### 3 · `filed.date_was_capped` — **SHIPPED in v1.059**
+
+> *"แค่แจ้งเตือนเฉยๆทำได้เลย"* — it is only a notification, go ahead.
+
+Shipped exactly as that: **nothing branches on it, it only tells.** `true` when
+every day of the month was taken and the job therefore doubles up on a day number.
+
+**Why it had to exist:** `date_shifted` is `false` in that case — correctly,
+because the day *is* the job's own work day — so **a shared day and an ordinary one
+were byte-identical in this block.** Now they are not.
+
+**And this is the first time the frozen-shape gate has fired on a real change, so
+it was answered the way its own docstring demands rather than by editing the set:**
+EMR had already measured a manifest carrying four unknown keys at once —
+`photo_ids`, `revision`, `removed` and a nonsense `something_in_2027` — and
+reported their tag output **byte-identical**, because nothing on their side
+enumerates `filed`; it is `.get("extras")` and `.get("renamed")`. **The other side
+was told, and said yes, before the key existed.** That is the whole point of the
+gate and it worked.
+
+Test proven **red first** by breaking the carry (`date_was_capped: False` in a
+manifest that should say `True`), green when restored. 138/138.
+
+---
+
+#### 4 · The vessel-crossing branch — **Nick closed it with the only evidence that counts**
+
+> *"ใช้งานจริงแล้วใช้ได้ดีเลย มาให้ทำเรื่องการแก้งานเดิมต่อนี่ไงครับ"*
+> — it has been used for real and works well; that is why he came to ask about
+> editing an existing job.
+
+**He is not dismissing the gap, he is telling me its priority.** Real jobs have run
+through the whole chain, repeatedly, and the reason he is here is the *next*
+feature. The branch I could not prove is on the route pairing makes unreachable
+(item 1), so **proving it was never the thing standing between him and working
+software.**
+
+I was holding it open as "the one claim that is not measured", which was accurate
+and the wrong thing to lead with four times in one day.
+
+---
+
+### So the sheet is clear of HPO's blockers, and the next thing is the sidecar route
+
+Nothing on the §5.6 / §6.1 / vessel list is waiting on Nick any more. **The only
+open work is the one he actually asked for: correcting a filed job.** Sidecar
+first, alone, with its own version — agreed by all three, and now unblocked at
+this end.
+
+— Codey (HPO session)
+
+---
+
 ## §4. EMR — to fill.
 
 ## §5. R&D Director — summary back to Nick.

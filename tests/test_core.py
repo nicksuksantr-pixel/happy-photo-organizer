@@ -2648,10 +2648,21 @@ def test_contract_the_filed_block_shape_is_frozen():
 
         filed = json.loads((result.final_folder / "job.json")
                            .read_text(encoding="utf-8"))["filed"]
+        # `date_was_capped` added 2026-10-02 on Nick's approval (§5.6). This is
+        # the first time this gate has fired on a real change, and it was
+        # answered the way the docstring demands rather than by editing the set:
+        # EMR measured a manifest carrying four unknown keys at once and their
+        # tag output was byte-identical, because nothing on their side
+        # enumerates `filed` - it is `.get("extras")` and `.get("renamed")`.
+        # So the other side was told, and said yes, BEFORE the key existed.
         assert set(filed) == {
             "folder", "folder_date", "work_date", "date_shifted",
+            "date_was_capped",
             "merged_into_existing_folder", "grouped_with", "extras",
             "renamed", "hpo_version", "filed_at"}, sorted(filed)
+        assert isinstance(filed["date_was_capped"], bool)
+        # an ordinary filing into an empty month is NOT capped
+        assert filed["date_was_capped"] is False, filed["date_was_capped"]
 
         # the three EMR named as load-bearing, with their types
         assert isinstance(filed["folder"], str) and filed["folder"]
@@ -3478,6 +3489,48 @@ def test_a_bom_does_not_wipe_the_config_or_the_catalog():
         c.load()
         assert len(c.data.get("jobs", [])) == 2, (
             "a BOM emptied the catalog: " + repr(c.data))
+
+
+def test_a_full_month_says_so_in_the_filed_block():
+    """§5.6: when every day of the month is taken a job doubles up on a day
+    number, and until now the manifest could not say so - `date_shifted` is
+    False in that case, correctly, because the day IS the job's real work day.
+    So a shared day and a normal one looked identical to anything downstream.
+
+    The month length comes from the calendar (`monthrange`), not from a constant,
+    so this is 31 placeholders for October and would be 28 for February.
+
+    Nick approved the field as a notification on 2026-10-02: nothing branches on
+    it, it only tells.
+    """
+    if not _have_pillow():
+        return
+    from core import jobshot
+
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        dest = tmp / "dest"
+        dest.mkdir()
+        # fill every day of October 2026 - 31 of them, per the calendar
+        from calendar import monthrange
+        days = monthrange(2026, 10)[1]
+        assert days == 31, days
+        for d in range(1, days + 1):
+            (dest / f"{d:02d}-10-26 Placeholder {d:02d}").mkdir()
+
+        arrival = _arrival(tmp, photos=1, job="Overhauled Air Compressor",
+                           work_date="2026-10-02", plain=True,
+                           job_id="20261002-090000-capped")
+        result = jobshot.import_job(arrival, dest)
+        assert result.ok, result.error
+
+        filed = json.loads((result.final_folder / "job.json")
+                           .read_text(encoding="utf-8"))["filed"]
+        assert filed["date_was_capped"] is True, filed
+        # the day is still the job's OWN work day, so date_shifted stays False
+        assert filed["date_shifted"] is False, filed
+        assert filed["work_date"] == "2026-10-02", filed
+        assert result.final_folder.name.startswith("02-10-26"), result.final_folder.name
 
 
 def main() -> int:
