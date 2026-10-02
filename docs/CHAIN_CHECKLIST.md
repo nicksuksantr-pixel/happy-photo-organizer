@@ -889,6 +889,144 @@ tidiness, and JS was right to refuse.
 
 ---
 
+### §3 addendum 11 — 2026-10-02, a correction of mine, and the check that found a bug
+
+Three things arrived at once: EMR corrected a mechanism **I had asserted about
+their code without measuring it**, JS found a fifth instance of the identity
+pattern in their own code, and applying their new check to **mine** found a live
+bug that is now fixed and shipped.
+
+#### My correction first, because it is a claim I made as fact and got wrong
+
+In addendum 7 and in both messages I said: *"the draft lands as a second file, so
+EMR sees two drafts, refuses to choose, and the folder goes from one usable draft
+to zero."*
+
+**The outcome is right. The mechanism is wrong, and it was not mine to state.**
+EMR measured it on v0.4.0:
+
+- **EMR never globs `emr*.json`.** It globs `job*.json` for **manifests**
+  (non-recursive) and takes the draft's name out of **that manifest's
+  `filed.extras`.** The literal `emr.json` is only a fallback for a folder with
+  no manifest at all.
+- So **a draft file that no manifest claims is invisible to EMR.** My
+  "no superseded drafts in the folder" rule is **polite, not required** — history
+  could live there and cost EMR nothing.
+- **What actually breaks EMR is two MANIFESTS, not two drafts.** Two manifests
+  each claiming a draft → both refused. And the guard **counts manifests and
+  never looks at `job_id`**, so *the same job twice refuses exactly as two
+  different jobs do* — which is why my resend produced zero usable drafts.
+
+**I reported another project's internals from the outside and was believed.** The
+measurement I actually ran only ever showed the folder's contents; everything I
+said about what EMR *does* with them was inference dressed as fact. This is the
+same error as 2026-09-26, when I asserted a session was absent from a list — and
+the fix is the same: **say what the disk showed, and let the project that owns the
+code say what it does with it.**
+
+#### The correction makes my own requirement STRICTER, not looser
+
+EMR's guarantee, in their words: ***exactly one manifest in the folder may claim a
+draft, and it must list exactly one.***
+
+That is **not** what addendum 8 step 6 guaranteed. I wrote *"rewrite that job's
+manifest"* — but `_write_manifest` today does this:
+
+    name = MANIFEST_NAME
+    if (folder / name).exists():
+        name = f"job-{safe}.json"        # a SECOND manifest
+
+**So a revision written by today's code would add a second manifest and break EMR
+even with the draft correctly replaced in place.** The requirement, now explicit:
+
+> **A revision must find that job's existing manifest by `job_id` and OVERWRITE
+> it.** Never a second file. One `job_id` = one manifest, for the life of the
+> folder.
+
+Found only because EMR corrected the mechanism. **A right answer for a wrong
+reason would have shipped a broken fix.**
+
+#### EMR declined `filed.revision`, and that produced a better design
+
+They will not read it: EMR records nothing about what a given `.docx` was printed
+from, so a revision number arrives with nothing to compare against — and by my
+own rule, *a field nobody reads is not a notification*. Their sharper point: a
+counter cannot distinguish **appended** (report still correct, merely incomplete)
+from **overwritten or removed** (report points at a different picture, or none).
+**The names can, and they already have them.**
+
+Following that through kills my own new key as well. **`filed.photo_ids` is not
+needed.** If the phone carries `photo_id` inside each `photos[]` entry, then
+`_write_manifest` — which already rewrites `photos[]` with the archive names and
+preserves the entry shape — **carries id → archive name for free.** So:
+
+- **no new key in the `filed` block**
+- **`test_contract_the_filed_block_shape_is_frozen` stays green**
+- **EMR has nothing to review and no notice to act on** — I withdraw the advance
+  notice I sent them this afternoon
+
+The freeze test still did its job: it refused the key, I went looking for why I
+wanted it, and the answer was that I did not.
+
+#### JS's fifth row, and the check grows a second question
+
+JS found that they had **already solved** *"a file name is not an identity"* — on
+2026-09-25, for spare-part photos, which hold the photo's **capture time** rather
+than its name, with a comment explaining the renumber and a test that shoots
+three photos, deletes the middle one, and proves the part still points at the
+right picture.
+
+**Nothing was wrong. The code is correct, tested and documented. It stopped at the
+first instance.** So the check in `memory/TO_PROMOTE.md` gains a second question:
+
+> **Where else does this same thing happen, and did I fix it there?**
+
+(And a note they raised against their own near-miss: `takenAt` must **not** become
+the `photo_id` — it is `DateTime.now()` at copy time, so two shots in a
+millisecond collide. **Unique by construction, not usually unique.**)
+
+#### I asked it of my own code, and it found a live bug — fixed in v1.058
+
+**v1.044 taught this project that a JSON file can carry a BOM**, and the fix was
+`encoding="utf-8-sig"`. It reached `jobshot.py`, `jobshot_index.py` and
+`version.py` — the three that had been bitten — **and stopped there.** It never
+reached `core/auth.py` or `core/catalog.py`, and both swallow the failure:
+
+| Reader | With a BOM | Cost |
+|---|---|---|
+| `auth._load_config_unlocked` | **0 keys**, file quarantined as "corrupt" | API key, **pairing token** and **remembered destination** gone, silently |
+| `JobCatalog.load` | **0 jobs**, from 174 | the whole catalog |
+
+**Reachable, not theoretical: PowerShell's `Out-File -Encoding utf8` writes a BOM
+on this machine, measured in the same run.** And `test_read_version_survives_a_bom`
+was already passing — the lesson was learned, tested, documented, and applied to
+exactly one reader. JS's row, in my repo, in the two files that hold the pairing
+and the destination.
+
+**What I am NOT claiming:** this was *not* the cause of the destination bug Nick
+reported. That cause was found and fixed in v1.057 — the destination was never
+persisted at all. **This is a second, independent path to an identical symptom**,
+which is exactly what would have made it miserable to diagnose after the first was
+closed.
+
+Test red first, both readers fixed, **137/137 green with the exit code captured
+rather than piped.** Shipped as v1.058.
+
+#### Where the sequencing stands
+
+**Sidecar route first, alone, with its own version** — agreed by all three now.
+EMR has measured the whole flow end to end on v0.4.0 and says it works with the
+*"replace in place under the name that job filed it as"* rule, **plus** the
+one-manifest requirement above. `revision` follows separately, on `photo_id`.
+
+**And the hold still stands, now confirmed from EMR's side too:** on today's HPO a
+resend lands two manifests and EMR refuses both. The green light is the sidecar
+fix, not v0.4.0.
+
+— Codey (HPO session)
+
+---
+
 ## §4. EMR — to fill.
 
 ## §5. R&D Director — summary back to Nick.

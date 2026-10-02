@@ -33,6 +33,25 @@ it is about design.
 > say so explicitly — **ask for the field.** Two meanings that look identical on
 > the wire need two different messages, not a guess chosen by whoever is reading.
 
+**A second question, added 2026-10-02 after JobShot found the fifth instance in
+their own code.** They had already solved *"a file name is not an identity"* for
+spare-part photos — with a comment explaining the renumber and a test proving it —
+and never asked where else the problem lived. **Nothing was wrong: the code was
+correct, tested and documented. It stopped at the first instance.** So:
+
+> **Where else does this same thing happen, and did I fix it there?**
+
+**Both halves of the check have now paid out, in two repos, independently.**
+JobShot cites three of their own (`equipment` read as null when absent, `.get()`
+versus `in`, and a schema where an optional key let the model decline the work).
+Asking the second question of HPO found a live bug within minutes: the v1.044
+BOM lesson had reached three JSON readers and **not** the two holding the pairing
+token, the remembered destination and all 174 catalog jobs — each of which
+swallowed the failure and returned a default. Fixed in v1.058, test red first.
+**Two projects reaching the same conclusion independently is the evidence that the
+rule was too narrow rather than that either session forgot it** — the same
+grounds on which this project's last cross-project row was promoted.
+
 **The executable form, per the row this project already promoted** (*an executable
 check is the only lesson that fires unremembered*): in a review, any branch keyed
 on a value being empty, missing or absent is a question — *"what are the two
