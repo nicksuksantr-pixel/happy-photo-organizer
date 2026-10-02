@@ -1890,6 +1890,28 @@ def test_receipt_is_written_by_the_manual_routes_too():
 
 
 def test_contract_upload_reply_shape_is_frozen():
+    """§3 — the upload reply. **A failure here is not a test to fix.**
+
+    This is the wire JobShot reads to decide a job is safe to delete from the
+    phone. If a key moves, changes type or disappears, the question is
+    **"has JobShot been told, and has the sheet got the version"** — answered
+    before the change exists, not after. Adding a key is the one safe direction
+    (a reader that ignores unknown keys is unaffected), and even that is recorded
+    below with the date and the reason.
+
+    **Who reads what, each attributed to the side that measured it** - added
+    2026-10-02 after EMR corrected my claim about their call sites and JobShot
+    found their own gate asserting eight keys with no reason beside them:
+
+      * **JobShot (measured by JobShot):** the whole of `filed[]` - `extras`
+        decides "safe to delete", `work_date` explains a folder the day rule
+        moved, `folder` is what it shows Nick.
+      * **HPO (measured by HPO):** nothing. HPO writes this and never reads it.
+
+    `filed` is a LIST here and a BOOL in the §4 receipt. The same word, two
+    types, on purpose - and it has bitten the client once, which is why both are
+    pinned in the same suite.
+    """
     if not _have_pillow():
         return
     with tempfile.TemporaryDirectory() as td:
@@ -1929,6 +1951,25 @@ def test_contract_upload_reply_shape_is_frozen():
 
 
 def test_contract_ping_and_receipt_shapes_are_frozen():
+    """§2 (ping) and §4 (the receipt). **A failure here is not a test to fix.**
+
+    §2 is how the phone decides it may send at all; §4 is the answer that makes a
+    LOST REPLY survivable - the phone asks it instead of pushing twenty megabytes
+    over a vessel link again. Both are read by software on another device that
+    ships separately from this one, so a key that moves or changes type is a
+    protocol change: **"has JobShot been told, and has the sheet got the
+    version"**, answered first.
+
+    **Who reads what, attributed to the side that measured it:**
+
+      * **JobShot (measured by JobShot):** `ready` + `reason` gate sending;
+        `app` is an identifier it may compare, never a display name; `filed`,
+        `folder`, `photos` and `extras` are what it shows and what it trusts.
+      * **HPO (measured by HPO):** nothing - HPO answers these, it does not ask.
+
+    Note `filed` is a **bool** here and a **list** in the §3 reply. One word,
+    two types, deliberately pinned together so the trap is visible in one place.
+    """
     if not _have_pillow():
         return
     from core import jobshot_receive as recv
