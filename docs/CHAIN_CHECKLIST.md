@@ -1695,6 +1695,80 @@ red-first.
 
 ---
 
+### §3 addendum 17 — 2026-10-03, **this machine is the TEST install, and it said so in my own output**
+
+**Everything HPO has verified in this chain was verified on a test installation,
+and the real archive has never been readable from here.** JobShot found it, in a
+line I had quoted to them twice:
+
+    192.168.110.146  ->  200   v1.060, ship 'ENA Test', ready    (this PC)
+
+**`ship 'ENA Test'`.** Every real job on Nick's phone is **`ENA CHALLENGER`** —
+they have ten in screenshots. Nick confirmed it plainly: *"ในมือถือก็มีเครื่องจริง
+เครื่องเดียวนะ ตัว ena test ไม่มีแล้ว"* — on the phone there is only the one real
+machine, and the ENA Test pairing is gone.
+
+Measured on this side rather than accepted on report:
+
+| | |
+|---|---|
+| `jobshot_ship` here | **`'ENA Test'`** |
+| the one JobShot job left on this disk | `ship 'ENA Test'` |
+| the receipt book | 8 entries, **every one 2026-09-26**, 7 of 8 folders already deleted |
+| anything from 2026-10-02 | **none** |
+| `.167` answering 401 to my token | correct — a test token against the real PC |
+
+#### What this corrects, and it is more than one sentence
+
+**The runs I certified were real, and they were on the test vessel.** The
+21:27:51 and 23:08:58 jobs were genuine phone jobs — real `job_id`s, a two-minute
+transfer gap, EMR's `.docx` printed beside them. **None of that becomes false.**
+What becomes precise is where: *"the whole chain ran on a real job"* should have
+read ***"on the test installation."***
+
+**And §10's unprovable branch is explained rather than merely restated.** I wrote
+repeatedly that the vessel-crossing path could not be distinguished because
+*"every real job on this machine carries `ship: ENA Test`, which is this PC's own
+vessel."* **That is true because this IS the test vessel** — the tautology was the
+answer the whole time, and I reported it as a coincidence of the sample.
+
+**One factual update to §6.1, not a reopening of it.** Nick closed the vessel
+guard on the grounds that pairing plus a LAN-bound socket makes crossing
+impossible, and **that reasoning is untouched.** The premise that has changed is
+only this: when I wrote that nothing has ever produced a job naming a different
+ship, that was true of *this machine*. **There are now demonstrably two vessel
+identities in play** — `ENA Test` here, `ENA CHALLENGER` on the real PC — so the
+hand-drop path has a real source of one. **His decision stands; the sentence
+under it needed updating.**
+
+#### Why this is NOT an instance of the row I wrote an hour ago
+
+`a-true-fact-is-not-evidence-for-the-next-thing` describes five cases of **a true
+measurement inflated by one verb.** Its tell is *the claim is one step larger than
+the evidence.*
+
+**That tell cannot catch this, because no claim was made.** `ship 'ENA Test'` was
+printed, accurate, unasked-about, and in front of both of us for hours while we
+built an increasingly careful investigation on top of it. **The failure is
+upstream of inference.** JobShot's name for it is the right one:
+
+> **The unread field.** The check is not *"is my claim bigger than my evidence"*
+> but ***"does my evidence contain anything I have not accounted for"*** — and an
+> **identity** field is the one most worth reading, because it answers *which
+> thing am I even looking at.*
+
+**And it pairs exactly with their own gap, from the other side:** `Receipt` on the
+phone carries no PC identity at all, so it could not say which machine filed a
+job. **Mine printed one and nobody read it; theirs never printed one.** Same
+missing dimension, two different reasons, and it is why two installations stayed
+invisible for hours instead of minutes.
+
+Handed to the master in `memory/TO_PROMOTE.md` as its own row.
+
+— Codey (HPO session)
+
+---
+
 ## §4. EMR — to fill.
 
 ## §5. R&D Director — summary back to Nick.

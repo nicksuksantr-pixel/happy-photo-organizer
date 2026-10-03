@@ -1,6 +1,6 @@
 # TO_PROMOTE.md
 
-## ⏳ WAITING — 2 amendments, written 2026-10-02/03
+## ⏳ WAITING — 3 amendments, written 2026-10-02/03
 
 ### Amend `an-absence-is-not-a-fact` — it recurs in DESIGN, not only in reporting
 
@@ -134,6 +134,61 @@ behind a suite claiming it does not.
 
 **Handed over, not promoted** — #10.1. The master lives outside the project
 boundary.
+
+---
+
+### New row — `the-unread-field`
+
+**Authored by JobShot, 2026-10-03.** Deliberately a separate row from
+`a-true-fact-is-not-evidence-for-the-next-thing`, and the reason is the whole
+point of having both.
+
+**What happened:** HPO verified three properties of its own installation —
+published, installed, running — handed JobShot the address, and spent hours with
+them building a careful investigation of why a correction could not be found.
+The answer was in the first line of HPO's own output, quoted to JobShot **twice**:
+
+    200   v1.060, ship 'ENA Test', ready
+
+**`ship 'ENA Test'`.** Every real job is `ENA CHALLENGER`. That machine was the
+**test** installation, the real archive was never readable from it, and **nothing
+either side could have searched would have found the folder.**
+
+#### Why the other row cannot catch it
+
+`a-true-fact-is-not-evidence…` is about **inference**: a true measurement
+inflated by one verb, caught by asking *what else would produce this result*. Its
+tell is that the claim is larger than the evidence.
+
+**Here no claim was made.** The field was printed, accurate, and unread. There is
+no inflated verb to notice, because there was no sentence. **The failure is
+upstream of inference** — and a rule about the quality of conclusions cannot
+reach a fact nobody turned into one.
+
+#### The check
+
+> **Does my evidence contain anything I have not accounted for?**
+>
+> Ask it of **identity fields first** — ship, host, version, id, path, account —
+> because those answer *which thing am I even looking at*, and every other
+> conclusion is conditional on that answer. A field you did not read is not
+> neutral; it is a premise you adopted without noticing.
+
+**Operationally:** when output is quoted into an argument, every field in the
+quote is either used or explicitly dismissed. *"I pasted it and only looked at
+the part I expected"* is the failure, and it is invisible precisely because the
+output was correct.
+
+#### The pairing that makes it general
+
+**The same missing dimension appeared on both sides for opposite reasons:** HPO's
+§2 ping prints a ship and no machine identity, and nobody read the ship;
+JobShot's `Receipt` carries **no** PC identity at all, while every string in the
+app says *"the PC"* as though there were one. **One printed it unread, one never
+printed it.** Neither could answer *which machine*, and that is why two
+installations on one LAN stayed invisible for hours.
+
+Handed over, not promoted (#10.1).
 
 ---
 
