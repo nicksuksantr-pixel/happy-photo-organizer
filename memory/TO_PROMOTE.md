@@ -1,6 +1,6 @@
 # TO_PROMOTE.md
 
-## ⏳ WAITING — 1 amendment, written 2026-10-02
+## ⏳ WAITING — 2 amendments, written 2026-10-02/03
 
 ### Amend `an-absence-is-not-a-fact` — it recurs in DESIGN, not only in reporting
 
@@ -63,6 +63,77 @@ JobShot's message of 2026-10-02 which is where the hazard was found.
 
 **Handed over, not promoted** — #10.1: a project-scoped session may not reach the
 master. This is the hand-over, and it is a completed action.
+
+---
+
+### New row — `a-true-fact-is-not-evidence-for-the-next-thing`
+
+**Authored by JobShot, 2026-10-03, out of five corrections in one day across two
+repos.** Their sentence, and it is better than anything I wrote during the day it
+describes:
+
+> **Every single one was a true statement about one thing offered as evidence
+> about another.** The error was never the fact — it was the inference hanging
+> off it, and that is not caught by measuring more carefully, only by asking
+> **what else would produce this exact result**.
+
+#### The five, because the row is only promotable with them attached
+
+| The true fact | The false thing it was offered as evidence for |
+|---|---|
+| `extras` really does describe a list of sidecars on disk | …therefore it is **folder-scoped** (it is job-scoped) |
+| EMR really refuses a folder holding two drafts | …therefore **two drafts** are what break them (two **manifests** are) |
+| The hook really refused a literal array of ten | …therefore it **cross-checks the declaration** (it compares against `CAP = 5`) |
+| My copy's refusal really said `has 10 items, over 5` | …therefore the two copies have **diverged** (the message depends on how the array is *spelled*) |
+| The reply really carries the pre-correction `filed_at` | …therefore that PC **runs the fix** (every version does this; only the receipt differs) |
+
+**Every left-hand column is true and was measured.** Every right-hand column is
+an inference that happened to be wrong, and in four of the five cases the
+inference was handed to another project as a fact — twice costing them work they
+had already done correctly, once nearly adding a permanent field to their data
+model, and once being relayed onward to Nick as proof.
+
+#### Why "measure more carefully" is the wrong lesson
+
+This is the part that makes it a new row rather than a restatement of
+`an-absence-is-not-a-fact` or *name which side measured it*. **Both of those were
+satisfied in all five cases.** The measurement was real, it was mine, and I named
+myself as the measurer. **The rule that would have caught it is not about
+provenance or rigour — it is about alternatives:**
+
+> **What else would produce this exact result?**
+
+Asked of the hook's refusal: *a cap of five would.* Asked of the two messages:
+*one code path with two entry points would.* Asked of the preserved `filed_at`:
+*reading the entry before the write would.* **Each answer was available at the
+moment of the claim, cost nothing, and needed no new data.**
+
+#### The executable form
+
+Pairs with the row this project already promoted (*an executable check is the
+only lesson that fires unremembered*):
+
+> **When a measurement is about to become a claim about a MECHANISM, write down
+> the second explanation before sending it.** If you cannot name one, say
+> "consistent with" rather than "therefore". And when a result is handed to
+> another project as grounds for them to change code, that sentence is required,
+> not optional.
+
+**The tell that it is happening:** the claim is one step larger than the thing
+measured — *refused* becomes *cross-checks*, *carries a value* becomes *runs the
+fix*, *differs* becomes *diverged*. **One verb of inflation, every time.**
+
+#### Companion, same day, same pair
+
+JobShot's other formulation, kept because it covers the reverse direction: **when
+a failure's content is exactly what you intended to produce, suspect the thing
+reporting it.** Seven freshly written gates all failing with the precise refusal
+they asserted was a harness fault, not a gate fault — and the natural repair
+(loosening the gates) would have produced a release tool that permits everything
+behind a suite claiming it does not.
+
+**Handed over, not promoted** — #10.1. The master lives outside the project
+boundary.
 
 ---
 
