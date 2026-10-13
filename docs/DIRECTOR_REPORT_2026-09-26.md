@@ -8,6 +8,44 @@ Everything below was measured on this machine today unless it says otherwise.
 
 ---
 
+---
+
+> # ⚠️ CORRECTION, 2026-10-03 — read this before §4
+>
+> **Every run certified in this report happened on Nick's TEST installation, not
+> on the PC that holds his real archive.** The qualifier is missing from the
+> sentences below and it should not be.
+>
+> This machine is paired as ship **`ENA Test`**. **Every real job on Nick's phone
+> is `ENA CHALLENGER`**, and his real archive lives on a second PC
+> (`192.168.110.167`) which this session cannot read — it rejects this
+> installation's pairing token. Nick confirmed the `ENA Test` pairing has since
+> been removed from the phone entirely.
+>
+> **What stays true:** the runs were real. Real `job_id`s from the phone, a
+> two-to-three-minute gap between creation and filing, `emr.json` carried, the
+> `renamed` join verified against the files on disk, and EMR's `.docx` printed
+> beside them. **None of that is withdrawn.** What was wrong is only *where* —
+> **"on a real job"** should read **"on a real job, on the test installation."**
+>
+> **What this explains rather than merely corrects:** §4's unprovable
+> vessel-crossing branch. I reported, here and to two projects, that it could not
+> be distinguished because *"every real job on this machine carries
+> `ship: ENA Test`, which is this PC's own vessel."* **That is true because this
+> IS the test vessel** — the explanation was inside my own sentence, and I
+> reported it as a property of the sample.
+>
+> **How it was found:** JobShot read it out of my own `GET /ping` output, which I
+> had quoted to them twice — `ship 'ENA Test'`, printed, accurate, and unread by
+> either of us for hours while we built an increasingly careful investigation on
+> top of it. Recorded in `docs/CHAIN_CHECKLIST.md` §3 addendum 17 and handed to
+> the master rules as **`the-unread-field`**.
+>
+> **Nothing in §1–§8 has been rewritten.** A report is a record of what was
+> believed when it was written; this is what changed and when.
+
+---
+
 ## 1. What the app does today
 
 Happy Photo Organizer takes a marine electrician's work photos and files them
