@@ -1,6 +1,6 @@
 # TO_PROMOTE.md
 
-## ⏳ WAITING — 3 amendments, written 2026-10-02/03
+## ⏳ WAITING — 4 amendments, written 2026-10-02/13
 
 ### Amend `an-absence-is-not-a-fact` — it recurs in DESIGN, not only in reporting
 
@@ -187,6 +187,68 @@ JobShot's `Receipt` carries **no** PC identity at all, while every string in the
 app says *"the PC"* as though there were one. **One printed it unread, one never
 printed it.** Neither could answer *which machine*, and that is why two
 installations on one LAN stayed invisible for hours.
+
+Handed over, not promoted (#10.1).
+
+---
+
+### New row — `wanting-the-confirmation-is-not-the-user-needing-to-act`
+
+**Named by JobShot, 2026-10-13, about themselves — and I have my own instance, so
+it goes up with both.** This is **not** another inference failure. Every other row
+from this fortnight is about a conclusion being wrong. **This one is about who
+paid for it.**
+
+#### JobShot's instance, in their words
+
+> **Eleven days of me asking him to go and open a folder, on behalf of a thing
+> that had never happened.** The folder would have told us nothing he needed.
+> **I wanted the confirmation, and I dressed it as something he needed to do.**
+
+Nick had never performed a resend — *"ยังไม่เคยยิงซ้ำจริงๆสักที"*. There was no
+verification debt, only an unused feature, and the requests were for the
+*project's* certainty, presented as the *user's* task.
+
+#### Mine, and it is the same shape with a different surface
+
+**I led with the vessel-crossing branch four times in one day**, to Nick and to
+two other projects, as *"the one thing I cannot certify."* It was accurate. He
+closed it in one sentence — *"ใช้งานจริงแล้วใช้ได้ดีเลย มาให้ทำเรื่องการแก้งานเดิมต่อ
+นี่ไงครับ"* — **it works in real use; that is why I came to you about the next
+feature.** He was not disputing the gap. **He was telling me its priority, which
+I had never asked for and had quietly assumed was mine to set.**
+
+And it was worse than a misjudged priority: **the gap had a one-line explanation
+sitting in my own config the whole time** (`ship: ENA Test` — this is the test
+installation, see `the-unread-field`). I spent his attention four times on a
+question my own output had already answered.
+
+#### The distinction that makes it a rule
+
+**An unverified thing and an unused thing both read as "open" on a list.** Only
+one of them justifies asking the user to do something:
+
+| | justifies pressing? |
+|---|---|
+| **verification debt** — it should work, nobody has confirmed it, something may be wrong | **yes** |
+| **unused feature** — it works as far as anyone can tell, and no one has yet needed it | **no** |
+
+> **Before asking the user to do something so a project can be certain, name who
+> the certainty is for.** If the answer is "us", it is a task on the project's
+> list, not on theirs — and the honest form is to say *"this is unused"* and wait
+> for a real occasion, not to manufacture one.
+
+**The tell:** the request is for the user to *reproduce* or *confirm* something,
+rather than to decide something or to do work they wanted done. **A user cannot
+tell those apart from the outside** — both arrive as "could you check…" — which
+is exactly why the cost lands on them silently.
+
+#### Why it is worth a row of its own
+
+Everything else promoted this fortnight makes conclusions more reliable. **None
+of it would have prevented this**, because no conclusion here was wrong: the
+branch really was unproven, and the folder really would have settled it. **What
+was wrong was charging the user for our confidence.**
 
 Handed over, not promoted (#10.1).
 

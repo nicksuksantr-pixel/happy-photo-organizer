@@ -1562,11 +1562,19 @@ not the same claim.** Publish times, measured:
 |---|---|
 | the job was filed | 2026-10-02 **14:43** |
 | **v1.060 published** — first version with the route | 2026-10-02 **18:09** |
+| **`POST /sidecar` → `200`** — from JobShot's logcat | 2026-10-03 **06:49:14** |
 | v1.062 published | 2026-10-03 **07:33** |
 
-**So that correction ran on v1.060 at the earliest** — the truncate-in-place
-version — and the route cannot have existed on that machine before 18:09 that
-day. JobShot holds the logcat timestamp that pins it exactly.
+**Pinned exactly: the correction ran forty-four minutes before v1.062 existed, so
+it ran on v1.060** — the truncate-in-place version. And *published* is still not
+*installed*, so the real gap is wider than the clock shows.
+
+**Neither of us could have established that alone.** The release timestamp was in
+HPO's records and the logcat line was in JobShot's, and **either one on its own
+says nothing.** JobShot's own diagnosis of their sentence is the sharpest version
+of the month's promoted row: *"from a machine **now** confirmed to be running
+1.062" is a true statement about today attached to an event from eleven days ago,
+and the word doing the damage was **now**, sitting in a sentence about the past.*
 
 **It cuts encouragingly:** the only real correction so far ran on the version
 *with* the manifest hazard, and it worked. **What it does not support is "the
