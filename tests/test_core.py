@@ -4795,6 +4795,99 @@ def test_the_runner_never_swallows_a_failure_and_never_pipes():
         assert not any(bad in ln for ln in code), bad
 
 
+def test_the_invisible_byte_guards_still_cover_every_kind_of_file_here():
+    """**The gap I named on 2026-10-02 and left open**, in the same commit that
+    widened the BOM guard from `*.py` to five patterns:
+
+        "the glob list itself has no test that fails when a new machine-parsed
+         extension joins the repo. That is the honest place to stop, and naming
+         it beats claiming coverage."
+
+    Naming it did beat claiming coverage. It did not beat writing it. JobShot
+    reached their equivalent layer the same evening - testing the comment
+    stripper their manifest gate depends on, because *a stripper nobody tested
+    is the gate's gate* - and this is mine.
+
+    **What it defends:** the two guards scan a hard-coded list of patterns. The
+    repo grows. Nothing re-asks whether the list still covers it, which is
+    exactly how `*.py` came to be the whole list while `.claude/settings.json`
+    and `tools/workflow-agent-cap.mjs` - the agent cap's own config and script -
+    sat unscanned.
+
+    **So every kind of file in the tracked tree must be either scanned or
+    EXEMPT FOR A WRITTEN REASON.** A new kind fails this test, and the person
+    who added it decides which. That is the whole mechanism: it does not know
+    what is dangerous, it only refuses to let the question go unasked.
+    """
+    import subprocess
+
+    scanned_suffixes = {
+        ".py": "BOM + CR, test_no_source_file_carries_a_bom_or_cr",
+        ".spec": "BOM - PyInstaller executes it",
+        ".json": "BOM - job_catalog.json, and .claude/settings.json arms the cap",
+        ".mjs": "BOM - workflow-agent-cap.mjs IS the cap's script",
+        ".js": "BOM - the trigger scripts",
+        ".md": "control characters, test_no_record_carries_an_invisible_control_character",
+    }
+    scanned_names = {
+        "VERSION": "test_version_file_has_no_bom_and_parses_to_the_right_tuple",
+    }
+    # Exempt, each with the reason MEASURED rather than assumed.
+    exempt_suffixes = {
+        ".png": "binary; a leading EF BB BF is not a PNG and Pillow refuses it loudly",
+        ".ico": "binary, same",
+        ".txt": "requirements.txt only; a BOM makes pip fail on the first "
+                "requirement, at install time, visibly",
+    }
+    exempt_names = {
+        "pre-commit": "MEASURED 2026-10-14 in a scratch repo: a BOM makes git "
+                      "answer `cannot spawn .git/hooks/pre-commit` and REFUSE "
+                      "the commit (exit 1, zero commits). It fails CLOSED, so "
+                      "an invisible byte here cannot silently disarm the guard - "
+                      "which is what I had assumed before measuring it.",
+        ".gitattributes": "git's own config; it pins LF, and git parses it itself",
+        ".gitignore": "same",
+    }
+
+    try:
+        out = subprocess.run(["git", "ls-files"], capture_output=True,
+                             timeout=120, cwd=str(ROOT))
+    except (OSError, subprocess.SubprocessError):
+        return                                  # no git: nothing to assert
+    if out.returncode != 0:
+        return
+    tracked = [Path(x) for x in
+               out.stdout.decode("utf-8", "replace").splitlines() if x.strip()]
+    assert len(tracked) > 50, f"only {len(tracked)} tracked files - wrong cwd?"
+
+    unaccounted = {}
+    for f in tracked:
+        suffix = f.suffix.lower()
+        if suffix:
+            if suffix in scanned_suffixes or suffix in exempt_suffixes:
+                continue
+            unaccounted.setdefault(suffix, []).append(str(f))
+        else:
+            if f.name in scanned_names or f.name in exempt_names:
+                continue
+            unaccounted.setdefault(f.name, []).append(str(f))
+
+    assert not unaccounted, (
+        "a new kind of file joined the repo and no invisible-byte guard has "
+        "been asked about it:" + chr(10)
+        + chr(10).join(f"  {k}  e.g. {v[0]}" for k, v in sorted(unaccounted.items()))
+        + chr(10) + chr(10)
+        + "Decide, do not delete this test: add the pattern to the guard above, "
+          "or add it to exempt_* WITH A MEASURED REASON. The guards scan a "
+          "hard-coded list and nothing else re-asks whether it still fits.")
+
+    # and the claim this test makes about the guard must stay true of the guard
+    guard = (ROOT / "tests" / "test_core.py").read_text(encoding="utf-8")
+    for pattern in ("*.py", "*.spec", "*.json", "*.mjs", "*.js"):
+        assert f'"{pattern}"' in guard, (
+            f"{pattern} is listed here as scanned but is not in the guard")
+
+
 def main() -> int:
     tests = [(n, f) for n, f in sorted(globals().items())
              if n.startswith("test_") and callable(f)]
