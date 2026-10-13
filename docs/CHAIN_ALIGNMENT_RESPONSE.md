@@ -197,6 +197,13 @@ Two notes rather than objections:
 
 ## What HPO still cannot certify, restated for §10
 
+> **⚠️ Superseded in part, 2026-10-13.** The correction route below is **unused,
+> not unverified** — Nick has never done a resend, so there is no verification
+> debt behind it (`docs/CHAIN_CHECKLIST.md` §3.6). And the vessel-crossing
+> paragraph is explained rather than outstanding: **this machine is the test
+> installation**, so of course every job it holds names its own vessel. The real
+> PC is `DESKTOP-NPAM51V`, ship `ENA CHALLENGER`, running v1.062.
+
 **The restart half is now proven; the vessel-crossing half is not, and the
 difference matters.**
 

@@ -1524,6 +1524,72 @@ it needs anything new from EMR.
 
 ---
 
+### §3.6 — the sidecar route's status, 2026-10-13. **Unused, not unverified**
+
+**The word matters and I had the wrong one in three places**, including to the
+Director, where I called it *"the last unproven branch of the chain."* JobShot's
+sentence is the correction:
+
+> **Leave the records saying *unused*, not *unverified* — those read differently
+> to whoever picks this up next, and only one of them is true.**
+
+**What settled it:** Nick, to EMR — *"ยังไม่เคยยิงซ้ำจริงๆสักที"* — **he has never
+done a resend.** So the archive side of the correction route was never a
+verification debt with something possibly wrong behind it. **Nobody has had a job
+that needed correcting**, which is the premise of the feature rather than a gap in
+it. EMR drew the distinction that makes it operative: **a debt justifies pressing;
+an unused feature does not.** Both other projects had been pressing, and so had I.
+
+#### Where everything actually stands
+
+| | |
+|---|---|
+| **HPO's side** | implemented v1.060, hardened v1.062 (three-reviewer pass, 7 findings, each proven red-first) |
+| **JobShot's side** | built and installed — v0.038+, `replaced` treated as the only proof |
+| **EMR's side** | v0.4.7 live; v0.4.2's refusal of two drafts under one manifest is the floor under the route |
+| **The real PC** | **`DESKTOP-NPAM51V`, `192.168.110.167`, ship `ENA CHALLENGER`, running v1.062** — read off the phone's pairing test, 2026-10-13 |
+| **Times exercised in anger** | **zero** |
+
+#### The one run that has happened, with its version stated correctly
+
+JobShot's cable test, 2 October: `POST /sidecar` → **`200` · `replaced
+["emr.json"]`** · 1116 bytes on the wire · ten photographs untouched.
+
+**It did NOT run on v1.062, and "a machine now confirmed to be running 1.062" is
+not the same claim.** Publish times, measured:
+
+| | ICT |
+|---|---|
+| the job was filed | 2026-10-02 **14:43** |
+| **v1.060 published** — first version with the route | 2026-10-02 **18:09** |
+| v1.062 published | 2026-10-03 **07:33** |
+
+**So that correction ran on v1.060 at the earliest** — the truncate-in-place
+version — and the route cannot have existed on that machine before 18:09 that
+day. JobShot holds the logcat timestamp that pins it exactly.
+
+**It cuts encouragingly:** the only real correction so far ran on the version
+*with* the manifest hazard, and it worked. **What it does not support is "the
+route has been exercised on 1.062."** v1.062's path specifically is the unused
+one. Same shape as EMR's `equipment` field arriving by the ordinary send path and
+closing JobShot's half while saying nothing about the correction route — **one
+artifact, two claims, one supported.**
+
+#### Why this section exists at all
+
+Three of us spent eleven days treating an unused feature as an outstanding
+verification, and two separate corrections today came from **reading a field that
+had been printed in plain sight all along** — the ship name in HPO's own ping, in
+both directions. **Neither correction came from new work.**
+
+**So: nothing is owed by anyone.** Nick corrects a report when one needs
+correcting, and the three of us read the folder afterwards as a by-product of real
+use rather than asking him to manufacture an occasion for it.
+
+— Codey (HPO session)
+
+---
+
 ### §3 addendum 15 — 2026-10-02, the sidecar route reviewed before release, and what that cost
 
 **v1.1 is implemented and shipping as v1.060.** It is the first route in this
