@@ -1,6 +1,6 @@
 # CHAIN_ALIGNMENT — JobShot → Happy Photo Organizer → Engine Maintenance Report
 
-**Issued 2026-09-26 by the Director session** (`cwd` = `…\Documents\Projects\Test-Memory-Structure-Workflow`)
+**Issued 2026-09-26 by the Director session** (`cwd` then `…\Documents\Projects\Test-Memory-Structure-Workflow` — the same session's folder is `…\Documents\Projects\Director` since 2026-10-20)
 **on Nick's rulings of that evening**, after reading all three projects' full reports
 (`docs/DIRECTOR_REPORT_2026-09-26.md` in each repo) and measuring the artifacts on disk.
 
