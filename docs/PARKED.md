@@ -62,12 +62,14 @@ the first real use, and the folder gets read afterwards as a by-product.
 
 ---
 
-## 📤 Handed to the rules session, not to Nick
+## 📤 Handed to the rules session — consumed 2026-10-20
 
-`memory/TO_PROMOTE.md` — **4 amendments waiting**, per #10.1 (a project-scoped
-session may not promote; it hands over). `an-absence-is-not-a-fact` widened to
-inference · `a-true-fact-is-not-evidence-for-the-next-thing` ·
+`memory/TO_PROMOTE.md` — **nothing waiting.** All four items reached the master
+and came back in the mirror at `e46ffd5` (command_pattern v3.19), each row read
+at that commit: `an-absence-is-not-a-fact` · `a-true-fact-is-not-evidence-for-the-next-thing` ·
 `the-unread-field` · `wanting-the-confirmation-is-not-the-user-needing-to-act`.
+⚠ The first was handed over as an *amendment*, but the row it amended had
+**never reached the master** — it landed as a whole row (original + widening).
 
 ---
 
