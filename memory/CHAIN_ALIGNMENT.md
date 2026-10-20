@@ -150,7 +150,7 @@ resolves them as `raw.get("spares", raw.get("spare_parts"))`, so the fallback ru
 `"spare_parts"` loses every row **silently, with `dropped: 0`** — nothing was refused, because
 nothing was offered. **JS sends exactly one of the two keys.** EMR has specified it and pinned it
 with a test rather than guessing which key a writer meant. Full field-by-field spec:
-`Engine_Maintenance_Report/docs/SPARE_PARTS_SPEC.md`.
+`Engine-Maintenance-Report/docs/SPARE_PARTS_SPEC.md`.
 
 **§6.4b — the ship name on the controlled document can differ from the job's, silently.** By EMR's
 contract §0 the Ship Name comes from **EMR Settings** and never from the phone. Measured on the

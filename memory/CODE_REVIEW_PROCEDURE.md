@@ -357,7 +357,7 @@ Verified individually against the real repos (Windows 11 / PowerShell).
 | HAPPY-Ai-Agent *(real pytest config)* | `python -m pytest -q` |
 | SHIP-MONITORING | `python -m pytest -q tests` |
 | Happy-Photo-Organizer *(plain script)* | `python tests\test_core.py` |
-| Engine_Maintenance_Report *(unittest)* | `python -m unittest discover -s tests -v` |
+| Engine-Maintenance-Report *(unittest)* | `python -m unittest discover -s tests -v` |
 | Happy-Ai-Trading — **own venv, no pytest installed** | `.venv\Scripts\python.exe -m unittest discover -s tests` |
 | OCR-Agentic-Ai — **smoke scripts, not a unit suite** | `.venv\Scripts\python.exe tests\smoke_pipeline.py` |
 

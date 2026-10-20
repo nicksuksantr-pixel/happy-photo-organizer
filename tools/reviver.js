@@ -53,9 +53,20 @@ const DIMENSION_LIST = 'A ความถูกต้อง · B พฤติก
 //   fields roughly halved. New worst case ~28,500 chars (~32 KB): the schema now ENFORCES what the
 //   prompt already asked for instead of contradicting it.
 //   Do NOT raise a cap without recomputing the whole worst case (top + arrays + dims + findings + cleared).
+// [2026-09-08] FOURTH round -- and the first time the REJECTIONS themselves were read. Every one named a
+//   FIELD, never a total: scopeNotes(400) appeared in all ten rejections across both dead firms;
+//   notCovered(600) killed firm B on its last two tries; verdictSummary(600), dimensionScores.why(220) and
+//   the ARR item cap (150) each appeared too. Their attempts were 20.6-22.9 KB against a schema worst case
+//   of 28.5 KB -- so these caps were never protecting a budget, they were discarding whole reviews over a
+//   paragraph. And they bite the HONESTY fields first (scope, what-I-did-not-check, why this score), which
+//   are the ones that scale with the target: a 47-file review cannot state its scope in 400 characters, so
+//   the more carefully a firm declared its limits, the more certainly it was thrown away.
+//   Raised: scopeNotes 400->1000, verdictSummary 600->1000, notCovered 600->1000, why 220->340, ARR item
+//   150->220. Recomputed worst case, per the rule above: 28,500 -> 34,040 chars -- still well under the
+//   ~56 KB firm C emitted and passed with in round three.
 const STR = { type:'string' }
 const S = n => ({ type:'string', maxLength: n })
-const ARR = { type:'array', items:{ type:'string', maxLength: 150 }, maxItems: 6 }
+const ARR = { type:'array', items:{ type:'string', maxLength: 220 }, maxItems: 6 }
 const REPORT = { type:'object',
   // ⚠ 2026-08-27 (รอบ 2): required เดิม 21 ช่อง → **2 ใน 3 บริษัทตายด้วย "StructuredOutput retry cap (5)
   // exceeded — 5 failed calls with no valid output"** คือทำสคีมาให้ถูกไม่ได้แม้ลอง 5 ครั้ง = เครื่องมือ
@@ -67,11 +78,11 @@ const REPORT = { type:'object',
   required:['verdictSummary','dimensionScores','overallScore','overallScoreFrom','findings','cleared','notCovered','confidence'],
   properties:{
     firm: STR,
-    verdictSummary: S(600),
+    verdictSummary: S(1000),
     target: S(500),
     intent: S(400),
     intentTag: { type:'string', enum:['STATED','INFERRED','ASSUMED'] },
-    scopeNotes: S(400),
+    scopeNotes: S(1000),
     entryPoints: ARR,
     layers: ARR,
     callers: ARR,
@@ -84,7 +95,7 @@ const REPORT = { type:'object',
     // เฉพาะมิติที่กดคะแนน — ซึ่งเป็นมิติเดียวที่ Coddy ต้องอ่านละเอียดอยู่แล้ว
     dimensionScores:{ type:'array', maxItems: 10, items:{ type:'object',
       required:['dimension','score','why','evidence'],
-      properties:{ dimension: S(60), score:{ type:'integer', minimum:1, maximum:5 }, why: S(220), evidence: S(150) } } },
+      properties:{ dimension: S(60), score:{ type:'integer', minimum:1, maximum:5 }, why: S(340), evidence: S(150) } } },
     // ผูกช่วง 1-5 เหมือน lucifer REVIEW (reviver #26 รอบ 3 · บริษัท B · 2026-08-27): เดิมเป็น number เปล่าๆ
     // ตัวรวมผลกรอง `n > 0` ทิ้ง → คะแนน 0 จะถูกอ่านว่า "บริษัทนั้นไม่ได้ให้คะแนน" ทั้งที่ให้มาแล้ว
     // = รายงานว่ารันไม่ครบทั้งที่ครบ ซึ่งเป็นบั๊กตระกูลเดียวกับที่รอบนี้ตามล้างทั้งวัน แค่กลับด้าน
@@ -105,7 +116,7 @@ const REPORT = { type:'object',
     cleared:{ type:'array', maxItems: 6, items:{ type:'object',
       required:['what','file','whyNotAProblem','claim'],
       properties:{ what: S(140), file: S(160), whyNotAProblem: S(250), claim: S(150) } } },
-    notCovered: S(600),
+    notCovered: S(1000),
     confidence: S(400),
     crossProjectLesson: S(400),
   } }

@@ -5,6 +5,8 @@ export const meta = {
     { title: 'ออดิต', detail: '3 agent รีวิวอย่างเดียว (lens ละตัว) ขนานกัน → คืน findings P0–P3' },
   ],
 }
+// MAX_AGENTS: 3      <- one review agent per lens, exactly three, no fan-out per finding (#16.1: the
+//                       PreToolUse hook tools/workflow-agent-cap.mjs refuses a script without this line)
 
 // ───────────────────────────────────────────────────────────────────────
 // เรียกผ่าน: Nick พิมพ์ "Tester" → Coddy ทำตาม command_pattern ข้อ 5:
