@@ -73,6 +73,14 @@ at that commit: `an-absence-is-not-a-fact` · `a-true-fact-is-not-evidence-for-t
 
 ---
 
+## 🟡 Found while shipping v1.063 — not fixed, waiting on Nick
+
+| Item | State |
+|---|---|
+| **`publish_release.py` reads `latest` the instant it publishes** | 2026-10-23 16:24Z: draft created, asset verified (91,622,295 bytes), published — then `gate_published` read `latest`, got **v1.062**, and refused with *"revert it to a draft now"*. Seconds later `latest` was v1.063 and `--check 1.063 --previous 1.062` passed every gate. **Following the refusal would have un-published a good release.** The refusal is worded for one cause (a broken release on `latest`); here `latest` was simply still the previous good one. Fix is small: after publishing, poll `latest` for ~30 s before judging, and only advise reverting when `latest` names the NEW tag and something about it is wrong. Earlier the same evening the first attempt died on `gh release create` with a TLS handshake timeout — tag pushed, no release, `latest` untouched; the tool's tag step is idempotent and the re-run was clean. |
+
+---
+
 ## State of the tree, at the time of writing
 
     VERSION 1.063 (2026-10-23 — "offline" no longer reads "up to date"), see CHANGELOG
