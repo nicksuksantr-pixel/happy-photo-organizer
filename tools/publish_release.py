@@ -172,7 +172,19 @@ def gate_the_app_would_offer_it(version: str, previous: str) -> None:
     """Ask the APP, not the API. The updater is the only consumer that matters,
     and it is the one that silently found nothing on 2026-10-02."""
     from core import updater
-    info = updater.check_for_update(previous, timeout=15.0)
+
+    def ask(as_version: str):
+        # Without this an unreachable GitHub came back as None until v1.063:
+        # the first question below refused for the wrong reason and the second
+        # passed vacuously. And main() only catches Refused, not a traceback.
+        try:
+            return updater.check_for_update(as_version, timeout=15.0)
+        except updater.UpdateCheckFailed as e:
+            raise Refused(f"the app's updater could not ask GitHub as a "
+                          f"v{as_version} user ({e}) — nothing is known; "
+                          f"run --check again") from e
+
+    info = ask(previous)
     if info is None:
         raise Refused(f"the app's own updater offers nothing to a v{previous} "
                       f"user — this release is invisible to the people on it")
@@ -181,7 +193,7 @@ def gate_the_app_would_offer_it(version: str, previous: str) -> None:
                       f"to a v{previous} user, not {version!r}")
     if not getattr(info, "download_url", ""):
         raise Refused("the updater found the release but no download URL")
-    current = updater.check_for_update(version, timeout=15.0)
+    current = ask(version)
     if current is not None:
         raise Refused(f"a v{version} user is offered {current.version!r} — "
                       f"the version comparison is wrong")

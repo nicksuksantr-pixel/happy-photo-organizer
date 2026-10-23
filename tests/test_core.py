@@ -2224,6 +2224,166 @@ def test_manual_check_marks_itself_as_checking():
             assert w.last_check_at is not None
 
 
+# --- not known is not "no" (v1.063) -----------------------------------------
+#
+# SHIP-MONITORING's lesson `not-known-is-not-no`, promoted 2026-10-23, read
+# against this repo the same day: with the network down, `_fetch_latest_release`
+# caught the URLError and returned None, which `check_for_update` passed on as
+# "nothing newer". So the button said "Up to date (1.062)" on a ship with no
+# internet, the manual check logged "v1.062 is the latest", and the button's
+# "Updates: offline" state and the "GitHub unreachable" log line could never
+# appear. `test_update_button_describes_every_state_it_can_be_in` passed all
+# along because it SETS `last_error` by hand - it pinned the label, never the
+# path that is supposed to produce it. These tests drive the real poll.
+
+
+class _FakeReply:
+    def __init__(self, body: bytes, status: int = 200):
+        self.status = status
+        self._body = body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def read(self):
+        return self._body
+
+
+def _with_github(reply, fn):
+    """Run `fn` with urlopen answering `reply` (a callable taking the request).
+    Patched on urllib itself because the updater calls it through the module."""
+    import urllib.request
+    real = urllib.request.urlopen
+    urllib.request.urlopen = lambda req, timeout=None: reply(req)
+    try:
+        return fn()
+    finally:
+        urllib.request.urlopen = real
+
+
+def _raises(exc):
+    def reply(_req):
+        raise exc
+    return reply
+
+
+def _answers(body, status=200):
+    raw = body if isinstance(body, bytes) else json.dumps(body).encode("utf-8")
+    return lambda _req: _FakeReply(raw, status)
+
+
+def _release(tag, asset="HappyPhotoOrganizerSetup.exe"):
+    assets = [] if asset is None else [{
+        "name": asset, "browser_download_url": f"https://example.invalid/{tag}/{asset}",
+        "size": 1234}]
+    return {"tag_name": tag, "assets": assets, "body": ""}
+
+
+def _unanswered_shapes():
+    """Every way the question can go unanswered. None of them is "nothing newer"."""
+    import urllib.error
+    return {
+        "no network": _raises(urllib.error.URLError("getaddrinfo failed")),
+        "timeout": _raises(TimeoutError("timed out")),
+        "socket error": _raises(OSError("connection reset")),
+        "rate limited (403)": _raises(urllib.error.HTTPError(
+            "https://api.github.com", 403, "rate limit exceeded", None, None)),
+        "not found (404)": _raises(urllib.error.HTTPError(
+            "https://api.github.com", 404, "Not Found", None, None)),
+        "captive portal page": _answers(b"<html>Sign in to ship Wi-Fi</html>"),
+        "JSON that is not a release": _answers([1, 2, 3]),
+        "a 500 that did not raise": _answers({"message": "boom"}, status=500),
+        "a release with no tag": _answers({"tag_name": "", "assets": []}),
+    }
+
+
+def test_an_update_check_that_cannot_ask_github_never_says_up_to_date():
+    from core import updater
+    for shape, reply in _unanswered_shapes().items():
+        try:
+            got = _with_github(reply, lambda: updater.check_for_update("1.062", timeout=1))
+        except updater.UpdateCheckFailed:
+            continue
+        raise AssertionError(f"{shape}: check_for_update returned {got!r} - an "
+                             f"unanswered question reported as an answer")
+
+
+def test_the_update_button_says_offline_when_github_cannot_be_asked():
+    """The real poll, not a hand-set `last_error`: this is the test that is red
+    on v1.062, where every shape below came out as 'Up to date (1.062)'."""
+    with tempfile.TemporaryDirectory() as td:
+        for shape, reply in _unanswered_shapes().items():
+            w = _worker(Path(td))
+            _with_github(reply, w._poll_github)
+            label, kind, _c = w.describe()
+            assert kind == "offline", f"{shape}: the button says {label!r}"
+            assert w.last_error, f"{shape}: nothing for the manual check to report"
+
+
+def test_a_real_answer_of_nothing_newer_is_still_up_to_date():
+    """The other half - without it the tests above pass for an updater that
+    reports 'offline' always. Only an ANSWER may say up to date."""
+    from core import updater
+    with tempfile.TemporaryDirectory() as td:
+        for tag in ("v1.049", "v1.048"):            # same and older than the worker's
+            w = _worker(Path(td))
+            _with_github(_answers(_release(tag)), w._poll_github)
+            label, kind, _c = w.describe()
+            assert kind == "uptodate" and not w.last_error, (tag, label, w.last_error)
+
+        # and a newer release is still offered
+        info = _with_github(_answers(_release("v1.063")),
+                            lambda: updater.check_for_update("1.062", timeout=1))
+        assert info is not None and info.version == "1.063", info
+
+        # unchanged on purpose: a published release whose installer is not
+        # attached yet (mid-upload) offers nothing rather than a broken download
+        info = _with_github(_answers(_release("v1.063", asset=None)),
+                            lambda: updater.check_for_update("1.062", timeout=1))
+        assert info is None, info
+
+
+def test_losing_github_after_reaching_it_is_logged():
+    """The 'GitHub unreachable' transition line existed since round 6 and had
+    never been able to fire, because no failure ever reached the except."""
+    import urllib.error
+    with tempfile.TemporaryDirectory() as td:
+        w = _worker(Path(td))
+        _with_github(_answers(_release("v1.049")), w._poll_github)
+        _with_github(_raises(urllib.error.URLError("down")), w._poll_github)
+        assert any("unreachable" in m for _lvl, m in w.host.logs), w.host.logs
+        _with_github(_answers(_release("v1.049")), w._poll_github)
+        assert any("reachable again" in m for _lvl, m in w.host.logs), w.host.logs
+
+
+def test_the_release_gate_refuses_when_the_updater_cannot_ask():
+    """Before v1.063 an unreachable GitHub came back as None, so this gate
+    refused for the wrong reason ("invisible to the people on it") - and its
+    second question, whether a user ALREADY on the new version is offered
+    something, passed vacuously. It must say what happened, as a refusal and
+    not a traceback: `main()` only catches `Refused`."""
+    import urllib.error
+    mod = _release_tool()
+    down = _raises(urllib.error.URLError("down"))
+    msg = _with_github(down, lambda: _refuses(
+        mod.gate_the_app_would_offer_it, "1.063", "1.062"))
+    assert "could not ask" in msg, msg
+
+    calls = []
+
+    def first_answers_then_down(req):          # the vacuous second question
+        calls.append(req)
+        if len(calls) == 1:
+            return _answers(_release("v1.063"))(req)
+        raise urllib.error.URLError("dropped")
+    msg = _with_github(first_answers_then_down, lambda: _refuses(
+        mod.gate_the_app_would_offer_it, "1.063", "1.062"))
+    assert "could not ask" in msg and len(calls) == 2, (msg, len(calls))
+
+
 # --- the report draft rides along (JobShot's emr.json, 2026-09-25) ----------
 #
 # The phone may put a third kind of file in a job folder: `emr.json`, the

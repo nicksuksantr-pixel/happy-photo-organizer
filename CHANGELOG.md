@@ -9,6 +9,42 @@ Cosmetic / design / V2-scope items that survived round 6 + 7 + 8. All
 catalogued in detail at the bottom of this file under "Round 6
 deferred".
 
+## [1.063] — 2026-10-23 — "Offline" no longer reads "Up to date"
+
+With no network, the update button said **"Up to date (1.062)"** and the manual
+check logged *"v1.062 is the latest"*. GitHub had not been asked at all: the
+fetch caught the network error and returned `None`, which is also what "nothing
+newer" returns. On a ship whose internet comes and goes, that is the one wrong
+answer that stops anyone looking — a newer release could be out and the app
+would keep saying there is none.
+
+Found by reading SHIP-MONITORING's lesson `not-known-is-not-no` (promoted to the
+shared registry 2026-10-23) against this repo, and measured before it was fixed.
+
+### Fixed
+- An unanswered check — no network, timeout, rate limit (403), not found (404),
+  a ship Wi-Fi sign-in page answering HTML, a 500, a release with no tag — now
+  raises `UpdateCheckFailed`, and the button says **"Updates: offline"**. The
+  manual check reports *"Update check failed: …"* with the reason.
+- The *"GitHub unreachable"* / *"reachable again"* log lines now fire. They had
+  existed since round 6 and could never run, because no failure reached them.
+- `tools/publish_release.py` — the gate that asks the app's own updater now
+  refuses with *"could not ask GitHub"* when it cannot, instead of refusing for
+  the wrong reason (*"invisible to users"*), and its second question (is a user
+  already on the new version offered anything?) no longer passes vacuously.
+
+### Unchanged, on purpose
+- A published release whose installer is not attached yet still offers nothing,
+  rather than a download that cannot work.
+
+### Tests
+Five new, driven through the real poll with `urlopen` faked for nine failure
+shapes — red on v1.062 (four of five), green now. The old button test passed
+throughout because it set `last_error` by hand: it pinned the label, never the
+path that is supposed to produce it. The fifth new test is the control: a real
+"nothing newer" answer must still read "Up to date", or "offline always" would
+pass.
+
 ## [1.057] — 2026-09-26 — It remembers your folder
 
 Nick: *"เวลาเปิดปิดหรืออัพเดทโปรแกรม ช่องโฟเดอร์ที่เลือกไว้ไม่จำ เลยต้องเลือกใหม่ทุกครั้ง"* — close, reopen

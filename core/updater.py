@@ -3,11 +3,14 @@ updater.py — Check GitHub Releases for newer version, download installer, rela
 
 Public API:
   • check_for_update(current_version, timeout=3.0) -> UpdateInfo | None
+      raises UpdateCheckFailed when GitHub could not be asked
   • download_installer(url, dest, progress_cb, cancel_event) -> bool
   • launch_installer_and_exit(installer_path, silent=True)
 
 Repo is configured via env var `HAPPY_UPDATE_REPO` (owner/name) or REPO constant.
-Designed to fail silently — never block app startup or crash on network error.
+Never blocks app startup: the check runs on a background thread. A network
+error is NOT swallowed into "no update" (v1.063) — it raises UpdateCheckFailed,
+so the caller can say "offline" instead of "up to date".
 
 Debug breadcrumbs land in %TEMP%/happy-photo-organizer-updater.log — windowed
 exes have no stderr, so on-disk logging is the only way to diagnose failures.
@@ -86,6 +89,16 @@ class UpdateInfo:
     size: int                 # bytes
 
 
+class UpdateCheckFailed(Exception):
+    """GitHub could not be asked, or did not answer with a release.
+
+    Kept apart from `None` on purpose. Until v1.063 every failure here returned
+    None, which `check_for_update` already used for "nothing newer" — so with
+    no network the button read "Up to date (1.062)" and the manual check logged
+    "v1.062 is the latest". An unanswered question is not the answer no.
+    """
+
+
 # ─── Version compare ───
 
 
@@ -116,7 +129,7 @@ def is_newer(current: str, latest: str) -> bool:
 # ─── GitHub Releases API ───
 
 
-def _fetch_latest_release(timeout: float) -> dict | None:
+def _fetch_latest_release(timeout: float) -> dict:
     url = f"{GITHUB_API}/repos/{REPO}/releases/latest"
     # F8 (Tester 2026-06-04): record the resolved repo slug once per check so a
     # wrong/typo'd REPO (or unset HAPPY_UPDATE_REPO in the built exe) surfaces
@@ -132,22 +145,33 @@ def _fetch_latest_release(timeout: float) -> dict | None:
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             if resp.status != 200:
-                return None
-            return json.loads(resp.read().decode("utf-8"))
-    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError, json.JSONDecodeError):
-        return None
+                raise UpdateCheckFailed(f"GitHub answered HTTP {resp.status}")
+            data = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:      # before URLError: it is a subclass
+        _debug_log(f"_fetch_latest_release: HTTP {e.code}")
+        raise UpdateCheckFailed(f"GitHub answered HTTP {e.code}") from e
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        _debug_log(f"_fetch_latest_release: unreachable: {e}")
+        raise UpdateCheckFailed(f"could not reach GitHub: {e}") from e
+    except (UnicodeDecodeError, json.JSONDecodeError) as e:
+        # a captive portal (ship Wi-Fi sign-in page) answers 200 with HTML
+        _debug_log(f"_fetch_latest_release: not JSON: {e}")
+        raise UpdateCheckFailed("GitHub's answer was not JSON — a sign-in page?") from e
+    if not isinstance(data, dict):
+        raise UpdateCheckFailed("GitHub's answer was not a release")
+    return data
 
 
 def check_for_update(current_version: str, timeout: float = 3.0) -> UpdateInfo | None:
-    """Returns UpdateInfo if a newer release exists, else None.
-    Fails silently on any error (no network, repo not found, etc.).
+    """Returns UpdateInfo if a newer release exists, None if GitHub ANSWERED
+    and nothing newer is installable. Raises UpdateCheckFailed when no answer
+    came back (no network, rate limit, repo not found, a sign-in page) — the
+    caller must not report that as "up to date".
     """
     data = _fetch_latest_release(timeout)
-    if not data:
-        return None
     tag = str(data.get("tag_name") or "").strip()
     if not tag:
-        return None
+        raise UpdateCheckFailed("the latest release has no tag")
     latest_ver = tag.lstrip("vV")
     if not is_newer(current_version, latest_ver):
         return None

@@ -75,8 +75,8 @@ at that commit: `an-absence-is-not-a-fact` · `a-true-fact-is-not-evidence-for-t
 
 ## State of the tree, at the time of writing
 
-    VERSION 1.062, published and verified from outside
-    167/167 tests green
+    VERSION 1.063 (2026-10-23 — "offline" no longer reads "up to date"), see CHANGELOG
+    172/172 tests green
     working tree clean, 0 ahead / 0 behind origin
     releases go through tools/publish_release.py — 8 gates, each proven to refuse
 
