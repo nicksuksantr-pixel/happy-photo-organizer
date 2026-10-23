@@ -4853,6 +4853,159 @@ def test_the_published_gate_refuses_every_shape_of_not_really_there():
         "tag_name": "v1.062", "draft": False, "assets": [good]})
 
 
+def _quietly(fn):
+    """settle() prints a line per re-ask; keep the test output readable."""
+    import contextlib
+    import io
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        result = fn()
+    return result, out.getvalue()
+
+
+def test_a_latest_that_has_not_caught_up_is_waited_for_not_reverted():
+    """**2026-10-23, the reason `settle()` exists.** v1.063 was published, the
+    gate read `latest` at once, got v1.062, and advised "revert it to a draft
+    now". Seconds later `latest` said v1.063 and every gate passed - following
+    the advice would have un-published a good release.
+
+    Driven through `publish()` itself, not only the helper, so what is proven
+    is the wiring: the sequence GitHub gave that evening must end in PUBLISHED,
+    and nothing printed on the way may tell anyone to revert.
+    """
+    mod = _release_tool()
+    good = {"name": mod.ASSET, "state": "uploaded", "size": 100}
+    answers = [{"tag_name": "v1.062", "draft": False, "assets": [good]}] * 2 + [
+        {"tag_name": "v1.063", "draft": False, "assets": [good]}]
+    fetched = []
+
+    def fetch():
+        fetched.append(1)
+        return answers[min(len(fetched), len(answers)) - 1]
+
+    def gh(args, **kw):
+        if args[:3] == ["gh", "release", "view"]:
+            return json.dumps({"assets": [good], "isDraft": True})
+        return ""
+
+    names = ("run", "local_gates", "_fetch_latest",
+             "gate_the_app_would_offer_it", "SETTLE_DELAYS")
+    saved = {n: getattr(mod, n) for n in names}
+    mod.run, mod.local_gates, mod._fetch_latest = gh, (lambda v: 100), fetch
+    mod.gate_the_app_would_offer_it = lambda v, p: None
+    mod.SETTLE_DELAYS = (0, 0, 0, 0)
+    try:
+        _, printed = _quietly(lambda: mod.publish("1.063", "1.062", "notes"))
+    finally:
+        for n, v in saved.items():
+            setattr(mod, n, v)
+    assert len(fetched) == 3, fetched
+    assert "PUBLISHED" in printed, printed
+    assert "revert" not in printed.lower(), printed
+
+
+def test_a_latest_that_never_catches_up_is_refused_without_revert_advice():
+    """Waiting is not passing. If `latest` never moves, that is a refusal - but
+    users are still on the previous release, so the advice must not be to
+    revert this one."""
+    mod = _release_tool()
+    good = {"name": mod.ASSET, "state": "uploaded", "size": 100}
+    fetched, slept = [], []
+
+    def stale():
+        fetched.append(1)
+        return {"tag_name": "v1.062", "draft": False, "assets": [good]}
+
+    msg, _ = _quietly(lambda: _refuses(
+        mod.settle, lambda: mod.gate_published("1.063", expect_bytes=100,
+                                               fetch=stale),
+        sleep=slept.append))
+    assert slept == list(mod.SETTLE_DELAYS), slept
+    assert len(fetched) == len(mod.SETTLE_DELAYS) + 1, fetched
+    # longer than the `max-age=60` GitHub sends on `latest`
+    assert sum(slept) > 60, sum(slept)
+    assert "nothing to revert" in msg and "run --check again" in msg, msg
+    assert "revert it to a draft" not in msg.lower(), msg
+
+
+def test_a_real_refusal_is_never_made_to_wait():
+    """settle() retries only "not yet". A release on `latest` with no asset is
+    an incident: it must refuse on the FIRST ask and keep its revert advice.
+    And a `latest` NEWER than this release (`--check 1.062` today) is a verdict
+    too - with no revert advice, because users are not on this release."""
+    mod = _release_tool()
+    good = {"name": mod.ASSET, "state": "uploaded", "size": 100}
+    cases = {
+        "published with no asset":
+            ({"tag_name": "v1.063", "draft": False, "assets": []}, True),
+        "a different file of the same name":
+            ({"tag_name": "v1.063", "draft": False,
+              "assets": [dict(good, size=99)]}, False),
+        "latest is a NEWER release":
+            ({"tag_name": "v1.064", "draft": False, "assets": [good]}, False),
+    }
+    for label, (body, revert) in cases.items():
+        fetched, slept = [], []
+
+        def fetch(b=body):
+            fetched.append(1)
+            return b
+
+        msg, _ = _quietly(lambda: _refuses(
+            mod.settle, lambda: mod.gate_published("1.063", expect_bytes=100,
+                                                   fetch=fetch),
+            sleep=slept.append))
+        assert (fetched, slept) == ([1], []), (label, fetched, slept)
+        assert ("revert it to a draft" in msg.lower()) == revert, (label, msg)
+
+
+def test_a_github_that_did_not_answer_is_asked_again_not_a_traceback():
+    """The first publish attempt on 2026-10-23 died on a TLS handshake timeout.
+    Before this a failed read of `latest` was a traceback - and `main()` only
+    catches `Refused`."""
+    import urllib.error
+    mod = _release_tool()
+    good = {"name": mod.ASSET, "state": "uploaded", "size": 100}
+    fetched, slept = [], []
+
+    def flaky():
+        fetched.append(1)
+        if len(fetched) == 1:
+            raise urllib.error.URLError("TLS handshake timeout")
+        return {"tag_name": "v1.063", "draft": False, "assets": [good]}
+
+    _quietly(lambda: mod.settle(
+        lambda: mod.gate_published("1.063", expect_bytes=100, fetch=flaky),
+        sleep=slept.append))
+    assert len(fetched) == 2 and slept == [mod.SETTLE_DELAYS[0]], (fetched, slept)
+
+
+def test_the_app_gate_waits_for_the_updater_to_catch_up_too():
+    """The updater reads the same cached `latest`. Right after publishing it can
+    offer a v1.062 user nothing, which on its own would read as "invisible to
+    the people on it". Under settle() that is a verdict only once the wait is
+    over - and then it is still said, in those words."""
+    mod = _release_tool()
+    replies = [_release("v1.062"), _release("v1.063"), _release("v1.063")]
+    calls, slept = [], []
+
+    def github(req):
+        calls.append(req)
+        return _answers(replies[min(len(calls), len(replies)) - 1])(req)
+
+    _with_github(github, lambda: _quietly(lambda: mod.settle(
+        lambda: mod.gate_the_app_would_offer_it("1.063", "1.062"),
+        sleep=slept.append)))
+    assert len(calls) == 3 and slept == [mod.SETTLE_DELAYS[0]], (len(calls), slept)
+
+    slept.clear()
+    msg, _ = _with_github(_answers(_release("v1.062")), lambda: _quietly(
+        lambda: _refuses(mod.settle,
+                         lambda: mod.gate_the_app_would_offer_it("1.063", "1.062"),
+                         delays=(1, 2), sleep=slept.append)))
+    assert slept == [1, 2] and "invisible to the people on it" in msg, (slept, msg)
+
+
 def test_the_version_gate_refuses_a_binary_that_is_behind_its_source():
     """v1.061's other half: a code fix landed AFTER the build, so the bytes on
     their way to GitHub predated the commit they were supposed to carry. The

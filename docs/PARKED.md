@@ -73,19 +73,20 @@ at that commit: `an-absence-is-not-a-fact` · `a-true-fact-is-not-evidence-for-t
 
 ---
 
-## 🟡 Found while shipping v1.063 — not fixed, waiting on Nick
+## ✅ Found while shipping v1.063 — fixed 2026-10-23 on Nick's word
 
 | Item | State |
 |---|---|
-| **`publish_release.py` reads `latest` the instant it publishes** | 2026-10-23 16:24Z: draft created, asset verified (91,622,295 bytes), published — then `gate_published` read `latest`, got **v1.062**, and refused with *"revert it to a draft now"*. Seconds later `latest` was v1.063 and `--check 1.063 --previous 1.062` passed every gate. **Following the refusal would have un-published a good release.** The refusal is worded for one cause (a broken release on `latest`); here `latest` was simply still the previous good one. Fix is small: after publishing, poll `latest` for ~30 s before judging, and only advise reverting when `latest` names the NEW tag and something about it is wrong. Earlier the same evening the first attempt died on `gh release create` with a TLS handshake timeout — tag pushed, no release, `latest` untouched; the tool's tag step is idempotent and the re-run was clean. |
+| **`publish_release.py` reads `latest` the instant it publishes** | **Fixed** (Nick: *"Fix the publish_release.py gate so it waits and re-checks `latest`"*). What happened: 2026-10-23 16:24Z, published, `gate_published` read `latest` at once, got **v1.062**, and advised *"revert it to a draft now"* — seconds later every gate passed. **Following it would have un-published a good release.** Fix: `settle()` re-asks while a gate raises `NotYetKnown` (an OLDER `latest`, GitHub not answering, or the updater not offering it yet) for **120 s / 7 asks** — longer than the `Cache-Control: max-age=60, s-maxage=60` the endpoint sends (measured), gentle on the 60/h unauthenticated limit. A real refusal (no asset, wrong bytes) still comes on the **first** ask. **"Revert it to a draft" is now said only when `latest` names THIS release** — a `latest` naming another tag means users are not on it, so reverting changes nothing. Same fix caught a second wrong case: `--check 1.062` today also said "revert it to a draft now". 5 new tests; the 23-10 sequence replayed through the old `publish()` refuses on read 1, through the new one publishes on read 3; live `--check 1.063 --previous 1.062` passes. |
 
 ---
 
 ## State of the tree, at the time of writing
 
     VERSION 1.063 (2026-10-23 — "offline" no longer reads "up to date"), see CHANGELOG
-    172/172 tests green
+    177/177 tests green
     working tree clean, 0 ahead / 0 behind origin
-    releases go through tools/publish_release.py — 8 gates, each proven to refuse
+    releases go through tools/publish_release.py — 8 gates, each proven to refuse,
+    and a `latest` that has not caught up is waited for, not reverted
 
 — Codey (HPO session)

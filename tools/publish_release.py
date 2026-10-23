@@ -31,6 +31,7 @@ import argparse
 import json
 import subprocess
 import sys
+import time
 import urllib.request
 from pathlib import Path
 
@@ -46,6 +47,46 @@ BUNDLED_VERSION = ROOT / "dist" / "HappyPhotoOrganizer" / "_internal" / "VERSION
 
 class Refused(Exception):
     """A gate said no. Nothing after it runs."""
+
+
+class NotYetKnown(Refused):
+    """No verdict yet: GitHub has not caught up, or did not answer.
+
+    On 2026-10-23 v1.063 was published, `latest` was read at once, it still
+    said v1.062, and the gate advised **"revert it to a draft now"**. Seconds
+    later `latest` said v1.063 and every gate passed, so the advice would have
+    un-published a good release. The endpoint answers with
+    `Cache-Control: public, max-age=60, s-maxage=60` (measured 2026-10-23), so
+    the minute after publishing can look exactly like this. `settle()` asks
+    again; anything else a gate raises is a verdict and is never retried.
+    """
+
+    def __init__(self, message: str, *, now: str):
+        super().__init__(message)
+        self.now = now      # one line for the progress print
+
+
+# Longer than the 60 s GitHub says `latest` may be cached for, and gentle on an
+# unauthenticated rate limit of 60 requests an hour: 7 asks over 120 s.
+SETTLE_DELAYS = (5, 10, 15, 20, 30, 40)
+
+
+def settle(gate, *, delays=None, sleep=None):
+    """Run `gate()` until it gives a verdict, asking again while it raises
+    `NotYetKnown`. A real refusal (published with no asset, wrong bytes) comes
+    straight through on the first ask: an incident is not made to wait."""
+    delays = SETTLE_DELAYS if delays is None else delays
+    sleep = sleep or time.sleep
+    for d in delays:
+        try:
+            return gate()
+        except NotYetKnown as e:
+            print(f"  not yet: {e.now} — asking again in {d}s")
+            sleep(d)
+    try:
+        return gate()
+    except NotYetKnown as e:
+        raise Refused(f"still, after {sum(delays)}s of asking: {e}") from e
 
 
 def run(args: list[str], *, timeout: int = 900) -> str:
@@ -139,14 +180,36 @@ def gate_published(version: str, *, expect_bytes: int, fetch=None) -> dict:
     Refuses: still a draft · no asset · more than one · an asset still
     uploading · a size that does not match what was built locally · a `latest`
     that names a different tag.
+
+    **"Revert it to a draft" is only ever said about THIS release.** Reverting
+    changes what users are served only when `latest` already names it; when
+    `latest` names another tag, users are not on this release and reverting it
+    fixes nothing. Wrap the call in `settle()` right after publishing: an
+    OLDER `latest` is GitHub not having caught up (`NotYetKnown`).
     """
     fetch = fetch or _fetch_latest
-    body = fetch()
-    tag = body.get("tag_name")
-    if tag != f"v{version}":
-        raise Refused(f"`latest` names {tag!r}, not v{version} — "
-                      f"**revert it to a draft now** so `latest` falls back to "
-                      f"the previous working release")
+    try:
+        body = fetch()
+    except (OSError, ValueError) as e:   # URLError, HTTPError, timeouts; not JSON
+        raise NotYetKnown(f"could not ask GitHub for `latest` ({e}) — nothing "
+                          f"is known; run --check again",
+                          now="GitHub did not answer") from e
+    want = f"v{version}"
+    tag = str(body.get("tag_name") or "") if isinstance(body, dict) else ""
+    if tag != want:
+        from core import updater
+        if tag and updater.is_newer(tag, version):
+            raise NotYetKnown(
+                f"`latest` still names {tag!r}, older than {want} — users are "
+                f"still served {tag}, as before this publish, so there is "
+                f"nothing to revert. GitHub caches `latest` for up to 60 s; "
+                f"run --check again in a few minutes, and if it never moves, "
+                f"look at which release GitHub marks as Latest",
+                now=f"`latest` still says {tag}")
+        raise Refused(f"`latest` names {tag!r}, not {want} — this release is "
+                      f"not what users are served, so reverting it would change "
+                      f"nothing they see. Look at which release GitHub marks as "
+                      f"Latest")
     if body.get("draft"):
         raise Refused("it is still a draft")
     assets = [a for a in (body.get("assets") or []) if a.get("name") == ASSET]
@@ -180,17 +243,26 @@ def gate_the_app_would_offer_it(version: str, previous: str) -> None:
         try:
             return updater.check_for_update(as_version, timeout=15.0)
         except updater.UpdateCheckFailed as e:
-            raise Refused(f"the app's updater could not ask GitHub as a "
-                          f"v{as_version} user ({e}) — nothing is known; "
-                          f"run --check again") from e
+            raise NotYetKnown(f"the app's updater could not ask GitHub as a "
+                              f"v{as_version} user ({e}) — nothing is known; "
+                              f"run --check again",
+                              now="the updater could not ask GitHub") from e
 
+    # The updater reads the same cached `latest`, so right after publishing
+    # "nothing" and "an older version" are what not-caught-up looks like too.
+    # Under settle() they become a verdict only once the wait is over.
     info = ask(previous)
     if info is None:
-        raise Refused(f"the app's own updater offers nothing to a v{previous} "
-                      f"user — this release is invisible to the people on it")
-    if getattr(info, "version", None) != version:
-        raise Refused(f"the updater offers {getattr(info, 'version', None)!r} "
-                      f"to a v{previous} user, not {version!r}")
+        raise NotYetKnown(f"the app's own updater offers nothing to a "
+                          f"v{previous} user — this release is invisible to "
+                          f"the people on it",
+                          now=f"the updater offers nothing to v{previous}")
+    offered = getattr(info, "version", None)
+    if offered != version:
+        msg = f"the updater offers {offered!r} to a v{previous} user, not {version!r}"
+        if offered and updater.is_newer(offered, version):
+            raise NotYetKnown(msg, now=f"the updater still offers {offered}")
+        raise Refused(msg)
     if not getattr(info, "download_url", ""):
         raise Refused("the updater found the release but no download URL")
     current = ask(version)
@@ -246,8 +318,9 @@ def publish(version: str, previous: str, notes: str) -> None:
     print(f"  asset verified on the draft: {got[0]['size']:,} bytes")
 
     run(["gh", "release", "edit", tag, "--draft=false"])
-    gate_published(version, expect_bytes=size)
-    gate_the_app_would_offer_it(version, previous)
+    # settle(): the first read after publishing can still be the old `latest`
+    settle(lambda: gate_published(version, expect_bytes=size))
+    settle(lambda: gate_the_app_would_offer_it(version, previous))
     print(f"  PUBLISHED and verified from outside · v{version}")
 
 
@@ -263,11 +336,12 @@ def main() -> int:
     try:
         if a.check:
             size = INSTALLER.stat().st_size if INSTALLER.is_file() else 0
-            body = gate_published(a.check, expect_bytes=size) if size else None
+            body = settle(lambda: gate_published(a.check, expect_bytes=size)
+                          ) if size else None
             if body:
                 print(f"  v{a.check} published, asset matches the local build")
             if a.previous:
-                gate_the_app_would_offer_it(a.check, a.previous)
+                settle(lambda: gate_the_app_would_offer_it(a.check, a.previous))
                 print(f"  and the app offers it to a v{a.previous} user")
             return 0
         if a.dry_run:
