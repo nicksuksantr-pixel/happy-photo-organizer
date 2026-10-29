@@ -181,6 +181,7 @@ mapping every filed photo (v1.055+; earlier folders have no map and cannot get o
 `renamed` means that photo was never filed · `filed.folder` / `extras` / `renamed` keep their names and
 types, **frozen by a test.** Named gap: `extras` reports that `copy2` returned without error, **not that
 the bytes on disk are complete.**
+**Guarding §4's reserved names on the PC side** (commit `a9774ae`, 2026-10-29, on Nick's go; it ships with the next HPO release, so it is **not yet on the ship**): a phone file named `report_history.json` (any letter case) is never filed and never listed in `extras`; the sidecar-correction route `POST /jobshot/v1/sidecar` writes only `emr.json` / `emr-*.json` and answers **409** for any other name — JobShot's allowlist proposal, so it also covers the next file EMR adds.
 
 **EMR guarantees:** it never writes to another project's files · a bad draft never fails a report · it
 refuses rather than half-fills an ambiguous folder · unconfirmed values are dropped, not printed ·
