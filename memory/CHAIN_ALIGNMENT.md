@@ -171,10 +171,11 @@ three know the two can disagree, and EMR is not at fault for the divergence.
 ## §7 · What each project guarantees
 
 **JS guarantees** (committed in writing, v0.028): `job.json` is the eight fields with `"jobshot": 1`,
-written last · photos byte-for-byte with EXIF intact · `emr.json` absent when nothing was typed · photo
+written last · photos byte-for-byte with EXIF intact · `emr.json` absent when there is nothing for EMR — no typed draft, no equipment name, no photo tag (JS v0.044; before it, absent when nothing was typed) · photo
 names in `emr.json` true at write time · **`source` written for every spare row and every section** ·
 **`equipment` stays a bare string** · **only `typed` or `ai_confirmed` is ever written.** Any change to
 the last three goes on the chain sheet **with a version, before a line of code is written.**
+**Since JS v0.044** (`b151235`, 2026-10-30, not on the phone yet): `emr.json` goes whenever the equipment name is known or a photo is tagged, so most phone jobs now arrive with at least `equipment`. There are no new keys, and HPO and `job.json` are unchanged. **Nick's decision: always send, and EMR auto-reports every job.** EMR's `Draft.is_empty` counts a name, so `auto_reports` (on by default) writes such a job's report with blank boxes and Preventive/Pass by default.
 
 **HPO guarantees:** `emr.json` carried byte-for-byte · `extras` naming what is on disk · `renamed`
 mapping every filed photo (v1.055+; earlier folders have no map and cannot get one) · a key absent from
