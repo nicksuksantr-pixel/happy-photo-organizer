@@ -85,6 +85,10 @@ it retypes anything, except for a job captured before JS v0.026 (§9).
     two manifests naming one draft, `filed` without `renamed`, photo names resolving to nothing.
 20. The engineer presses **Create report.** The `.docx` is written beside the photos, and the folder then
     remembers the job is done (a `.docx` present = done).
+21. **EMR v0.4.9+ also writes `report_history.json` beside the `.docx`** (Nick, 2026-10-29: the ship's
+    history must outlive one PC). On every scan EMR files copies its PC lacks, so a new or second PC gets
+    the history back by opening the archive. Making the report again overwrites it; EMR writes no other
+    file in the folder.
 
 ---
 
@@ -97,6 +101,8 @@ it retypes anything, except for a job captured before JS v0.026 (§9).
 | **`filed.renamed`** — the phone-name → archive-name join | **HPO alone** | JS never reads it and must never start. **EMR depends on it completely and cannot verify it** (§6). |
 | Provenance (`typed` / `ai_confirmed`) | **JS alone** | EMR enforces it. |
 | Report content | **The engineer, once, on the phone** | HPO does not touch it. |
+| **`report_history.json`** in a job folder (EMR v0.4.9+) | **EMR alone** | Never read, rewrite, move or delete it, including when a resend or a merge into an existing folder touches that folder. |
+| **File names in a job folder** | — | Two patterns are taken: **`emr*.json`** is read by EMR as a phone draft, and **`job.json` / `job-*.json`** by HPO as a manifest. No project names a new file in a job folder into either pattern. |
 | The company form | **EMR alone** | `work_date_end` is **removed** (JS v0.028): the form has one date field and no period-of-work line. A span that matters prints as prose inside Troubleshooting, which already flows from `sections.action`. **Closed by Nick; EMR's `CHAIN_CHECKLIST.md` §4d closes with it.** |
 | `_RANGE_RE` in EMR | EMR | **Kept deliberately.** The chain will never feed it again, but it reads multi-day folders that already exist in Nick's archive and folders another crew names by hand. *No longer fed is not dead.* |
 
