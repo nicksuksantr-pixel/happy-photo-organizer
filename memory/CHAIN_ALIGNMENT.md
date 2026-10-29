@@ -102,7 +102,7 @@ it retypes anything, except for a job captured before JS v0.026 (§9).
 | Provenance (`typed` / `ai_confirmed`) | **JS alone** | EMR enforces it. |
 | Report content | **The engineer, once, on the phone** | HPO does not touch it. |
 | **`report_history.json`** in a job folder (EMR v0.4.9+) | **EMR alone** | Never read, rewrite, move or delete it, including when a resend or a merge into an existing folder touches that folder. |
-| **File names in a job folder** | — | Two patterns are taken: **`emr*.json`** is read by EMR as a phone draft, and **`job.json` / `job-*.json`** by HPO as a manifest. No project names a new file in a job folder into either pattern. |
+| **File names in a job folder** | — | Three names are taken: **`emr*.json`** is read by EMR as a phone draft, **`job.json` / `job-*.json`** by HPO as a manifest, and **`report_history.json`** is EMR's own. No project names a new file in a job folder into any of them, and **JS never ships a sidecar called `report_history.json`**: HPO would file it under that name and list it in `filed.extras`, and a later sidecar correction could then overwrite EMR's history (HPO's read-only check, 2026-10-29). |
 | The company form | **EMR alone** | `work_date_end` is **removed** (JS v0.028): the form has one date field and no period-of-work line. A span that matters prints as prose inside Troubleshooting, which already flows from `sections.action`. **Closed by Nick; EMR's `CHAIN_CHECKLIST.md` §4d closes with it.** |
 | `_RANGE_RE` in EMR | EMR | **Kept deliberately.** The chain will never feed it again, but it reads multi-day folders that already exist in Nick's archive and folders another crew names by hand. *No longer fed is not dead.* |
 
