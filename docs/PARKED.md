@@ -81,10 +81,16 @@ at that commit: `an-absence-is-not-a-fact` · `a-true-fact-is-not-evidence-for-t
 
 ---
 
+## 📦 On `main`, not released — ships with the next release (Nick, 2026-10-29: *"no release yet"*)
+
+| Item | State |
+|---|---|
+| **Sidecar route writes report drafts only**, and **the upload never files `report_history.json`** | Done, with JobShot's proposal and Nick's go. EMR v0.4.9 writes its own `report_history.json` into the job folder (CHAIN_ALIGNMENT §4). Before this, a phone file under that name would have been filed and listed in `filed.extras`, and a later correction could then have overwritten EMR's history. Now the upload skips the name case-insensitively, with a warning and no `extras` entry, and the correction route answers **409** for anything other than `emr.json` / `emr-*.json`. 2 new tests, both red on the old code; the multi-file tests now use `emr-notes.json` etc. instead of `notes.json`. **Needs a CHANGELOG entry at release.** |
+
 ## State of the tree, at the time of writing
 
     VERSION 1.063 (2026-10-23 — "offline" no longer reads "up to date"), see CHANGELOG
-    177/177 tests green
+    179/179 tests green
     working tree clean, 0 ahead / 0 behind origin
     releases go through tools/publish_release.py — 8 gates, each proven to refuse,
     and a `latest` that has not caught up is waited for, not reverted

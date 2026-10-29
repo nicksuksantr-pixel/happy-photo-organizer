@@ -1416,6 +1416,16 @@ never as an error worth retrying.
 (`^[A-Za-z0-9._-]{1,64}\.json$`). No path separators, no `..`, no other
 extension — a name is a name here, never a path.
 
+> **Narrowed 2026-10-29, Nick's word, JobShot's proposal: only report drafts.**
+> The route now writes **`emr.json` / `emr-*.json`** and nothing else
+> (`_DRAFT_NAME_RE`). Any other name is **409**, even one the job really filed.
+> The upload also stops filing a phone file named **`report_history.json`**,
+> case-insensitively, and leaves it out of `extras`, so the phone keeps its copy.
+> Why: EMR v0.4.9 writes its own `report_history.json` into the job folder, and
+> `filed.extras` only says whose a file is, not what kind it is
+> (CHAIN_ALIGNMENT §4). No phone build that exists sends any other name, per
+> JobShot's own check, so no reply a phone gets today changes.
+
 **Size cap: 1 MB per file, 2 MB total.** A report draft is a few KB; anything near
 this is not a draft. (The total was 4 MB until 2026-10-02, which was exactly
 4 x 1 MB - so the per-file check always fired first and the total could never

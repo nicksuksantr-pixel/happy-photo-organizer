@@ -3990,6 +3990,129 @@ def test_sidecar_refuses_every_name_that_is_not_its_own_sidecar():
             restore()
 
 
+def test_a_phone_file_named_like_emrs_history_is_never_filed():
+    """`report_history.json` is EMR's own record, written beside the .docx in
+    the job folder (EMR v0.4.9, CHAIN_ALIGNMENT §4). A phone file filed under
+    that name would be read by EMR as its history and - listed in
+    `filed.extras` - be writable later by the correction route.
+
+    Not filed means not in `extras` either: the phone keeps its copy and warns,
+    rather than being told something survived. Checked lower-cased, because on
+    NTFS `Report_History.json` IS EMR's file."""
+    if not _have_pillow():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        restore = _sidecar_sandbox(tmp)
+        try:
+            from core import jobshot
+            dest = tmp / "dest"
+            dest.mkdir()
+            job = "Overhauled Air Compressor"
+
+            # a new folder: the name must not appear at all
+            a_id = "20260926-100000-aaaaaa"
+            arrival = _arrival(tmp / a_id, photos=2, job=job, plain=True,
+                               work_date="2026-09-26", job_id=a_id)
+            (arrival / "emr.json").write_text('{"note": "A"}', encoding="utf-8")
+            (arrival / "report_history.json").write_text('{"fake": 1}',
+                                                         encoding="utf-8")
+            a = jobshot.import_job(arrival, dest)
+            assert a.ok, a.error
+            assert a.extras == ["emr.json"], a.extras
+            assert not (a.final_folder / "report_history.json").exists()
+            assert any("report_history.json" in w for w in a.warnings), a.warnings
+            block = json.loads((a.final_folder / a.manifest_name)
+                               .read_text(encoding="utf-8"))["filed"]
+            assert block["extras"] == ["emr.json"], block
+
+            # EMR makes a report in that folder
+            history = a.final_folder / "report_history.json"
+            history.write_text('{"emr": "REAL"}', encoding="utf-8")
+
+            # a second phone merges in, carrying the name in another case
+            b_id = "20260926-110000-bbbbbb"
+            arrival = _arrival(tmp / b_id, photos=2, job=job, plain=True,
+                               work_date="2026-09-26", job_id=b_id)
+            (arrival / "emr.json").write_text('{"note": "B"}', encoding="utf-8")
+            (arrival / "Report_History.json").write_text('{"fake": 2}',
+                                                         encoding="utf-8")
+            b = jobshot.import_job(arrival, dest)
+            assert b.ok, b.error
+            assert b.final_folder == a.final_folder, (a.final_folder, b.final_folder)
+            assert history.read_text(encoding="utf-8") == '{"emr": "REAL"}'
+            assert len(b.extras) == 1 and b.extras[0].startswith("emr-"), b.extras
+            # not even under a collision name beside it
+            strays = [p.name for p in a.final_folder.iterdir()
+                      if p.name.lower().startswith("report_history")]
+            assert strays == ["report_history.json"], strays
+        finally:
+            restore()
+
+
+def test_the_correction_route_writes_report_drafts_and_nothing_else():
+    """`filed.extras` says whose a file is; this says what KIND it may be. The
+    route answers 409 for any name that is not `emr.json` / `emr-*.json` - the
+    same filter the phone applies to what it sends (JobShot, 2026-10-29).
+
+    The case that made it necessary: a job whose `filed.extras` already lists
+    `report_history.json` (filed before the upload guard existed) could have
+    had EMR's history overwritten from the LAN. An allowlist rather than one
+    refused name, so the next file EMR adds is covered before anyone knows it.
+    """
+    if not _have_pillow():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        restore = _sidecar_sandbox(tmp)
+        try:
+            from core import jobshot_receive as recv
+            dest = tmp / "dest"
+            dest.mkdir()
+            jid = "20260926-120000-cccccc"
+            r = _file_with_drafts(tmp, dest, job_id=jid,
+                                  names=("emr.json", "notes.json"))
+            folder = r.final_folder
+
+            # a file this job really filed, but not a report draft
+            res = recv.replace_sidecars(jid, {"notes.json": {"x": 1}}, dest)
+            assert res.status == 409 and not res.ok, (res.status, res.error)
+            # in a set, it takes the draft down with it: nothing partial
+            res = recv.replace_sidecars(jid, {"emr.json": {"note": "NEW"},
+                                              "notes.json": {"x": 1}}, dest)
+            assert res.status == 409 and not res.ok, (res.status, res.error)
+            assert json.loads((folder / "emr.json").read_text(
+                encoding="utf-8"))["note"] == "OLD-emr.json"
+
+            # the legacy hole: EMR's history, listed in this job's extras
+            history = folder / "report_history.json"
+            history.write_text('{"emr": "REAL"}', encoding="utf-8")
+            manifest_path = folder / r.manifest_name
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["filed"]["extras"].append("report_history.json")
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            res = recv.replace_sidecars(jid, {"report_history.json":
+                                              {"hijacked": True}}, dest)
+            assert res.status == 409 and not res.ok, (res.status, res.error)
+            assert history.read_text(encoding="utf-8") == '{"emr": "REAL"}'
+
+            # the job's own draft is still correctable
+            ok = recv.replace_sidecars(jid, {"emr.json": {"note": "FIXED"}}, dest)
+            assert ok.ok, (ok.status, ok.error)
+
+            # and so is a second phone's draft under its collision name
+            b_id = "20260926-130000-bbbbbb"
+            b = _file_with_draft(tmp, dest, job_id=b_id,
+                                 job="Overhauled Air Compressor")
+            assert b.final_folder == folder, (b.final_folder, folder)
+            b_name = b.extras[0]
+            assert b_name.startswith("emr-"), b.extras
+            ok = recv.replace_sidecars(b_id, {b_name: {"note": "B-FIXED"}}, dest)
+            assert ok.ok, (ok.status, ok.error)
+        finally:
+            restore()
+
+
 def test_sidecar_refuses_an_oversized_or_malformed_body():
     """The caps are applied to the SERIALISED content, not to a claim in a
     header - and a body that is not the documented shape is 422, not a
@@ -4132,11 +4255,11 @@ def _file_with_two_drafts(tmp, dest, *, job_id, job="Overhauled Air Compressor")
                        work_date="2026-09-26", job_id=job_id)
     (arrival / "emr.json").write_text(json.dumps({"note": "OLD-EMR"}),
                                       encoding="utf-8")
-    (arrival / "notes.json").write_text(json.dumps({"note": "OLD-NOTES"}),
+    (arrival / "emr-notes.json").write_text(json.dumps({"note": "OLD-NOTES"}),
                                         encoding="utf-8")
     r = jobshot.import_job(arrival, dest)
     assert r.ok, r.error
-    assert sorted(r.extras) == ["emr.json", "notes.json"], r.extras
+    assert sorted(r.extras) == ["emr-notes.json", "emr.json"], r.extras
     return r
 
 
@@ -4164,12 +4287,12 @@ def test_sidecar_rolls_the_whole_set_back_when_one_file_cannot_be_written():
             jid = "20260926-200000-rollbk"
             r = _file_with_two_drafts(tmp, dest, job_id=jid)
             folder = r.final_folder
-            locked = folder / "notes.json"
+            locked = folder / "emr-notes.json"
             _os.chmod(locked, _stat.S_IREAD)       # Nick marked it, or EMR holds it
             try:
                 res = recv.replace_sidecars(jid, {
                     "emr.json": {"note": "NEW-EMR"},
-                    "notes.json": {"note": "NEW-NOTES"},
+                    "emr-notes.json": {"note": "NEW-NOTES"},
                 }, dest)
             finally:
                 _os.chmod(locked, _stat.S_IWRITE | _stat.S_IREAD)
@@ -4179,7 +4302,7 @@ def test_sidecar_rolls_the_whole_set_back_when_one_file_cannot_be_written():
             # BOTH drafts still hold their old contents - the rollback
             assert json.loads((folder / "emr.json")
                               .read_text(encoding="utf-8"))["note"] == "OLD-EMR"
-            assert json.loads((folder / "notes.json")
+            assert json.loads((folder / "emr-notes.json")
                               .read_text(encoding="utf-8"))["note"] == "OLD-NOTES"
             # no scratch left in Nick's archive
             strays = [p.name for p in folder.iterdir() if p.name.startswith(".hpo-")]
@@ -4206,13 +4329,13 @@ def test_sidecar_replaces_several_drafts_at_once_when_all_of_them_can_be_written
             r = _file_with_two_drafts(tmp, dest, job_id=jid)
             res = recv.replace_sidecars(jid, {
                 "emr.json": {"note": "NEW-EMR"},
-                "notes.json": {"note": "NEW-NOTES"},
+                "emr-notes.json": {"note": "NEW-NOTES"},
             }, dest)
             assert res.ok, res
-            assert sorted(res.replaced) == ["emr.json", "notes.json"], res.replaced
+            assert sorted(res.replaced) == ["emr-notes.json", "emr.json"], res.replaced
             assert json.loads((r.final_folder / "emr.json")
                               .read_text(encoding="utf-8"))["note"] == "NEW-EMR"
-            assert json.loads((r.final_folder / "notes.json")
+            assert json.loads((r.final_folder / "emr-notes.json")
                               .read_text(encoding="utf-8"))["note"] == "NEW-NOTES"
             assert [p.name for p in r.final_folder.iterdir()
                     if p.name.startswith(".hpo-")] == []
@@ -4371,11 +4494,11 @@ def test_sidecar_total_size_cap_can_actually_fire():
             # refuses first and the size check is never reached - which is what
             # the first version of this test actually proved
             _file_with_drafts(tmp, dest, job_id=jid,
-                              names=("emr.json", "a.json", "b.json"))
+                              names=("emr.json", "emr-a.json", "emr-b.json"))
             # three bodies each UNDER the per-file cap, together over the total
             each = {"pad": "x" * (recv.MAX_SIDECAR_BYTES - 4096)}
             res = recv.replace_sidecars(jid, {
-                "emr.json": each, "a.json": each, "b.json": each}, dest)
+                "emr.json": each, "emr-a.json": each, "emr-b.json": each}, dest)
             assert res.status == 413, (res.status, res.error)
         finally:
             restore()
@@ -4433,7 +4556,7 @@ def test_two_corrections_at_once_do_not_lose_each_others_work():
                                                      dest))
 
             ts = [_th.Thread(target=go, args=("emr.json", "A")),
-                  _th.Thread(target=go, args=("notes.json", "B"))]
+                  _th.Thread(target=go, args=("emr-notes.json", "B"))]
             for t in ts:
                 t.start()
             for t in ts:
@@ -4444,11 +4567,11 @@ def test_two_corrections_at_once_do_not_lose_each_others_work():
             # load-bearing keys - not a half-written casualty of the race
             assert json.loads((r.final_folder / "emr.json")
                               .read_text(encoding="utf-8"))["note"] == "A"
-            assert json.loads((r.final_folder / "notes.json")
+            assert json.loads((r.final_folder / "emr-notes.json")
                               .read_text(encoding="utf-8"))["note"] == "B"
             block = json.loads((r.final_folder / "job.json")
                                .read_text(encoding="utf-8"))["filed"]
-            assert sorted(block["extras"]) == ["emr.json", "notes.json"], block
+            assert sorted(block["extras"]) == ["emr-notes.json", "emr.json"], block
             assert block["renamed"], block
             assert block["sidecar_updated_at"], block
             assert [p.name for p in r.final_folder.iterdir()
@@ -4566,7 +4689,7 @@ def test_a_replace_that_fails_midway_rolls_the_earlier_ones_back():
                 # Scoped by destination, so this patch cannot affect anything
                 # else in the process - the lesson from the json.dump patch
                 # earlier in this same session, which fired four times.
-                if str(dst).endswith("notes.json"):
+                if str(dst).endswith("emr-notes.json"):
                     seen.append(str(dst))
                     raise OSError(28, "No space left on device")
                 return real_replace(src, dst, *a, **kw)
@@ -4575,7 +4698,7 @@ def test_a_replace_that_fails_midway_rolls_the_earlier_ones_back():
             try:
                 res = recv.replace_sidecars(jid, {
                     "emr.json": {"note": "NEW-EMR"},
-                    "notes.json": {"note": "NEW-NOTES"},
+                    "emr-notes.json": {"note": "NEW-NOTES"},
                 }, dest)
             finally:
                 recv.os.replace = real_replace
@@ -4583,13 +4706,13 @@ def test_a_replace_that_fails_midway_rolls_the_earlier_ones_back():
             assert seen, "the injected failure never fired"
             assert not res.ok and res.status == 500, res
             assert res.replaced == [], res.replaced
-            # THE POINT: emr.json was already replaced when notes.json failed,
+            # THE POINT: emr.json was already replaced when emr-notes.json failed,
             # and it has been put back. Without the backups it would hold
             # NEW-EMR while the reply said nothing was replaced.
             assert json.loads((folder / "emr.json")
                               .read_text(encoding="utf-8"))["note"] == "OLD-EMR", \
                 "the earlier replace was not rolled back"
-            assert json.loads((folder / "notes.json")
+            assert json.loads((folder / "emr-notes.json")
                               .read_text(encoding="utf-8"))["note"] == "OLD-NOTES"
             assert [q.name for q in folder.iterdir()
                     if q.name.startswith(".hpo-")] == []

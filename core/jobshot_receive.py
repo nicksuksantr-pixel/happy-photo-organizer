@@ -134,6 +134,14 @@ _JSON_NAME_RE = re.compile(r"^job(-[A-Za-z0-9._-]+)?\.json$")
 # said "filed", so Nick could delete the only copy of a draft that never
 # arrived (JobShot, 2026-09-25). Data only: images and JSON, nothing else.
 _SIDECAR_NAME_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}\.json$")
+# What the correction route may WRITE: EMR's phone drafts only, the same
+# `emr.json` / `emr-*.json` the phone filters to before it sends. `filed.extras`
+# says whose a file is; this says what kind. Without it any JSON a job once
+# carried was writable from the LAN - including `report_history.json`, EMR's
+# own record, had a phone ever sent one (HPO's check + JobShot, 2026-10-29). An
+# allowlist rather than a refused name, so the next file EMR adds is covered
+# before anyone knows what it is called.
+_DRAFT_NAME_RE = re.compile(r"^emr(-[A-Za-z0-9._-]+)?\.json$")
 _SAFE_SEGMENT_RE = re.compile(r"^[^\x00-\x1f<>:\"|?*\\/]+$")
 
 
@@ -223,7 +231,8 @@ def replace_sidecars(job_id: str, files: dict, dest_root: Path | None) -> Sideca
       1. the job must be one THIS PC filed — `jobshot_index.lookup`, which
          answers from the receipt book and falls back to scanning the archive,
          so it still works after a rename, a reinstall or a lost index;
-      2. every name must appear in **that job's own `filed.extras`** — not in a
+      2. every name must be a report draft (`emr.json` / `emr-*.json`) and
+         appear in **that job's own `filed.extras`** — not in a
          listing of the folder. This is the whole safety argument: a job can
          only replace a file it filed itself, can never invent a new name, and
          **can never touch another job's draft in a merged folder**;
@@ -307,6 +316,11 @@ def replace_sidecars(job_id: str, files: dict, dest_root: Path | None) -> Sideca
         name = str(name)
         if not _SIDECAR_NAME_RE.match(name):
             result.status, result.error = 409, f"{name!r} is not a sidecar name"
+            return result
+        if not _DRAFT_NAME_RE.match(name):
+            result.status, result.error = 409, (
+                f"{name!r} is not a report draft - only emr.json / emr-*.json "
+                f"can be replaced")
             return result
         if name not in filed_extras:
             # The gate. A name this job did not file is refused even though the

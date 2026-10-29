@@ -70,6 +70,13 @@ SUPPORTED_MANIFEST_VERSION = 1
 # manifest — keep it to characters Windows accepts.
 _SAFE_ID_RE = re.compile(r"[^A-Za-z0-9._-]+")
 
+# Names a phone sidecar is never filed under (CHAIN_ALIGNMENT §4).
+# `report_history.json` is EMR's own record, written beside the .docx in the
+# job folder (EMR v0.4.9+): a phone file filed under that name would be read by
+# EMR as its history and, listed in `filed.extras`, be writable later by the
+# correction route. Compared lower-cased - on NTFS `Report_History.json` IS it.
+RESERVED_SIDECAR_NAMES = frozenset({"report_history.json"})
+
 
 @dataclass
 class ImportResult:
@@ -484,6 +491,12 @@ def _read_arrival(job_folder: Path) -> _Arrival | ImportResult:
             if not f.is_file() or f.suffix.lower() != ".json":
                 continue
             if f.name == MANIFEST_NAME or f.name.startswith("job-"):
+                continue
+            if f.name.lower() in RESERVED_SIDECAR_NAMES:
+                # Not filed, so not in `extras` either: the phone keeps its
+                # copy and warns instead of being told it survived.
+                result.warnings.append(
+                    f"{f.name} was not filed: that name belongs to EMR")
                 continue
             extras.append(f)
     except OSError as e:
