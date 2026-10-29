@@ -293,4 +293,71 @@ never mine.**
 
 ---
 
+## Answer per §1, 2026-10-30 — can a second `emr.json` reach a folder that is already filed?
+
+EMR's question, relayed by the Director. It matters because JS v0.044 sends
+`emr.json` with every named or tagged job, and EMR treats a folder that has a
+`.docx` as done (EMR `4220598`).
+
+**Yes. Both paths the Director named are real, and there is a third.** Each one
+was measured with HPO's real filing code (`a9774ae`) in a temporary archive, with
+a stand-in `.docx` placed after the first filing. No code was changed.
+
+| # | Path | What lands in the folder | Measured |
+|---|---|---|---|
+| 1 | **Sidecar correction**, `POST /jobshot/v1/sidecar` | The **same** `emr.json`, with new content. That job's manifest gets `filed.sidecar_updated_at`. | 200, `replaced: ["emr.json"]`, still one draft, `.docx` untouched |
+| 2a | **Resend of the same `job_id`** | `emr-<job_id>.json` beside the first `emr.json`, plus `job-<job_id>.json`. The photos double. | 2 → 4 jpg, 2 manifests, 2 drafts (`FIRST` and `FULLER`) |
+| 2b | **A second resend of that `job_id`** | It **overwrites** `emr-<job_id>.json` and `job-<job_id>.json` in place. The photos triple. | 4 → 6 jpg; the draft now reads `THIRD`, and `FULLER` is gone |
+| 2c | **A different `job_id`, same job name and work date** (a second phone, or the job re-created) | `emr-<job_id>.json` and `job-<job_id>.json`. This is by design (Nick, 2026-09-22). | merged, 2 manifests, 2 drafts |
+| 3 | **A folder with no manifest** (card reader, or made by hand) whose name matches | The **first** `emr.json`, in a folder that may already hold a `.docx`. `find_filed_job` falls back to the folder name when no manifest exists. | merged, `extras: ["emr.json"]` |
+
+**On (1): the Director is right, with one precision.** No second file appears:
+the existing `emr.json` gets new content. EMR can see it in two ways:
+- the job's own manifest (`job.json` or `job-<id>.json`) carries
+  `filed.sidecar_updated_at`, in local ISO time to the second;
+- the draft's own modification time.
+
+Either one can be compared with the `.docx`'s modification time.
+
+**On (2): the Director is right, but it is two cases that look identical on disk.**
+- **2a/2b, same `job_id`.** This only happens when the phone uploads a job this PC
+  has already filed. The §4 probe (`GET /jobshot/v1/job/<id>`) exists to stop that.
+  A resend still lands when:
+  - the probe wrongly answers 404, because the folder was moved out of the
+    archive or HPO cannot parse its manifest. The probe's 404 does **not** carry
+    `unreadable_records`; only the sidecar route's 404 does. So on the probe a
+    damaged manifest looks exactly like "never filed". Or:
+  - a phone build does not probe.
+
+  **The PC never refuses a `job_id` it has already filed.** That is the resend
+  finding above, and the `revision` design that would fix it is still not shipped.
+- **2c, a different `job_id`.** This is intended. Because of JS v0.044, nearly every
+  two-phone folder will now hold both `emr.json` and `emr-<id>.json`.
+- **How EMR can tell them apart:**
+  - in 2a both manifests carry the **same** `job_id`; in 2c the ids differ;
+  - every manifest's `filed.extras` names that job's draft, and `filed.filed_at`
+    says when it landed.
+
+**On (3), the one not asked about:** the draft is not a second one. It is the
+first, arriving in a folder EMR may already have reported from photographs alone.
+The outcome is the same: it is ignored silently.
+
+**HPO never reads, moves or rewrites a `.docx`, and filing never checks whether
+one exists.** "This folder has a report" is EMR's signal alone. What HPO provides,
+per job, is when the job landed (`filed_at`) and when its draft was last replaced
+(`sidecar_updated_at`).
+
+### A finding from this measurement, recorded rather than fixed (no code change was asked for)
+
+**2b overwrites without saying so.** `_copy_extras` and `_write_manifest` only
+test whether the **first** name is taken. A third arrival of the same `job_id`
+therefore replaces the second arrival's `emr-<id>.json` and `job-<id>.json`.
+The warning reads *"… this job's was filed as emr-<id>.json"*, which is true but
+hides that it replaced an earlier copy. Only that job's own files are affected,
+and Nick's 2026-10-02 ruling makes a filed folder working state, so no other job
+loses anything. It belongs with the `revision` work, which would make same-job
+resends a replacement on purpose.
+
+---
+
 — Codey (Happy-Photo-Organizer)
