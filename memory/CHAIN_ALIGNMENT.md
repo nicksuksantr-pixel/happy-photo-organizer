@@ -56,20 +56,38 @@ it retypes anything, except for a job captured before JS v0.026 (§9).
    - But the phone asks `GET /jobshot/v1/job/<id>` before it sends (step 15; JS `statusOf`). It would find
      last month's filing, mark the new job filed and **never send it**, with no error anywhere.
    - JS mints a new id for every job today, *Do it now* included (`JobStore.createJob`).
-   **Nick's direction, not yet agreed in the chain:** New job offers a QR scan. Scanning a machine's label
-   starts the job prefilled with that machine's name and the previous job's details, **never its date or
-   its `job_id`**, so it is a new job by construction and only the photos are new. HPO files it under its
-   own date like any other job; nothing is asked of HPO. The same `equipment_id`, and so the same name,
-   ties it to the earlier reports, and JobShot updates its routine record itself.
-   **JS answered (`eb1eb30`, review only): agreed, with conditions.**
-   - The scan is a prefill, not a lock: everything stays editable before Create.
-   - Source: EMR's live lookup, which alone has the report as filed. With the PC off, the register copy
-     gives the machine's facts only. The phone's own old draft is never used.
-   - `scanned` = copied from EMR because of a scan, accepted, and unchanged since. Any edit makes it
-     `typed`. Sections and spare fields only.
-   **Open for Nick:** the carry list in JS's answer, and whether the routine round counts at the job's first
-   photo (JS's proposal) or at the scan. Also open: the EMR-LAN-test, and the go for ADR-0008.
-   **Open for EMR:** confirm it prints `scanned`, unlike `ai`. **Not the chain's agreement until then.**
+   **Agreed by all three, 2026-10-30 — a QR scan starts a routine's next round** (Nick's direction and his two
+   answers; JS `eb1eb30`; EMR `c9e2c55`, `40c0792`). **Design only, nothing built.**
+   - New job offers a QR scan. Scanning a machine's label starts a **new job**: it never copies the old date
+     or `job_id`. HPO files it under its own date like any other job, and nothing is asked of HPO.
+   - **The scan is a prefill, not a lock.** Everything stays editable before Create, because a breakdown on a
+     routine machine is scanned the same way.
+   - **What the scan carries** (Nick chose JS's list):
+     - prefilled: `equipment_id`, Equipment, Model, Serial and the job name;
+     - offered as "Last time (date)" and taken with one Accept: the type, the Action and Test text, and
+       spare rows without their serial;
+     - never carried: Problem, Cause, Pass/Fail, a spare's serial, photos and tags, the date and the id.
+   - **The round counts at the job's first photo** (Nick chose it over counting at the scan; the BUG-013
+     lesson). JobShot updates its routine itself. A routine learns its `equipment_id` on the phone only,
+     and a scan never creates a routine.
+   - **The source is EMR's live lookup** (`/emr/v1/thing`), because it alone has the report as filed,
+     PC-side changes included. One limit: an edit made later in Word, to the `.docx`, is not in it. With
+     the PC off, the register copy gives the machine's facts only. The phone's own old draft is never used.
+   - **`scanned`** = copied from EMR because of a scan, accepted on the scan sheet, and unchanged since.
+     Any edit makes it `typed`. It covers sections and spare fields only; equipment fields carry no
+     provenance. EMR prints it like `typed`, unlike `ai`. Because it prints, a routine job carrying last
+     month's accepted text plus one tagged photo is written automatically, with nobody reading it at the PC.
+   - **Order:**
+     1. a CHAIN_CHECKLIST line with the EMR version;
+     2. EMR ships `scanned` in TRUSTED_SOURCES, with a test pinning exactly {typed, ai_confirmed, scanned};
+     3. that EMR is installed on the ship's PC;
+     4. only then does JS list it.
+     Measured why: EMR up to v0.5.1 drops a `scanned` section and blanks a `scanned` spare field, and the
+     automatic road holds the job as "need you".
+   - **Still before any build:**
+     - the EMR-LAN-test, which chooses the label address;
+     - the lookup endpoint (EMR step 4), with a firewall/admin check on a ship PC;
+     - Nick's go for ADR-0008.
 2. Photograph, and **tag each photo Before / After / part-label.** The phone cannot infer this.
 3. Optionally fill the report page: equipment / model / serial, preventive|breakdown, pass|fail, the
    four sections, spare parts.
