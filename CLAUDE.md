@@ -62,3 +62,6 @@ dist/HappyPhotoOrganizerSetup.exe ← Final installer (share this)
 
 Fill .docx forms automatically from folder names + AI-generated work details.
 See PROJECT_SUMMARY.md § "V2 Roadmap" for the brief.
+
+## 🚫 #28 No update drill, no release (house rule, 2026-10-30)
+`tools/release-gate.mjs` refuses `gh release` / `adb install` to a phone / a Play deploy unless a passing `drills/<version>.json` matches those exact bytes. The previous packaged release must update itself to them, laid out like the user's, and pass every check in `memory/UPDATE_DRILL.md`. Never hand-write a receipt or route around the lock; only Nick waives it, once per tag.
