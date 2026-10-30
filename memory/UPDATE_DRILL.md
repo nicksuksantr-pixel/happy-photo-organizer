@@ -168,7 +168,8 @@ Add a check when a new failure class appears. That means adding it here **and** 
      while signed out) is Nick's, given to him as numbered steps in Thai.
    - **One drill at a time on this PC.** Before starting, check `C:\Users\Public\drill-busy.txt`. If it exists,
      another app is drilling, so wait. Otherwise create it with your app name and start time, and remove it when
-     you finish, pass or fail.
+     you finish, pass or fail. Claim it when the run starts, never while you build or stage: Nick is the
+     bottleneck, and a lock held over a compile queues another app's ready drill behind it.
    - For a per-machine app, or a release that changes the install mode, use a VirtualBox VM with a snapshot.
 
    ⚠ **Run the harness OUTSIDE the Claude desktop app.** Claude's shell runs inside an MSIX container that
