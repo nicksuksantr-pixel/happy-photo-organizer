@@ -4,8 +4,8 @@
 // WHY THIS FILE EXISTS
 // 2026-10-30: EMR v0.5.3 ("the app updates itself") was published with its own report saying
 // "NOT done: a drill of the packaged exe". On Nick's PC the update renamed the old build to
-// `_previous`, the new one appeared as a second folder on the Desktop, the old icon kept its place,
-// and the shortcut went with the old build. Nick: "how can something this basic be missed".
+// `_previous`, the new one appeared as a second folder on the Desktop, and the old folder kept the
+// icon's place, so Nick opened the old build from it. Nick: "how can something this basic be missed".
 // It was not the first time: SHARED_LESSONS has a whole "Build / Release / Auto-update" section of
 // the same class (hoarded installers, a poisoned "applied" flag, comparators that strand the fleet).
 // Every one of them was a step NOBODY RAN: the OLD PACKAGED build updating ITSELF to the new one.
@@ -20,8 +20,12 @@
 //   gh release edit <tag> --draft=false | --latest | --prerelease=false
 //   gh api …releases… with POST/PATCH                         (refused: use gh release so it can be read)
 //   adb [-s SERIAL] install <apk>        (allowed only for an emulator: -e or -s emulator-NNNN)
+//     also when adb is reached through a variable ("$ADB" install …), and an APK given as a variable
+//   flutter install · flutter run --release|--profile · gradlew install*Release · bundletool install-apks
+//     to anything but an emulator: they put a build on a phone whose bytes cannot be matched — use adb
 //   running a script named *publish* / *release* that does not itself call `release-gate.mjs --check`
-// As a CLI:   node release-gate.mjs --check <asset>…   exits 0 only if every asset has a passing receipt
+// As a CLI:   node release-gate.mjs --check [--tag vX] <asset>…   exits 0 only if every asset has a passing
+//             receipt, or (with --tag) Nick's one-shot note names that tag; the note is consumed
 //             node release-gate.mjs --validate <receipt.json>   prints what is missing in one receipt
 //
 // The way past it is not a flag. It is a drill, or Nick's one-shot note (~/.claude/release-approval.json
@@ -178,10 +182,14 @@ function scriptRun(w) {
 export function publishIntents(cmd) {
   const found = []
   for (const seg of splitSegments(String(cmd || ''))) {
-    let w = words(seg)
-    while (w.length && (w[0] === '&' || w[0] === '.' || /^[A-Z_][A-Z0-9_]*=/.test(w[0]))) w = w.slice(1)
+    let w = words(seg); const env = {}
+    while (w.length && (w[0] === '&' || w[0] === '.' || /^[A-Z_][A-Z0-9_]*=/.test(w[0]))) {
+      const m = /^([A-Z_][A-Z0-9_]*)=(.*)$/.exec(w[0]); if (m) env[m[1]] = m[2]
+      w = w.slice(1)
+    }
     if (!w.length) continue
-    const exe = path.basename(w[0]).toLowerCase().replace(/\.exe$/, '')
+    const exe = path.basename(w[0]).toLowerCase().replace(/\.(exe|bat|cmd)$/, '')
+    const emuSerial = (s) => /^emulator-\d+$/.test(String(s || ''))
     if (exe === 'gh' && w[1] === 'release' && ['create', 'upload', 'edit'].includes(w[2])) {
       const verb = w[2]; const rest = w.slice(3)
       const flags = rest.filter((x) => x.startsWith('-'))
@@ -213,12 +221,44 @@ export function publishIntents(cmd) {
     if (exe === 'gh' && w[1] === 'api' && w.some((x) => /releases/i.test(x)) &&
         w.some((x, i) => (/^(-X|--method)$/.test(x) && /^(POST|PATCH|PUT)$/i.test(w[i + 1] || '')) || /^--method=(POST|PATCH|PUT)$/i.test(x)))
       { found.push({ kind: 'raw-api', seg }); continue }
-    if (exe === 'adb') {
-      const i = w.findIndex((x) => x === 'install' || x === 'install-multiple')
+    // adb, also when its path sits in a variable (JS found "$ADB" -s <phone> install … walked straight past, 2026-10-30)
+    const INSTALL_VERB = /^install(-multiple|-multi-package)?$/
+    const isAdb = exe === 'adb' || (isVar(w[0]) && (/adb/i.test(w[0]) ||
+      (w.some((x) => INSTALL_VERB.test(x)) && w.some((x) => /\.apk$/i.test(x)))))
+    if (isAdb) {
+      const i = w.findIndex((x) => INSTALL_VERB.test(x))
       if (i < 0) continue
-      const emu = w.includes('-e') || w.some((x, k) => x === '-s' && /^emulator-\d+$/.test(w[k + 1] || ''))
+      const emu = w.includes('-e') || w.some((x, k) => x === '-s' && emuSerial(w[k + 1])) || emuSerial(env.ANDROID_SERIAL)
       if (emu) continue
-      for (const f of w.slice(i + 1).filter((x) => !x.startsWith('-') && /\.apk$/i.test(x))) found.push({ kind: 'asset', file: f, seg })
+      // an APK held in a variable could be any build: it has to be written literally to be hashed
+      for (const f of w.slice(i + 1).filter((x) => !x.startsWith('-') && (/\.apk$/i.test(x) || isVar(x)))) found.push({ kind: 'asset', file: f, seg })
+      continue
+    }
+    // Tools that build-and-install in one step put bytes on a phone that no receipt can be matched to. On an
+    // emulator they are the drill's own business; anywhere else, install the drilled file with adb instead.
+    const deviceOf = (names) => {
+      for (let k = 0; k < w.length; k++) {
+        const x = w[k]
+        for (const n of names) {
+          if (x === n) return w[k + 1] || ''
+          if (x.startsWith(n + '=')) return x.slice(n.length + 1)
+        }
+      }
+      return null
+    }
+    const phoneInstall = (what) => found.push({ kind: 'device-install', seg,
+      why: `"${seg}" ${what} on a device that is not an emulator, so its bytes cannot be matched to a drill receipt. ` +
+        'Drill it on the emulator, then install that exact file with: adb -s <serial> install -r <file.apk>' })
+    if (exe === 'flutter' && (w[1] === 'install' || (w[1] === 'run' && w.some((x) => /^--(release|profile)$/.test(x))))) {
+      if (!emuSerial(deviceOf(['-d', '--device-id']))) phoneInstall(`puts a ${w[1] === 'install' ? 'release' : 'release/profile'} build`)
+      continue
+    }
+    if ((exe === 'gradlew' || exe === 'gradle') && w.some((x) => /(^|:)install\w*(release|profile)$/i.test(x))) {
+      if (!emuSerial(env.ANDROID_SERIAL)) phoneInstall('installs a release build on every connected device')
+      continue
+    }
+    if (w.includes('install-apks') && (exe === 'bundletool' || w.some((x) => /bundletool[^\\/]*\.jar$/i.test(x)))) {
+      if (!emuSerial(deviceOf(['--device-id']))) phoneInstall('installs a build')
       continue
     }
     // A wrapper script that publishes must carry the gate itself, or the gate never sees the gh line.
@@ -249,6 +289,7 @@ export function judge(cmd, cwd) {
   const problems = []
   for (const it of publishIntents(cmd)) {
     if (it.repo && isDrillRepo(root, it.repo)) continue               // publishing to the drill's test repo is the drill
+    if (it.kind === 'device-install') { problems.push(it.why); continue }
     if (it.kind === 'raw-api') { problems.push(`"${it.seg}" publishes through the raw API, which this gate cannot read. Use gh release create/upload/edit.`); continue }
     if (it.kind === 'script') {
       const p = path.resolve(cwd || root, it.file)
@@ -282,15 +323,21 @@ export function judge(cmd, cwd) {
   return { root, problems }
 }
 
-function approvalFor(cmd) {
+/** Nick's one-shot note, if `matches(tag)` accepts its tag; consumed on use. */
+function takeApproval(matches) {
   let ok = null
   try { ok = JSON.parse(read(APPROVAL)) } catch { return false }
   if (!ok || (ok.expiresEpochMs && Date.now() >= Number(ok.expiresEpochMs))) return false
-  if (!ok.tag || !String(cmd).includes(String(ok.tag))) return false
+  if (!ok.tag || !matches(String(ok.tag))) return false
   try { fs.unlinkSync(APPROVAL) } catch {}
   process.stderr.write(`RULE #28: released ${ok.tag} WITHOUT a drill, on Nick's one-shot note (${ok.reason || 'no reason given'}); note consumed.\n`)
   return true
 }
+// hook mode: the tag has to appear in the command itself
+const approvalFor = (cmd) => takeApproval((tag) => String(cmd).includes(tag))
+// CLI mode: a publish script names the tag it is about to publish (SM found the note could never reach
+// a gated script otherwise: the hook passes the script because it carries --check, and --check refused)
+const approvalForTag = (want) => takeApproval((tag) => normTag(tag) === normTag(want))
 
 const MESSAGE = (problems, root) => `RULE #28 — RELEASE BLOCKED: no update drill, no release.
 ${problems.map((p) => ' • ' + p).join('\n')}
@@ -302,7 +349,8 @@ user data intact, no update loop, the next release still visible, a bad download
 The drill writes drills/<version>.json (schema "update-drill/1") with the SHA-256 of each asset.
 Check one:   node tools/release-gate.mjs --validate drills/<version>.json
 Repo: ${root}
-Only Nick can waive it, once, by having ~/.claude/release-approval.json written with this tag.`
+Only Nick can waive it, once, by having ~/.claude/release-approval.json written with this tag.
+A publish script reaches that note by naming its tag: node tools/release-gate.mjs --check --tag <tag> <assets>`
 
 // ── entry points ─────────────────────────────────────────────────────────────────────────────────
 const isMain = !!process.argv[1] && path.resolve(process.argv[1]).toLowerCase() === fileURLToPath(import.meta.url).toLowerCase()
@@ -318,13 +366,20 @@ if (isMain) {
   if (args[0] === '--check') {
     const root = repoRoot(process.cwd())
     const problems = []
-    if (args.length < 2) problems.push('--check needs the asset paths it is about to publish')
-    for (const f of args.slice(1)) {
+    let tag = null; const files = []
+    for (let i = 1; i < args.length; i++) {
+      if (args[i] === '--tag') tag = args[++i] || ''
+      else if (args[i].startsWith('--tag=')) tag = args[i].slice(6)
+      else files.push(args[i])
+    }
+    if (!files.length) problems.push('--check needs the asset paths it is about to publish')
+    for (const f of files) {
       if (!fs.existsSync(f)) { problems.push(`asset ${f} not found`); continue }
       const sha = sha256(f); const hit = passingReceiptFor(root, { sha })
       if (!hit) problems.push(`no drill receipt in drills/ lists ${path.basename(f)} (sha256 ${sha.slice(0, 12)}…)`)
       else if (hit.problems.length) problems.push(`${hit.file}: ${hit.problems.join('; ')}`)
     }
+    if (problems.length && files.length && tag && approvalForTag(tag)) process.exit(0)
     if (problems.length) { console.error(MESSAGE(problems, root)); process.exit(1) }
     console.log('release-gate: every asset has a passing drill receipt'); process.exit(0)
   }
@@ -333,7 +388,7 @@ if (isMain) {
   try { hook = JSON.parse(fs.readFileSync(0, 'utf8') || '{}') } catch { process.exit(0) }
   if (!['Bash', 'PowerShell'].includes(hook.tool_name)) process.exit(0)
   const cmd = hook.tool_input?.command || ''
-  if (!/\bgh\b|\badb\b|publish|release|deploy|upload|promote/i.test(cmd)) process.exit(0)   // fast path
+  if (!/\bgh\b|adb|install|publish|release|deploy|upload|promote/i.test(cmd)) process.exit(0)   // fast path
   const cwd = hook.cwd || process.env.CLAUDE_PROJECT_DIR || process.cwd()
   let verdict
   try { verdict = judge(cmd, cwd) } catch (e) { process.exit(0) }        // a bug in the gate must not brick the shell

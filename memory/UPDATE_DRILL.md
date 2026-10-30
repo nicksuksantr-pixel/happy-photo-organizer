@@ -165,7 +165,9 @@ Add a check when a new failure class appears. That means adding it here **and** 
    - every shortcut's target;
    - the install file list.
 3. **Serve TO** through the loopback feed (§3.1) and trigger the update through FROM's own path. Drill **each** path
-   the release enables: the automatic one and the button. For an auto-install, also drill it with the app busy (a
+   the release enables: the automatic one and the button, and **every delivery route** the field uses. SM, for
+   example, has two: the Server updates from GitHub, and every station updates from its Server. Each check's
+   evidence names each route. A route that cannot be drilled yet blocks the release; it is not a footnote. For an auto-install, also drill it with the app busy (a
    dialog open, text typed). It must wait, not interrupt.
 4. **Wait out the cleanup window**, then measure every check in §4 and copy the evidence lines into the log.
 5. **Failure injection.**
@@ -176,7 +178,9 @@ Add a check when a new failure class appears. That means adding it here **and** 
    `drills/logs/<version>.log`. Then run `node tools/release-gate.mjs --validate drills/<version>.json`. Commit both,
    then publish.
 7. **Publish with the project's publish script, never by hand.** The script must do all of these:
-   - call `node tools/release-gate.mjs --check <assets>` first, and stop on a non-zero exit;
+   - call `node tools/release-gate.mjs --check --tag <tag> <assets>` first, and stop on a non-zero exit. With
+     `--tag`, a bridge release can reach Nick's one-shot note (§8) through the script; the note is consumed right
+     there, so a publish that then fails needs a new note;
    - check **every** exit code (never pipe `gh` through `tail`/`head`/`Select-Object`, which swallows the failure);
    - go draft → upload → publish;
    - read the release back through the same endpoint the field reads (`/releases/latest`) and assert it has exactly
@@ -189,7 +193,9 @@ Add a check when a new failure class appears. That means adding it here **and** 
 - assert versionCode, job count and content, and the same signing certificate;
 - launch, and check there is no FATAL in logcat.
 
-Only then `adb install -r` to Nick's phone, or run the Play upload. For Play, the FROM is the APK from the previous uploaded bundle (`bundletool build-apks --mode=universal`). The lock allows emulator installs, so the drill itself is never blocked.
+Only then `adb install -r` the exact drilled file to Nick's phone, written literally, or run the Play upload.
+Never `flutter install`, `flutter run --release` or `gradlew install…Release` to the phone: they rebuild, so the bytes
+on the phone are not the drilled ones, and the lock refuses them. For Play, the FROM is the APK from the previous uploaded bundle (`bundletool build-apks --mode=universal`). The lock allows emulator installs, so the drill itself is never blocked.
 
 ## 5a · The shared harness — one drill kit, not four
 
@@ -236,7 +242,9 @@ So each app crosses **once**, in this order:
    **Before it ships, drill everything the OLD build can already reach through another real path.** For example,
    a folder/USB update road that runs the same install code, or an installer it can launch. That covers install,
    swap, migration, relaunch, shortcuts, data and tree. Only what no shipped path can reach (normally the check and
-   the download) is left for the after-the-fact drill.
+   the download) is left for the after-the-fact drill. A second delivery route counts too. SM's stations update
+   from their own Server, not from GitHub. A released station pointed at a local candidate Server reaches the
+   bridge before it is published.
 2. It ships on **Nick's one-shot waiver**, with this written in its notes: *bridge, not drilled before release*.
 3. Within the hour, it is **drilled after the fact**: a `drill` account on the previous release updates itself
    through the real channel, and every §4 check is recorded in `drills/<version>.json` with
@@ -257,7 +265,10 @@ a `drill_repo` whose name lacks "drill" or that equals the real repo.
   - `gh release upload` of an `.exe/.zip/.msi/.msix/.apk/.aab/.7z`, or of anything passed as a variable;
   - `gh release edit --draft=false | --latest | --prerelease=false`;
   - `gh api` POST/PATCH/PUT on releases;
-  - `adb install` to anything but an emulator;
+  - `adb install` to anything but an emulator, also when adb or the APK is reached through a variable
+    (`"$ADB" … install`, `adb install $APK`);
+  - `flutter install`, `flutter run --release|--profile`, `gradlew install…Release` and `bundletool install-apks` to
+    anything but an emulator: they put bytes on a phone that no receipt can be matched to;
   - a `*deploy*` / `*upload*` / `*promote*` script that calls the Play Developer API (`androidpublisher`);
   - a `*publish*` / `*release*` script that publishes (gh release, the releases API by hand, adb install, Play) but
     does not itself call `node tools/release-gate.mjs --check <assets>`.
@@ -267,7 +278,10 @@ a `drill_repo` whose name lacks "drill" or that equals the real repo.
   - reading releases;
   - editing notes.
 - **Waiver: Nick's one-shot note.** `~/.claude/release-approval.json` holds `{"tag":"vX","reason":"…","expiresEpochMs":…}`
-  and is consumed on use. Claude writes it only on Nick's explicit words for that tag.
+  and is consumed on use. Claude writes it only on Nick's explicit words for that tag. The hook reads it when the tag
+  appears in the command. A publish script reads it through `--check --tag <tag> <assets>`.
 - **What it cannot catch, stated rather than implied.** A receipt written by hand to get past it, which the rule
   forbids. And a release made outside Claude Code: GitHub's website, or a terminal Nick runs himself. The lock catches
-  forgetting, not fraud. Like the agent-cap hook, it **fails open** if `node` cannot run.
+  forgetting, not fraud. Like the agent-cap hook, it **fails open** if `node` cannot run. A debug `flutter run` or
+  `gradlew installDebug` onto a phone also passes: that is development, not a release. It still replaces the app on
+  that phone when the debug build shares the package name.
