@@ -4113,6 +4113,112 @@ def test_the_correction_route_writes_report_drafts_and_nothing_else():
             restore()
 
 
+def test_a_job_that_arrives_again_and_again_never_erases_an_earlier_arrival():
+    """The same `job_id` filed four times into one folder keeps four drafts and
+    four manifests. Before 2026-10-30 only the FIRST name was tested for being
+    taken, so the third arrival wrote over the second's `emr-<id>.json` and
+    `job-<id>.json` - measured answering EMR's question (CHAIN_ALIGNMENT_RESPONSE,
+    path 2b), with a warning that read as if nothing had been replaced.
+
+    The PC still files a resend (refusing one is the `revision` design, not
+    shipped); what it must not do is make an earlier arrival disappear.
+    """
+    if not _have_pillow():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        restore = _sidecar_sandbox(tmp)
+        try:
+            from core import jobshot
+            dest = tmp / "dest"
+            dest.mkdir()
+            jid = "20260926-100000-aaaaaa"
+            notes = ("FIRST", "SECOND", "THIRD", "FOURTH")
+            results = []
+            for n, note in enumerate(notes):
+                arrival = _arrival(tmp / f"arrival-{n}", photos=2,
+                                   job="Overhauled Air Compressor", plain=True,
+                                   work_date="2026-09-26", job_id=jid)
+                (arrival / "emr.json").write_text(json.dumps({"note": note}),
+                                                  encoding="utf-8")
+                r = jobshot.import_job(arrival, dest)
+                assert r.ok, r.error
+                results.append(r)
+            folder = results[0].final_folder
+            assert all(r.final_folder == folder for r in results)
+
+            drafts = ["emr.json", f"emr-{jid}.json",
+                      f"emr-{jid}-2.json", f"emr-{jid}-3.json"]
+            manifests = ["job.json", f"job-{jid}.json",
+                         f"job-{jid}-2.json", f"job-{jid}-3.json"]
+            for r, note, draft, manifest in zip(results, notes, drafts, manifests):
+                # each arrival's draft is on disk with its own content...
+                assert r.extras == [draft], (note, r.extras)
+                assert json.loads((folder / draft).read_text(
+                    encoding="utf-8"))["note"] == note, (note, draft)
+                # ...and its own manifest names that draft
+                assert r.manifest_name == manifest, (note, r.manifest_name)
+                block = json.loads((folder / manifest).read_text(
+                    encoding="utf-8"))["filed"]
+                assert block["extras"] == [draft], (note, block["extras"])
+
+            # every manifest is still a manifest to the archive reader
+            assert len(jobshot._manifests_in(folder)) == 4
+            assert jobshot.unreadable_manifests(dest) == []
+            # and from the third arrival on, the warning says it had been here
+            for r in results[2:]:
+                assert any("arrived here before" in w for w in r.warnings), r.warnings
+            assert not any("arrived here before" in w for w in results[1].warnings)
+        finally:
+            restore()
+
+
+def test_the_receipt_says_when_its_no_cannot_be_trusted():
+    """§4's 404 carries `unreadable_records` when a job record in the archive
+    cannot be parsed - the field the sidecar route's 404 has had since
+    2026-10-02, now on the probe the phone asks BEFORE an upload.
+
+    That probe is where the doubt matters: a damaged `job.json` makes the job
+    look never filed, the phone re-uploads it, and every photograph is filed
+    twice (CHAIN_ALIGNMENT_RESPONSE, path 2a). The status stays 404 - that is
+    the contract - and the 200 shape is untouched (pinned in
+    `test_contract_ping_and_receipt_shapes_are_frozen`).
+    """
+    if not _have_pillow():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        restore = _sidecar_sandbox(tmp)
+        rx = _Receiver(tmp)
+        try:
+            from core import jobshot_index
+            rx.dest.mkdir()
+            jid = "20260926-210000-damage"
+            r = _file_with_draft(tmp, rx.dest, job_id=jid)
+
+            # healthy archive, never-filed job: the plain 404, no noise
+            status, body = _receipt(rx, "20260101-000000-neverxx")
+            assert status == 404, body
+            assert set(body) == {"jobshot", "filed", "job_id"}, body
+
+            (r.final_folder / "job.json").write_bytes(b'{"jobshot": 1, "job_id": "2026')
+            jobshot_index.INDEX_PATH.unlink(missing_ok=True)      # force the scan
+
+            status, body = _receipt(rx, jid)
+            assert status == 404, body
+            assert body["filed"] is False, body
+            assert body["unreadable_records"] == 1, body
+            assert any("unreadable job record" in line for line in rx.logs), rx.logs
+
+            # a hostile id is refused before the archive is read at all
+            status, body = _receipt(rx, "..%2F..%2Fevil")
+            assert status == 404, body
+            assert "unreadable_records" not in body, body
+        finally:
+            rx.close()
+            restore()
+
+
 def test_sidecar_refuses_an_oversized_or_malformed_body():
     """The caps are applied to the SERIALISED content, not to a claim in a
     header - and a body that is not the documented shape is 422, not a

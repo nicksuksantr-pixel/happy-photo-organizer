@@ -358,6 +358,24 @@ and Nick's 2026-10-02 ruling makes a filed folder working state, so no other job
 loses anything. It belongs with the `revision` work, which would make same-job
 resends a replacement on purpose.
 
+### Update, 2026-10-30 — both HPO halves fixed on Nick's go (on `main`, next release)
+
+- **2b no longer overwrites.** When this job's own name is taken too, the next
+  arrival becomes `emr-<id>-2.json` / `job-<id>-2.json`, then `-3`, and so on.
+  The warning now ends *"(this job had arrived here before; that copy is
+  untouched)"*. Measured again: after resend #2 the folder holds `FIRST`,
+  `FULLER` and `THIRD`, with three manifests. Both new names fall inside the
+  reserved patterns (`emr*.json`, `job-*.json`), so no file name is added. **The
+  photos still multiply.** Refusing or merging a resend is the `revision` work,
+  and that is not shipped.
+- **The §4 probe's 404 now carries `unreadable_records`**, as the sidecar route's
+  has done since 2026-10-02. The probe that comes before an upload can now say
+  "I cannot tell" instead of "never filed" when a `job.json` is damaged. This only
+  takes effect once JobShot reads the field on the probe.
+- **No EMR change follows from this.** EMR v0.5.0 (`468d2de`) already hashes every
+  `emr*.json` into `draft_sha256`, so an `-2` draft is caught exactly as an
+  `emr-<id>.json` is.
+
 ---
 
 — Codey (Happy-Photo-Organizer)

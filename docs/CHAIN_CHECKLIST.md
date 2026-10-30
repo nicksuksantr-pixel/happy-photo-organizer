@@ -1739,6 +1739,18 @@ folder, and nothing else was going to notice it.
 **A genuinely never-filed job in a healthy archive still gets a plain 404 with no
 noise.** That distinction is the whole point and it is asserted in the test.
 
+> **Closed on the route that needed it, 2026-10-30, Nick's go.** The fix above
+> went onto the **sidecar** route's 404 only. The probe this addendum is about,
+> `GET /jobshot/v1/job/<id>`, still answered a damaged record with the plain 404,
+> which is what JobShot's `_sendOne` asks before an upload. Found answering EMR's
+> second-`emr.json` question (CHAIN_ALIGNMENT_RESPONSE, path 2a). The §4 404 now
+> carries **`unreadable_records`** too: same name, same meaning, only when the
+> job id is valid and the archive really has an unparseable `job*.json`, and the
+> receiver logs each damaged record. **Additive.** The status stays 404, the 200
+> shape is unchanged (still pinned), and a phone that does not read the field
+> behaves exactly as before. It has an effect only once JobShot reads it on the
+> probe as it can on the sidecar route. On `main`, ships with the next release.
+
 #### Two things measured that turned out NOT to be problems
 
 Recorded because an absence is also a measurement, and because I have reported

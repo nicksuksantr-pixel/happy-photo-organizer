@@ -749,6 +749,28 @@ def _file_group(
             r.warnings.append(f"receipt recorder unavailable: {str(e)[:120]}")
 
 
+def _job_own_name(folder: Path, stem: str, suffix: str,
+                  job_id: str) -> tuple[str, bool]:
+    """The name this job's copy of `<stem><suffix>` takes when the plain name is
+    already used in `folder`: `<stem>-<job_id><suffix>`, and if THAT is taken too,
+    `<stem>-<job_id>-2<suffix>`, `-3`, ... Never a name already on disk.
+
+    The second half is the same `job_id` arriving here again (a resend). Until
+    2026-10-30 only the first name was tested, so a third arrival overwrote the
+    second's draft and manifest - measured answering EMR's question, path 2b in
+    CHAIN_ALIGNMENT_RESPONSE. Returns the name, and whether this job had
+    already arrived here (its own name was taken).
+    """
+    safe = _SAFE_ID_RE.sub("-", job_id) or "second"
+    name = f"{stem}-{safe}{suffix}"
+    again = (folder / name).exists()
+    n = 2
+    while (folder / name).exists():
+        name = f"{stem}-{safe}-{n}{suffix}"
+        n += 1
+    return name, again
+
+
 def _copy_extras(arrival: _Arrival, folder: Path) -> list[str]:
     """Copy the sidecars into the filed folder, untouched, names intact.
 
@@ -756,17 +778,21 @@ def _copy_extras(arrival: _Arrival, folder: Path) -> list[str]:
     function must never be the reason a phone loses the only copy of something.
     A name already taken means another job merged in here first, so the second
     one keeps its own identity (`emr-<job_id>.json`) instead of overwriting a
-    draft that belongs to different work.
+    draft that belongs to different work - or the same job arrived before, and
+    this arrival gets `emr-<job_id>-2.json` rather than erasing that one.
     """
     filed: list[str] = []
     for src in arrival.extras:
         target = folder / src.name
         if target.exists():
-            safe = _SAFE_ID_RE.sub("-", arrival.result.job_id) or "second"
-            target = folder / f"{src.stem}-{safe}{src.suffix}"
+            name, again = _job_own_name(folder, src.stem, src.suffix,
+                                        arrival.result.job_id)
+            target = folder / name
             arrival.result.warnings.append(
                 f"{folder.name} already had {src.name} — this job's was filed "
-                f"as {target.name}")
+                f"as {target.name}" + (
+                    " (this job had arrived here before; that copy is untouched)"
+                    if again else ""))
         try:
             shutil.copy2(src, target)
             filed.append(target.name)
@@ -842,12 +868,14 @@ def _write_manifest(arrival: _Arrival) -> None:
     name = MANIFEST_NAME
     if (folder / name).exists():
         # another job's manifest is already here — never overwrite it, that
-        # would erase the first job's record of what it sent
-        safe = _SAFE_ID_RE.sub("-", result.job_id) or "second"
-        name = f"job-{safe}.json"
+        # would erase the first job's record of what it sent. The same goes for
+        # this job's own earlier arrival: `job-<id>-2.json`, never on top of it.
+        name, again = _job_own_name(folder, "job", ".json", result.job_id)
         result.warnings.append(
             f"folder already had a {MANIFEST_NAME} — this job's manifest was "
-            f"written as {name}")
+            f"written as {name}" + (
+                " (this job had arrived here before; that record is untouched)"
+                if again else ""))
     try:
         with (folder / name).open("w", encoding="utf-8", newline="") as f:
             json.dump(out, f, ensure_ascii=False, indent=2)

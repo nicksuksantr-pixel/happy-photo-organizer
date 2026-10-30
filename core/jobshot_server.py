@@ -28,6 +28,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Callable
 
+from . import jobshot
 from . import jobshot_index as index
 from . import jobshot_receive as receive
 from .catalog import JobCatalog
@@ -150,12 +151,28 @@ class _Handler(BaseHTTPRequestHandler):
 
         job_id = unquote(self.path[len(receive.JOB_PATH_PREFIX):]).strip("/")
         r = self.server.receiver                # type: ignore[attr-defined]
-        entry = index.lookup(job_id, r.dest_root())
+        dest_root = r.dest_root()
+        entry = index.lookup(job_id, dest_root)
         if entry is None:
             # 404 means "not filed here" — the phone keeps its copy, which is
             # the safe direction to be wrong in.
-            self._send(404, {"jobshot": receive.PROTOCOL, "filed": False,
-                             "job_id": job_id})
+            body = {"jobshot": receive.PROTOCOL, "filed": False,
+                    "job_id": job_id}
+            # ...unless this PC cannot read some of its own job records, when
+            # "not filed" may really be "cannot tell". The phone asks this
+            # BEFORE an upload, so a damaged job.json answered plainly here
+            # means the whole job is sent and filed twice. Same field, same
+            # meaning as the sidecar route's 404 (2026-10-02); added here
+            # 2026-10-30 on Nick's go. The status stays 404: that is the contract.
+            if dest_root is not None and index.valid_job_id(job_id):
+                hurt = jobshot.unreadable_manifests(Path(dest_root))
+                if hurt:
+                    body["unreadable_records"] = len(hurt)
+                    r._log(f"receipt for {job_id}: no record, and "
+                           f"{len(hurt)} job record(s) cannot be read")
+                    for bad in hurt:
+                        r._log(f"  unreadable job record: {bad}")
+            self._send(404, body)
             return
         self._send(200, {
             "jobshot": receive.PROTOCOL,

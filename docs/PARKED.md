@@ -86,11 +86,12 @@ at that commit: `an-absence-is-not-a-fact` · `a-true-fact-is-not-evidence-for-t
 | Item | State |
 |---|---|
 | **Sidecar route writes report drafts only**, and **the upload never files `report_history.json`** | Done, with JobShot's proposal and Nick's go. EMR v0.4.9 writes its own `report_history.json` into the job folder (CHAIN_ALIGNMENT §4). Before this, a phone file under that name would have been filed and listed in `filed.extras`, and a later correction could then have overwritten EMR's history. Now the upload skips the name case-insensitively, with a warning and no `extras` entry, and the correction route answers **409** for anything other than `emr.json` / `emr-*.json`. 2 new tests, both red on the old code; the multi-file tests now use `emr-notes.json` etc. instead of `notes.json`. **Needs a CHANGELOG entry at release.** |
+| **A resend never erases an earlier arrival**, and **the §4 probe's 404 says when it cannot be trusted** (Nick, 2026-10-30: *"1+2"*) | Both were found answering EMR's second-`emr.json` question (`CHAIN_ALIGNMENT_RESPONSE.md`, paths 2b and 2a). (1) `_copy_extras` / `_write_manifest` only checked the first name, so a third arrival of one `job_id` overwrote the second's `emr-<id>.json` and `job-<id>.json`. Now `_job_own_name` goes on to `-2`, `-3` and so on, and the warning says the job had arrived before. (2) `GET /jobshot/v1/job/<id>` now adds `unreadable_records` to its 404 when a `job*.json` cannot be parsed. This is the same field the sidecar route has had since 2026-10-02. It is additive, the status is still 404, and it **only helps once JobShot reads it on the probe**. 2 new tests, both red on the old code. Photos still multiply on a resend, which is the `revision` work. **Needs a CHANGELOG entry at release.** |
 
 ## State of the tree, at the time of writing
 
     VERSION 1.063 (2026-10-23 — "offline" no longer reads "up to date"), see CHANGELOG
-    179/179 tests green
+    181/181 tests green
     working tree clean, 0 ahead / 0 behind origin
     releases go through tools/publish_release.py — 8 gates, each proven to refuse,
     and a `latest` that has not caught up is waited for, not reverted
