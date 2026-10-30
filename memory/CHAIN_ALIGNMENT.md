@@ -72,7 +72,8 @@ it retypes anything, except for a job captured before JS v0.026 (§9).
 14. Copy `emr.json` **byte-for-byte and never parse it.** Carry any other `*.json` sidecar the same way
     (a name matching `job.json` / `job-*.json` is read as a manifest, not carried).
 15. Answer the receipt, and record it in `jobshot_filed.json` so `GET /jobshot/v1/job/<id>` can answer a
-    lost reply.
+    lost reply. Its 404 carries `unreadable_records` when a `job*.json` cannot be parsed (HPO `630e674`+), so
+    "not filed" is never claimed from a damaged record.
 
 **On the PC (EMR)**
 
@@ -183,6 +184,7 @@ mapping every filed photo (v1.055+; earlier folders have no map and cannot get o
 types, **frozen by a test.** Named gap: `extras` reports that `copy2` returned without error, **not that
 the bytes on disk are complete.**
 **Guarding §4's reserved names on the PC side** (commit `a9774ae`, 2026-10-29, on Nick's go; it ships with the next HPO release, so it is **not yet on the ship**): a phone file named `report_history.json` (any letter case) is never filed and never listed in `extras`; the sidecar-correction route `POST /jobshot/v1/sidecar` writes only `emr.json` / `emr-*.json` and answers **409** for any other name — JobShot's allowlist proposal, so it also covers the next file EMR adds.
+**A resend never erases an earlier arrival** (commit `630e674`, 2026-10-30, on Nick's go; it ships with the next HPO release, so it is **not yet on the ship**): when the same `job_id` arrives again and its own `emr-<id>.json` / `job-<id>.json` is taken, the next arrival goes to `emr-<id>-2.json` / `job-<id>-2.json`, then `-3`, all inside §4's reserved names, and the warning says the earlier copy is untouched. The photos still multiply: refusing or merging a resend is the `revision` work, not shipped. **The probe's 404 now carries `unreadable_records`** (`GET /jobshot/v1/job/<id>`, §3 step 15) when a `job*.json` cannot be parsed, as the sidecar route's has since 2026-10-02, so the probe before an upload can say "cannot tell" instead of "never filed". It is additive and takes effect only once JS reads the field on the probe.
 
 **EMR guarantees:** it never writes to another project's files · a bad draft never fails a report · it
 refuses rather than half-fills an ambiguous folder · unconfirmed values are dropped, not printed ·
@@ -192,7 +194,7 @@ refuses rather than half-fills an ambiguous folder · unconfirmed values are dro
 - **A newer phone draft is caught by content, not by clock, for a report made by v0.5.0 or later.** `report_history.json` records `made_by` and `draft_sha256`, a hash of every `emr*.json` in the folder when the form was filled (button road) or just before the draft was read (automatic road). A report from v0.4.9 or older records neither, so all three paths stay silent for it, as before. Nothing changes on the wire, and no file name is added.
 - **What happens depends on how the newer draft arrived** (the three paths, HPO `442f52d`):
   - **Path 1, the sidecar route replacing `emr.json` in place** (the routine one since JS v0.044): a report the automatic road made is **remade** ("N remade from a newer phone draft"). One made **by hand is only flagged, never remade**, because it may hold tags and text entered at the PC.
-  - **Path 2, a resend adding `emr-<id>.json`:** caught but **refused, not remade** (measured). EMR's reader refuses a folder with two drafts, so the status line says "need you" where v0.4.9 was silent.
+  - **Path 2, a resend adding `emr-<id>.json`** (from HPO `630e674`, a later one adds `emr-<id>-2.json`, `-3`…, never overwriting)**:** caught but **refused, not remade** (measured). EMR's reader refuses a folder with two drafts, so the status line says "need you" where v0.4.9 was silent.
   - **Path 3, a folder with no manifest merged by name:** it can only meet a report made by hand, because the automatic road needs a draft. So it is flagged, never remade.
 - **For the phone's wording** (`emr_promises_test`): "the PC replaced the report" is true **only for an automatic report on path 1**. For a report made by hand, and on path 2, the true sentence is "the PC was told".
 
