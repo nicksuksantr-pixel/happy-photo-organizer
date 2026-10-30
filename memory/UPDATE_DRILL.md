@@ -204,7 +204,9 @@ the house goes back to the emulator system. One emulator serves every Android ap
 `C:\AndroidSdkBuild` (the AVD under `~/.android/avd`). A per-tag waiver is not the routine way to ship an Android
 build. Turning on hardware acceleration (WHPX) is a Windows setting, so it is Nick's step. The drill is the only
 thing #28 needs the emulator for: whether each change is ALSO tested on it day to day stays each project's own
-rule (NotiWallet: unit tests + analyze, Nick 2026-06-11).
+rule. NotiWallet's old 'no emulator' (2026-06-11) was lifted by Nick on 2026-10-31: use it normally, for testing
+and for checks before a real release, at the session's judgment. ScanDocs still asks Nick before every launch
+(his order, 2026-06-12), its drill included.
 
 **Measured on Nick's PC (JS, 2026-10-30):**
 - **Acceleration:** `emulator -accel-check` reports WHPX installed and usable, so nothing has to be switched on.
@@ -218,6 +220,9 @@ rule (NotiWallet: unit tests + analyze, Nick 2026-06-11).
   install is clean and two apps never share a device. It holds nothing but drill data, so the wipe is part of the
   drill. Never use or wipe Nick's own AVDs (`Pixel6_API35`).
 - **Disk:** about 3.5 GB per AVD, plus 3.5 GB for the image and 1.1 GB for the emulator, shared.
+- **Shut it down when the drill ends,** pass or fail (`adb -s emulator-NNNN emu kill`), and check that no
+  `qemu-system` process is left. A forgotten emulator holds 2 to 4 GB of RAM (ScanDocs, 2026-06-12: Nick had
+  to ask for it to be closed).
 
 **Android (`android`, sideloaded with adb or delivered by Play).** On the emulator:
 - install the FROM APK (its release file) and create real jobs;
