@@ -1868,8 +1868,9 @@ Handed to the master in `memory/TO_PROMOTE.md` as its own row.
 ### §3.7 — **LAN_PROTOCOL v1.1.1 · `X-JobShot-Job-Ids` and the probe hold.** Agreed with JobShot 2026-10-30
 
 **Versions:** HPO **v1.065** reads it (built on `main`, not released) · JobShot
-**v0.0xx** sends it (JS fills this in when it ships). Optional on both sides,
-so either may ship first. Called v1.1.1 because v1.2 is already the name of
+**v0.047** sends it (agreed and being built, 2026-10-30). Optional on both
+sides, so either may ship first: an old HPO ignores the header, and without it
+the hold starts when the zip is unpacked. Called v1.1.1 because v1.2 is already the name of
 `revision` in all three repos.
 
 **Why.** The §4 probe answered 404 while a job was still arriving or being
@@ -1906,6 +1907,14 @@ fix on 2026-10-30.
   JobShot version refuses to upload on any status but 200 and 404 (JobShot,
   2026-10-30), so this is safe on phones already shipped. The cap is under the
   phone's 30 s probe timeout, so the phone hears an answer.
+- **The phone's reading:**
+  - Before v0.047 it shows *"The PC refused the job (409)"*. That is safe, but
+    the wording is wrong.
+  - From v0.047 it reads `receiving` and tells the engineer the PC is still
+    receiving the job, so wait a minute and press Send again.
+- **A held probe answers 2xx only for a filed job.** The phone reads any 2xx
+  without `filed: true` as "not filed" and uploads. HPO's held answer is 200
+  only when the lookup finds the job's record, and otherwise 404 or 409.
 - **A broken or aborted upload releases its hold at once.** It filed nothing, so
   the next probe answers 404 and the retry can send.
 
