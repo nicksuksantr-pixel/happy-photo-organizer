@@ -24,21 +24,27 @@ deferred".
   (4000×3000) and answered 200, inside the phone's 30 s.
 
 ### Added
-- **503 `filing: true` on the check, after 120 s.** This bounds a waiting
-  thread. It is never a 404 for a job that is landing. The phone gives up at
-  30 s, so today it never sees this answer.
-
-### Not covered yet
-- **The moments before a Wi-Fi upload is unpacked.** The upload names no job,
-  so HPO only learns the `job_id` once the whole body has arrived and been
-  unpacked. Over loopback that was 1.3–2.2 s of 404; over a vessel link it is
-  the whole transfer time. An `X-JobShot-Job-Ids` header, agreed with JobShot
-  first, closes it.
+- **LAN_PROTOCOL v1.1.1: the `X-JobShot-Job-Ids` upload header**, agreed with
+  JobShot. A phone that names the jobs in its upload gets the wait from the
+  first byte, not only once the zip is unpacked. Without the header there was
+  1.2 s of 404 over loopback, and over a vessel link it would be the whole
+  transfer.
+  - The header is a hint. A malformed or miscounted one is ignored whole and
+    logged, and nothing is ever refused because of it.
+  - A broken upload releases its wait at once, so the phone's retry can send.
+- **409 `receiving: true` after 20 s.** The wait is capped below the phone's
+  30 s, so the phone hears an answer. Every JobShot version refuses to upload on
+  anything but 200 and 404, so this is safe on phones already out there.
+  Measured with the header: one 15-photo job answered 200 after 15.9 s in one
+  run, and 409 after 20.2 s in another.
 
 ### Tests
-- 186/186. Four new, all red on the old code: the check waits and answers
-  200, a failed filing answers 404, the cap answers 503, and one upload ending
-  does not release another upload of the same job.
+- 189/189. Seven new:
+  - six red on the old code: the check waits and answers 200; a failed filing
+    answers 404; the cap answers 409; one upload ending does not release
+    another upload of the same job; the header holds the check while the body
+    is still arriving; a bad header is ignored and never refuses;
+  - one guard: a broken upload releases its wait at once.
 
 ## [1.064] — 2026-10-30 — A phone job sent twice no longer erases anything
 

@@ -81,6 +81,11 @@ JOB_PATH_PREFIX = "/jobshot/v1/job/"
 # correcting wording, is the one Nick does most often.
 SIDECAR_PATH = "/jobshot/v1/sidecar"
 TOKEN_HEADER = "X-JobShot-Token"
+# LAN_PROTOCOL v1.1.1 (agreed with JobShot 2026-10-30): every job_id in an
+# upload, comma-separated, sent with the upload so §4 can hold its probe from
+# the first byte instead of only once the zip is unpacked. A hint, never the
+# truth: the zip decides what is filed, and nothing is refused over it.
+JOB_IDS_HEADER = "X-JobShot-Job-Ids"
 DEFAULT_PORT = 8765
 
 # ─── limits ───
@@ -107,6 +112,28 @@ MAX_SIDECAR_TOTAL = 2 * 1024 * 1024
 # concurrency). Corrections are rare and tiny, so a single lock costs nothing
 # and removes the whole class.
 _SIDECAR_LOCK = threading.RLock()
+
+
+def named_job_ids(raw: str | None, claimed: int) -> tuple[list[str], str]:
+    """Read `X-JobShot-Job-Ids`. Returns (ids, why it was ignored).
+
+    All or nothing: an empty or malformed element, a repeated id, or a count
+    that disagrees with X-JobShot-Jobs (when that was sent) means the header
+    is ignored whole and the upload is filed exactly as without it.
+    """
+    from . import jobshot_index
+
+    if raw is None or not raw.strip():
+        return [], ""
+    ids = [part.strip() for part in raw.split(",")]
+    if not all(jobshot_index.valid_job_id(i) for i in ids):
+        return [], f"{JOB_IDS_HEADER} ignored: an entry is not a job_id"
+    if len(set(ids)) != len(ids):
+        return [], f"{JOB_IDS_HEADER} ignored: it names a job twice"
+    if claimed and len(ids) != claimed:
+        return [], (f"{JOB_IDS_HEADER} ignored: it names {len(ids)} job(s) and "
+                    f"X-JobShot-Jobs says {claimed}")
+    return ids, ""
 
 
 def _discard(path: Path) -> None:

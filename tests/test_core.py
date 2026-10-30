@@ -4378,19 +4378,155 @@ def test_a_held_probe_says_not_filed_when_the_filing_fails():
         assert body["filed"] is False, body
 
 
-def test_a_probe_held_past_its_cap_says_filing_never_not_filed():
-    """A server thread is not held for ever, but running out of patience must
-    not turn into the one answer that sends the whole job again. Past the cap
-    the answer is 503 `filing: true` - not a receipt, and not a 404."""
+def test_a_probe_held_past_its_cap_says_receiving_never_not_filed():
+    """Running out of patience must not turn into the one answer that sends
+    the whole job again. Past the cap the answer is 409 `receiving: true`:
+    every JobShot version refuses to upload on any status but 200 and 404
+    (JobShot, 2026-10-30), and a newer one can say why. The cap sits under the
+    phone's 30 s, so it hears this instead of timing out."""
     if not _have_pillow():
         return
+    from core import jobshot_server as srv
+    assert srv.PROBE_HOLD_SECONDS < 30, srv.PROBE_HOLD_SECONDS
     with tempfile.TemporaryDirectory() as td:
         _waiting, probe, _upload, _flight, _logs = _probe_during_filing(
             Path(td), hold=0.3)
         status, body = probe
-        assert status == 503, body
-        assert body["filed"] is False and body["filing"] is True, body
-        assert body["job_id"] == "20260923-094312-ab12cd", body
+        assert status == 409, body
+        assert body == {"jobshot": 1, "filed": False, "receiving": True,
+                        "job_id": "20260923-094312-ab12cd"}, body
+
+
+def _start_upload(rx, body: bytes, headers: dict, first: int):
+    """Open an upload by hand and send only the first `first` bytes of its body:
+    the moment a large job is still crossing the vessel's Wi-Fi."""
+    import http.client
+    from core import jobshot_receive as recv
+    host, port = rx.base.split("//")[1].split(":")
+    conn = http.client.HTTPConnection(host, int(port), timeout=30)
+    conn.putrequest("POST", recv.UPLOAD_PATH)
+    conn.putheader(recv.TOKEN_HEADER, rx.token)
+    conn.putheader("Content-Length", str(len(body)))
+    for name, value in headers.items():
+        conn.putheader(name, value)
+    conn.endheaders()
+    conn.send(body[:first])
+    return conn
+
+
+def test_a_named_upload_holds_the_probe_while_its_body_is_still_arriving():
+    """LAN_PROTOCOL v1.1.1: `X-JobShot-Job-Ids` names the jobs in an upload, so
+    the hold can start at the first byte. Without it HPO learns the job_id only
+    once the zip is unpacked, and over a vessel link the whole transfer was a
+    window of 404 (JobShot 938df38, measured here as 1.3-2.2 s on loopback)."""
+    if not _have_pillow():
+        return
+    import threading
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        restore = _sidecar_sandbox(tmp)
+        rx = _Receiver(tmp)
+        jid = "20260923-094312-ab12cd"
+        try:
+            body = _job_zip(tmp)
+            half = len(body) // 2
+            conn = _start_upload(rx, body, {"X-JobShot-Jobs": "1",
+                                            "X-JobShot-Job-Ids": jid}, half)
+            probe = {}
+            p = threading.Thread(target=lambda: probe.update(r=_receipt(rx, jid)))
+            p.start()
+            p.join(0.8)
+            waiting = p.is_alive()
+            conn.send(body[half:])
+            reply = conn.getresponse()
+            status = reply.status
+            reply.read()
+            conn.close()
+            p.join(30)
+            assert waiting, f"the probe answered while the body was arriving: {probe}"
+            assert status == 200, status
+            st, got = probe["r"]
+            assert st == 200 and got["filed"] is True, (st, got)
+        finally:
+            rx.close()
+            restore()
+
+
+def test_the_job_ids_header_is_a_hint_and_never_a_reason_to_refuse():
+    """The zip stays the truth (agreed with JobShot 2026-10-30): a header that is
+    malformed, repeats an id or disagrees with X-JobShot-Jobs is ignored whole,
+    and one naming a job the upload did not file only delays that id's probe
+    until the upload ends. Neither refuses the upload."""
+    from core import jobshot_receive as recv
+    one, two = "20261030-101500-ab12cd", "20261030-111200-0f9e8d"
+    assert recv.named_job_ids(f"{one},{two}", 2) == ([one, two], "")
+    assert recv.named_job_ids(one, 0) == ([one], "")       # no count sent
+    assert recv.named_job_ids(None, 1) == ([], "")
+    assert recv.named_job_ids("", 1) == ([], "")
+    for raw, claimed in [(f"{one},,{two}", 3), (f"{one},../x", 2),
+                         (f"{one},{one}", 2), (f"{one},{two}", 1)]:
+        ids, why = recv.named_job_ids(raw, claimed)
+        assert ids == [] and why, (raw, claimed, ids, why)
+
+    if not _have_pillow():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        restore = _sidecar_sandbox(tmp)
+        rx = _Receiver(tmp)
+        phantom = "20261030-000000-0a0a0a"
+        try:
+            body = _job_zip(tmp)
+            conn = _start_upload(rx, body, {"X-JobShot-Jobs": "1",
+                                            "X-JobShot-Job-Ids": phantom},
+                                 len(body))
+            reply = conn.getresponse()
+            assert reply.status == 200, reply.status
+            reply.read()
+            conn.close()
+            assert any("not filed from this upload" in line and phantom in line
+                       for line in rx.logs), rx.logs
+            status, got = _receipt(rx, phantom)
+            assert status == 404, (status, got)
+
+            conn = _start_upload(rx, _job_zip(tmp / "again"), {
+                "X-JobShot-Jobs": "1", "X-JobShot-Job-Ids": f"{one},{two}"},
+                10 ** 9)
+            reply = conn.getresponse()
+            assert reply.status == 200, reply.status
+            reply.read()
+            conn.close()
+            assert any("X-JobShot-Job-Ids ignored" in line for line in rx.logs), rx.logs
+        finally:
+            rx.close()
+            restore()
+
+
+def test_an_upload_that_breaks_off_releases_its_hold_at_once():
+    """A broken upload filed nothing, so the honest answer is 404 and the
+    phone's retry must be free to send - not held for the full cap."""
+    if not _have_pillow():
+        return
+    import time as _time
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        restore = _sidecar_sandbox(tmp)
+        rx = _Receiver(tmp)
+        jid = "20260923-094312-ab12cd"
+        try:
+            body = _job_zip(tmp)
+            conn = _start_upload(rx, body, {"X-JobShot-Jobs": "1",
+                                            "X-JobShot-Job-Ids": jid},
+                                 len(body) // 3)
+            conn.close()
+            t0 = _time.perf_counter()
+            status, got = _receipt(rx, jid)
+            took = _time.perf_counter() - t0
+            assert status == 404, (status, got)
+            assert took < 10, f"held {took:.1f}s after the upload broke off"
+        finally:
+            rx.close()
+            restore()
 
 
 def test_a_job_id_stays_in_flight_until_every_filing_of_it_ends():

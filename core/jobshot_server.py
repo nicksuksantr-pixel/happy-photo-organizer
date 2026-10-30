@@ -34,12 +34,13 @@ from . import jobshot_receive as receive
 from .catalog import JobCatalog
 from .version import read_version
 
-# How long §4 waits for a job that is still being filed before it gives up and
-# answers 503 `filing: true`. The phone stops listening at 30 s and, per
-# JobShot, aborts before building a zip, so past that the job simply stays
-# Ready on the phone. This only bounds the thread here; it is never a reason
-# to answer 404 for a job that is landing (2026-10-30).
-PROBE_HOLD_SECONDS = 120.0
+# How long §4 waits for a job that is still arriving or being filed before it
+# answers 409 `receiving: true` instead. Under the phone's 30 s, so it hears an
+# answer rather than timing out; and every JobShot version refuses to upload on
+# any status but 200 and 404, so a 409 is safe on phones already shipped
+# (agreed with JobShot 2026-10-30). Never a reason to answer 404 for a job that
+# is landing. A single 15-photo job filed in about 16 s when this was set.
+PROBE_HOLD_SECONDS = 20.0
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -166,8 +167,8 @@ class _Handler(BaseHTTPRequestHandler):
             # (measured 2026-10-30), so wait for the filing and answer then.
             r._log(f"receipt for {job_id}: being filed now - holding the answer")
             if not index.wait_while_filing(job_id, PROBE_HOLD_SECONDS):
-                self._send(503, {"jobshot": receive.PROTOCOL, "filed": False,
-                                 "filing": True, "job_id": job_id})
+                self._send(409, {"jobshot": receive.PROTOCOL, "filed": False,
+                                 "receiving": True, "job_id": job_id})
                 return
             entry = index.lookup(job_id, r.dest_root())
         if entry is None:
@@ -319,6 +320,27 @@ class _Handler(BaseHTTPRequestHandler):
             return
 
         try:
+            claimed = int(self.headers.get("X-JobShot-Jobs", "0"))
+        except ValueError:
+            claimed = 0
+
+        # LAN_PROTOCOL v1.1.1: the jobs this upload says it carries are held
+        # from the first byte, so §4 does not answer 404 for them while a large
+        # body is still crossing the link. Released in `finally`, whatever
+        # happens - a broken upload filed nothing, and its retry must be free.
+        named, why = receive.named_job_ids(
+            self.headers.get(receive.JOB_IDS_HEADER), claimed)
+        if why:
+            r._log(why)
+        held = index.begin_filing(named)
+        try:
+            self._receive_upload(r, dest, length, claimed, held)
+        finally:
+            index.end_filing(held)
+
+    def _receive_upload(self, r, dest, length: int, claimed: int,
+                        named: list[str]) -> None:
+        try:
             data = self.rfile.read(length)
         except OSError as e:
             r._log(f"upload aborted: {str(e)[:120]}")
@@ -337,13 +359,15 @@ class _Handler(BaseHTTPRequestHandler):
                              "error": "the PC could not process the upload"})
             return
 
+        answered = {str(j.get("job_id", "")) for j in result.filed + result.skipped}
+        for job_id in named:
+            if job_id not in answered:
+                r._log(f"{receive.JOB_IDS_HEADER} named {job_id}, "
+                       f"but it was not filed from this upload")
+
         # §3 sends X-JobShot-Jobs. Silence is not success: if the zip claimed
         # more jobs than we accounted for, say so rather than let one vanish
         # between the two lists.
-        try:
-            claimed = int(self.headers.get("X-JobShot-Jobs", "0"))
-        except ValueError:
-            claimed = 0
         accounted = len(result.filed) + len(result.skipped)
         if claimed and accounted < claimed:
             result.warnings.append(

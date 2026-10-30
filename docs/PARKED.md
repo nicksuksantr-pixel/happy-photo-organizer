@@ -110,8 +110,10 @@ EMR takes the newest draft using v1.064's ranking rule.
 
 | Item | State |
 |---|---|
-| **1. The §4 probe waits for a job being filed** | **Built, on `main`.** It covers every route. Measured on one 15-photo job: held 15.7 s and 16.3 s, then 200. After 120 s it answers 503 `filing: true`, never 404. Four tests, red first. **The 503 waits for JobShot's confirmation of what the phone does with it before release.** |
-| **2. Read `X-JobShot-Job-Ids` on the upload**, so the hold starts at the first byte | **Proposed to JS, not built.** One header, a comma-separated list of every `job_id` in the zip, used only to hold probes, never to decide what is filed. Without it, today's phone still gets 404 for 1–2 s over loopback, and for the whole transfer time over Wi-Fi. Needs JS's yes, a protocol version from the Director, and a CHAIN_CHECKLIST line. |
+| **1. The §4 probe waits for a job being filed** | **Built, on `main`.** It covers every route. It waits up to 20 s, then answers 409 `receiving: true`, never 404. JobShot confirmed every phone version refuses to upload on anything but 200 and 404. |
+| **2. Read `X-JobShot-Job-Ids` on the upload**, so the hold starts at the first byte | **Agreed with JS and built, on `main`.** It is LAN_PROTOCOL **v1.1.1**, recorded at `CHAIN_CHECKLIST.md` §3.7. The header is a hint only: a bad one is ignored and logged, and nothing is ever refused because of it. Measured: held from 0.1 s, giving 200 after 15.9 s in one run and 409 after 20.2 s in another. |
+
+189/189, seven new tests (six red first, one guard).
 
 Release plan: one version with both items, so the ship PC takes one update.
 It still has to take v1.064 first.

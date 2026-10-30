@@ -1865,6 +1865,72 @@ Handed to the master in `memory/TO_PROMOTE.md` as its own row.
 
 ---
 
+### §3.7 — **LAN_PROTOCOL v1.1.1 · `X-JobShot-Job-Ids` and the probe hold.** Agreed with JobShot 2026-10-30
+
+**Versions:** HPO **v1.065** reads it (built on `main`, not released) · JobShot
+**v0.0xx** sends it (JS fills this in when it ships). Optional on both sides,
+so either may ship first. Called v1.1.1 because v1.2 is already the name of
+`revision` in all three repos.
+
+**Why.** The §4 probe answered 404 while a job was still arriving or being
+filed, because the receipt is written when filing ends, and on a 404 the phone
+sends the job again. Measured: 23 s of 404, and a resend filed every photo
+twice with two drafts (`CHAIN_ALIGNMENT_RESPONSE.md`, 2026-10-30). Nick took the
+fix on 2026-10-30.
+
+**The header**, on `POST /jobshot/v1/upload`:
+
+    X-JobShot-Job-Ids: 20261030-101500-ab12cd,20261030-111200-0f9e8d
+
+- It lists every `job_id` in the zip, comma-separated, with no spaces, in the
+  zip's folder order. The count equals `X-JobShot-Jobs`. Today the phone sends
+  one job per upload.
+- **It is a hint, and the zip is the truth.** HPO ignores the whole header, logs
+  a warning and files as before if any of these holds:
+  - an entry is empty or fails `^[A-Za-z0-9._-]{1,128}$`;
+  - an id appears twice;
+  - `X-JobShot-Jobs` was sent and disagrees with the count.
+- An id that is named but not filed from that upload is held until the upload
+  ends, then logged. **Nothing is ever refused because of the header.**
+- HPO up to v1.064 ignores the header (it reads no unknown header).
+
+**The hold**, on `GET /jobshot/v1/job/<id>`:
+- A job is "being received" from the first byte of an upload that names it, or,
+  without the header, from the moment its folder is read. It stops when its
+  filing ends, on every route (Wi-Fi, drop zone, script). It is a count, so one
+  of two concurrent uploads of a job ending does not release the other.
+- A probe for such a job waits **up to 20 s**, then answers as usual: 200, or 404
+  if the filing failed.
+- Still receiving after 20 s:
+  **`409 {"jobshot":1,"filed":false,"receiving":true,"job_id":"…"}`**. Every
+  JobShot version refuses to upload on any status but 200 and 404 (JobShot,
+  2026-10-30), so this is safe on phones already shipped. The cap is under the
+  phone's 30 s probe timeout, so the phone hears an answer.
+- **A broken or aborted upload releases its hold at once.** It filed nothing, so
+  the next probe answers 404 and the retry can send.
+
+**Measured on HPO's real receiver, loopback, one job of 15 photos:**
+
+| | Probe | Result |
+|---|---|---|
+| No header, 3000×2250 | 404 for the first 1.2 s, then held 13.4 s | 200 |
+| Header, 4000×3000 (201 MB) | held from 0.1 s for 15.9 s | 200 |
+| Header, 3000×2250 (113 MB) | held from 0.1 s for 20.2 s | **409**, then 200 at 20.9 s |
+
+The same job took 14.7 to 20.9 s on this machine, so a 15-photo job sits right
+at the cap. Over a vessel link the transfer time is added and a 409 becomes
+likely, which is the honest answer. **Not measured:** the ship PC, real phone
+photos, Wi-Fi.
+
+**Still possible after this** (the reason EMR takes the newest draft):
+- a folder moved out of the destination with its receipt row lost;
+- another HPO install answering;
+- a hand import of a job already filed.
+
+— Codey (HPO session)
+
+---
+
 ## §4. EMR — to fill.
 
 ## §5. R&D Director — summary back to Nick.
