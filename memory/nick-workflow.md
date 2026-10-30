@@ -53,16 +53,16 @@
   - **The lock is `tools/release-gate.mjs`**, a PreToolUse hook on Bash/PowerShell, global plus every repo's `.claude/settings.json`. It refuses publishing without a passing receipt for **those exact bytes**. Drafts and emulator installs pass. `node tools/release-gate.mjs --validate <receipt>` checks one receipt.
   - **Never hand-write a receipt and never route around the lock.** Only Nick waives it, once per tag, via `~/.claude/release-approval.json`.
   - **28.1 updater contract:** a loopback-only feed override (`HAPPY_UPDATE_DRILL=1` + `HAPPY_UPDATE_FEED`), check-at-start, and `update.log` with one line per stage plus `STARTED <version>`.
-  - **28.2 install layout:** one fixed per-user folder (never the Desktop or a versioned name) · installer-made shortcuts · update in place, never renaming the folder a shortcut points at (Windows link tracking follows it to the old build) · data outside the install folder · one download location · one instance.
+  - **28.2 install layout:** one fixed per-user folder (never the Desktop or a versioned name) · installer-made shortcuts · update in place, never renaming the folder an icon or shortcut points at (a renamed folder takes the user's icon with it) · data outside the install folder · one download location · one instance.
   - **Migrating a layout is itself a release, drilled FROM the old one.**
-  - **Bootstrap:** no shipped build has the feed override yet, so each app's bridge release (adding the §3 contract) ships once on Nick's waiver and is drilled within the hour after (UPDATE_DRILL.md §7). After that, no exceptions.
+  - **Bootstrap:** no shipped build has the feed override yet, so each app's bridge release (the §3 contract plus whatever must cross with it) ships once on Nick's waiver. Everything the old build can reach through another real path (a folder road, an installer) is drilled BEFORE it ships; only check and download are drilled within the hour after (UPDATE_DRILL.md §7). A declared `drill_repo` in drills/drill.json lets the candidate reach a public test repo without a receipt. After that, no exceptions.
   - **Measured 2026-10-30:** the 4 self-updaters (SM Inno · EMR zip+batch · HPO and PLC home-made installers) are hand-written separately, and none was ever drilled old-packaged → new. Every relaunch, leftover and mutex failure was found in the field.
-  - **Why:** EMR v0.5.3 left a second folder and a shortcut on the old build on Nick's Desktop, after its own report said "packaged exe not drilled".
+  - **Why:** EMR v0.5.3 left a second folder on Nick's Desktop, and the old folder kept the icon's place, after its own report said "packaged exe not drilled".
 
 ## Latest changes (newest first — keep max 10, move older lines to the bottom note)
 
 ★ **2026-10-30 (newest)** — **v3.23 · #28 NO UPDATE DRILL, NO RELEASE — and a lock that enforces it.**
-- **What happened.** EMR v0.5.3 ("the app updates itself") went out with its own report saying the packaged exe was never drilled. On Nick's PC it renamed his Desktop folder to `_previous`, added a second folder, and his icon and shortcut stayed with the old build. Nick: *"so basic — prescribe the strong medicine."*
+- **What happened.** EMR v0.5.3 ("the app updates itself") went out with its own report saying the packaged exe was never drilled. On Nick's PC it renamed his Desktop folder to `_previous` and added a second folder; the old one kept the icon's place, so he opened the old build. Nick: *"so basic — prescribe the strong medicine."*
 - **The rule.** Now: the previous packaged release must update itself to exactly the bytes being published, on a user-like layout, and pass `UPDATE_DRILL.md` §4.
 - **The lock.** `release-gate.mjs` refuses `gh release` / `adb install` without a matching receipt, the same way the agent-cap hook made #16 real.
 - **Plus** the install-layout standard (28.2) and the updater contract (28.1).

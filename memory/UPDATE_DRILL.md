@@ -11,7 +11,7 @@ On 2026-10-30, EMR v0.5.3 went out as "the app updates itself". Its own release 
 packaged exe"**. That same evening the update did this on Nick's PC:
 - it renamed his EMR folder on the Desktop to `…_previous`;
 - the new build appeared as a **second folder**;
-- the old icon kept its place, and his shortcut went with the old build.
+- the old folder kept the icon's place, and Nick opened the old build from it.
 
 Nick: *"how can something this basic be missed — it looks unprofessional."*
 
@@ -86,7 +86,7 @@ to live.
 | Rule | Why |
 |---|---|
 | **One fixed install folder per user**, e.g. `%LOCALAPPDATA%\Programs\<App>\`, created by an installer or by the app's first run. **Never run from the Desktop, Downloads, a USB stick or a folder whose name carries a version.** | A folder on the Desktop *is* the user's icon. Renaming it moves the icon, and so does a second folder. |
-| **Shortcuts (Start menu, and Desktop if wanted) are made by the installer or first run and point at that fixed path.** An update never renames or moves the folder a shortcut points at. | Windows shortcuts can follow a renamed target (link tracking), straight to the old build, and they die when that build is deleted. |
+| **Shortcuts (Start menu, and Desktop if wanted) are made by the installer or first run and point at that fixed path.** An update never renames or moves the folder a shortcut points at. | A renamed folder takes the user's icon with it. Whether a `.lnk` follows a renamed target depends on the case (shell link tracking). EMR measured one that resolved to the original path, which held the new build. Never renaming the folder makes the question moot. |
 | **An update replaces the app in place**: same folder, same exe name. A rollback copy, if kept, lives out of sight (`%LOCALAPPDATA%\<App>\rollback\`) and is deleted after the new build has started cleanly. | The user must never see two copies or have to choose between them. |
 | **User data lives outside the install folder** (`%LOCALAPPDATA%\<App>\data\` or a folder the user chose), never inside it. | Replacing the app must not be able to touch the data. |
 | **One download location**, swept on the ordinary start path (SHARED_LESSONS `an-updater-hoards-what-it-downloads`). | Disks fill on ships. |
@@ -230,8 +230,13 @@ yet be pointed at a candidate without publishing it. Do not redirect `api.github
 a trusted TLS certificate, which means installing a root CA, which is a system security change.
 
 So each app crosses **once**, in this order:
-1. A **bridge release** adds the §3 contract (and the tolerant comparator, if the version shape is changing), and
-   nothing else.
+1. A **bridge release** carries the smallest set that has to cross together: the §3 contract, the tolerant
+   comparator if the version shape is changing, and whatever cannot ship separately without a second undrillable
+   crossing. EMR's bridge, for example, also carries its in-place swap and the layout migration.
+   **Before it ships, drill everything the OLD build can already reach through another real path.** For example,
+   a folder/USB update road that runs the same install code, or an installer it can launch. That covers install,
+   swap, migration, relaunch, shortcuts, data and tree. Only what no shipped path can reach (normally the check and
+   the download) is left for the after-the-fact drill.
 2. It ships on **Nick's one-shot waiver**, with this written in its notes: *bridge, not drilled before release*.
 3. Within the hour, it is **drilled after the fact**: a `drill` account on the previous release updates itself
    through the real channel, and every §4 check is recorded in `drills/<version>.json` with
@@ -240,6 +245,10 @@ So each app crosses **once**, in this order:
 
 If the app's updater already has an override that can point at a separate public test repo (HPO's
 `HAPPY_UPDATE_REPO`), the bridge itself can be drilled first against that repo. Do that instead of the waiver.
+Declare the repo in `drills/drill.json`, giving `"drill_repo": "<owner>/<name-with-drill>"` and
+`"release_repo": "<the real one>"`. The lock then lets `gh release … --repo <drill_repo>` through without a
+receipt, because that upload IS the drill. It refuses the same command against any other repo. It also refuses
+a `drill_repo` whose name lacks "drill" or that equals the real repo.
 
 ## 8 · What the lock does, and does not, do
 

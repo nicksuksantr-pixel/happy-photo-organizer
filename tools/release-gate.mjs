@@ -155,6 +155,25 @@ function words(seg) {
 }
 const isVar = (w) => /\$|%[A-Za-z_]+%|`/.test(w)
 
+const SCRIPT_NAME = /(^|[\\/])[^\\/]*(publish|release|deploy|upload|promote)[^\\/]*\.(py|ps1|sh|bat|cmd|js|mjs)$/i
+const INTERPRETERS = new Set(['python', 'python3', 'py', 'node', 'powershell', 'pwsh', 'bash', 'sh', 'cmd', 'call', 'start', 'uv', 'pipenv', 'poetry'])
+// flags that take a value, so the value is not mistaken for the script
+const VALUE_FLAGS = new Set(['-executionpolicy', '-ep', '-w', '-x', '-X', '--env-file', '--import', '--require', '-r'])
+/** The script a command RUNS, if its name looks like a publisher; null when a script is only named. */
+function scriptRun(w) {
+  const first = path.basename(w[0] || '').toLowerCase().replace(/\.exe$/, '')
+  if (SCRIPT_NAME.test(w[0] || '')) return w[0]                              // .\publish_release.ps1
+  if (!INTERPRETERS.has(first)) return null                                   // grep / cat / git … name it, never run it
+  for (let i = 1; i < w.length; i++) {
+    const x = w[i]
+    if (/^(-c|-e|-Command|--eval|-m)$/i.test(x)) return null                  // inline code or a module, not a file
+    if (x === 'run' && /^(uv|pipenv|poetry)$/.test(first)) continue
+    if (x.startsWith('-') || x.startsWith('/')) { if (VALUE_FLAGS.has(x.toLowerCase())) i++; continue }
+    return SCRIPT_NAME.test(x) ? x : null                                     // the first positional is the script
+  }
+  return null
+}
+
 /** What a command would publish: a list of {kind, …} the gate must clear. */
 export function publishIntents(cmd) {
   const found = []
@@ -177,15 +196,18 @@ export function publishIntents(cmd) {
       }
       const tag = pos[0]; const files = pos.slice(1).map((f) => f.split('#')[0])
       if (verb === 'create' && flags.some((f) => f === '--draft' || f === '-d' || f === '--draft=true')) continue
+      // which repo it targets: the drill's own public test repo is judged differently (judge → isDrillRepo)
+      const ri = rest.findIndex((x) => x === '--repo' || x === '-R')
+      const repo = ri >= 0 ? rest[ri + 1] : ((rest.find((x) => x.startsWith('--repo=')) || '').slice(7) || null)
       if (verb === 'edit') {
         const publishes = flags.some((f) => /^--draft=false$|^--latest(=true)?$|^--prerelease=false$/.test(f))
-        if (publishes) found.push({ kind: 'publish-tag', tag, seg })
+        if (publishes) found.push({ kind: 'publish-tag', tag, seg, repo })
         continue
       }
       // a variable could be anything, including an installer: it has to be written literally to be hashed
       const installables = files.filter((f) => INSTALLABLE.test(f) || isVar(f))
-      if (verb === 'create' && !installables.length) found.push({ kind: 'publish-tag', tag, seg })
-      for (const f of installables) found.push({ kind: 'asset', file: f, tag, seg })
+      if (verb === 'create' && !installables.length) found.push({ kind: 'publish-tag', tag, seg, repo })
+      for (const f of installables) found.push({ kind: 'asset', file: f, tag, seg, repo })
       continue
     }
     if (exe === 'gh' && w[1] === 'api' && w.some((x) => /releases/i.test(x)) &&
@@ -200,17 +222,33 @@ export function publishIntents(cmd) {
       continue
     }
     // A wrapper script that publishes must carry the gate itself, or the gate never sees the gh line.
-    const script = w.find((x) => /(^|[\\/])[^\\/]*(publish|release|deploy|upload|promote)[^\\/]*\.(py|ps1|sh|bat|cmd|js|mjs)$/i.test(x))
+    // Only a script being RUN counts: the command itself, or the first positional argument of an interpreter.
+    // A script merely NAMED (grep, cat, git add, an editor) is not run — NTWL hit that false positive, 2026-10-30.
+    const script = scriptRun(w)
     if (script) found.push({ kind: 'script', file: script, seg })
   }
   return found
 }
 
 // ── the decision ─────────────────────────────────────────────────────────────────────────────────
+/**
+ * The drill's own public test repo, declared in drills/drill.json as `drill_repo` (UPDATE_DRILL §5): a shipped build
+ * can only be pointed at a real GitHub repo, so the candidate has to be published THERE before any receipt can exist.
+ * Allowed only when it is declared, its name says "drill", and it is not the app's real `release_repo`.
+ */
+function isDrillRepo(root, repo) {
+  let m = null
+  try { m = JSON.parse(read(path.join(root, 'drills', 'drill.json'))) } catch { return false }
+  const norm = (r) => String(r || '').toLowerCase().replace(/^https?:\/\/github\.com\//, '').replace(/\.git$/, '')
+  const want = norm(m?.drill_repo)
+  return !!want && norm(repo) === want && /drill/.test(want) && want !== norm(m?.release_repo)
+}
+
 export function judge(cmd, cwd) {
   const root = repoRoot(cwd)
   const problems = []
   for (const it of publishIntents(cmd)) {
+    if (it.repo && isDrillRepo(root, it.repo)) continue               // publishing to the drill's test repo is the drill
     if (it.kind === 'raw-api') { problems.push(`"${it.seg}" publishes through the raw API, which this gate cannot read. Use gh release create/upload/edit.`); continue }
     if (it.kind === 'script') {
       const p = path.resolve(cwd || root, it.file)
