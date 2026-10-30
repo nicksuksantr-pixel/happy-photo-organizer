@@ -9,6 +9,37 @@ Cosmetic / design / V2-scope items that survived round 6 + 7 + 8. All
 catalogued in detail at the bottom of this file under "Round 6
 deferred".
 
+## [Unreleased] — on `main` — The "was this filed?" check waits for a job that is landing
+
+### Fixed
+- **A job still being filed is no longer reported as "not filed".** The
+  receipt is written when filing ends, so during the filing the phone's check
+  (`GET /jobshot/v1/job/<id>`) answered 404, and on a 404 the phone sends the
+  whole job again. Measured 2026-10-30: 404 for 23 s on a 15-photo job, and a
+  resend in that time filed every photo twice, with two report drafts. Now a
+  job is registered as "being filed" from the moment its folder is read until
+  its filing ends, on every route (Wi-Fi, drop zone, script). The check waits
+  for it and then answers 200, or 404 if the filing failed. Measured after the
+  fix, one 15-photo job: the check waited 15.7 s (3000×2250) and 16.3 s
+  (4000×3000) and answered 200, inside the phone's 30 s.
+
+### Added
+- **503 `filing: true` on the check, after 120 s.** This bounds a waiting
+  thread. It is never a 404 for a job that is landing. The phone gives up at
+  30 s, so today it never sees this answer.
+
+### Not covered yet
+- **The moments before a Wi-Fi upload is unpacked.** The upload names no job,
+  so HPO only learns the `job_id` once the whole body has arrived and been
+  unpacked. Over loopback that was 1.3–2.2 s of 404; over a vessel link it is
+  the whole transfer time. An `X-JobShot-Job-Ids` header, agreed with JobShot
+  first, closes it.
+
+### Tests
+- 186/186. Four new, all red on the old code: the check waits and answers
+  200, a failed filing answers 404, the cap answers 503, and one upload ending
+  does not release another upload of the same job.
+
 ## [1.064] — 2026-10-30 — A phone job sent twice no longer erases anything
 
 Three fixes to the phone (JobShot) receiver. All three were found by checking

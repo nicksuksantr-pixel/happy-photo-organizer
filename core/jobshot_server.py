@@ -34,6 +34,13 @@ from . import jobshot_receive as receive
 from .catalog import JobCatalog
 from .version import read_version
 
+# How long §4 waits for a job that is still being filed before it gives up and
+# answers 503 `filing: true`. The phone stops listening at 30 s and, per
+# JobShot, aborts before building a zip, so past that the job simply stays
+# Ready on the phone. This only bounds the thread here; it is never a reason
+# to answer 404 for a job that is landing (2026-10-30).
+PROBE_HOLD_SECONDS = 120.0
+
 
 class _Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
@@ -153,6 +160,16 @@ class _Handler(BaseHTTPRequestHandler):
         r = self.server.receiver                # type: ignore[attr-defined]
         dest_root = r.dest_root()
         entry = index.lookup(job_id, dest_root)
+        if entry is None and index.is_filing(job_id):
+            # The job is landing right now: its receipt is written when the
+            # filing ends. Answering 404 here sent the whole job again
+            # (measured 2026-10-30), so wait for the filing and answer then.
+            r._log(f"receipt for {job_id}: being filed now - holding the answer")
+            if not index.wait_while_filing(job_id, PROBE_HOLD_SECONDS):
+                self._send(503, {"jobshot": receive.PROTOCOL, "filed": False,
+                                 "filing": True, "job_id": job_id})
+                return
+            entry = index.lookup(job_id, r.dest_root())
         if entry is None:
             # 404 means "not filed here" — the phone keeps its copy, which is
             # the safe direction to be wrong in.

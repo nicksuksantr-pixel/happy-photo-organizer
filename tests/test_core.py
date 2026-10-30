@@ -4276,6 +4276,143 @@ def test_the_receipt_says_when_its_no_cannot_be_trusted():
             restore()
 
 
+def _gated_resize(jobshot_mod, *, fail: bool = False):
+    """Make "this job is being filed" a state a test can stand in: every resize
+    waits for `gate`, and `started` is set by the first one. Returns
+    (started, gate, restore)."""
+    import threading
+    real = jobshot_mod.resize_to_target
+    started, gate = threading.Event(), threading.Event()
+
+    def held(src, dst, **kw):
+        started.set()
+        gate.wait(30)
+        if fail:
+            return False, {"error": "made to fail"}
+        return real(src, dst, **kw)
+
+    jobshot_mod.resize_to_target = held
+
+    def restore():
+        jobshot_mod.resize_to_target = real
+    return started, gate, restore
+
+
+def _probe_during_filing(tmp: Path, *, fail: bool = False, hold: float | None = None):
+    """Upload a job, probe it while it is still filing, then let the filing end.
+    Returns (was the probe still waiting after 0.8 s, probe reply, upload
+    reply, was the job in flight while gated, after, receiver logs)."""
+    import threading
+    from core import jobshot, jobshot_index
+    from core import jobshot_server as srv
+    restore = _sidecar_sandbox(tmp)
+    started, gate, unpatch = _gated_resize(jobshot, fail=fail)
+    real_cap = getattr(srv, "PROBE_HOLD_SECONDS", None)
+    if hold is not None:
+        srv.PROBE_HOLD_SECONDS = hold
+    rx = _Receiver(tmp)
+    jid = "20260923-094312-ab12cd"
+    upload, probe = {}, {}
+    try:
+        a = threading.Thread(target=lambda: upload.update(r=rx.post(_job_zip(tmp))))
+        a.start()
+        assert started.wait(10), "the filing never started"
+        in_flight = jobshot_index.is_filing(jid) if hasattr(
+            jobshot_index, "is_filing") else None
+        p = threading.Thread(target=lambda: probe.update(r=_receipt(rx, jid)))
+        p.start()
+        p.join(0.8)
+        waiting = p.is_alive()
+        gate.set()
+        a.join(30)
+        p.join(30)
+        after = jobshot_index.is_filing(jid) if hasattr(
+            jobshot_index, "is_filing") else None
+        return waiting, probe.get("r"), upload.get("r"), (in_flight, after), rx.logs
+    finally:
+        gate.set()
+        rx.close()
+        unpatch()
+        restore()
+        if real_cap is None:
+            if hasattr(srv, "PROBE_HOLD_SECONDS"):
+                del srv.PROBE_HOLD_SECONDS
+        else:
+            srv.PROBE_HOLD_SECONDS = real_cap
+
+
+def test_the_probe_waits_for_a_job_that_is_still_being_filed():
+    """§4 must never say "not filed" about a job that is landing.
+
+    Measured 2026-10-30 (CHAIN_ALIGNMENT_RESPONSE, case 1): the receipt and the
+    manifest are written when filing ENDS, so for 23 s of a 15-photo job the
+    probe answered 404 - and the phone, on a 404, uploads the job again. That
+    second upload was filed: 30 photos, two drafts, two manifests of one job_id.
+    Nick took the fix on 2026-10-30: hold the answer until the filing ends."""
+    if not _have_pillow():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        waiting, probe, upload, (during, after), logs = _probe_during_filing(Path(td))
+        assert waiting, f"the probe answered while its job was filing: {probe}"
+        assert during is True and after is False, (during, after)
+        status, body = probe
+        assert status == 200, body
+        assert body["filed"] is True, body
+        assert body["folder"] == upload[1]["filed"][0]["folder"], (body, upload)
+        assert any("being filed" in line for line in logs), logs
+
+
+def test_a_held_probe_says_not_filed_when_the_filing_fails():
+    """The hold is a wait, not a promise: a filing that fails releases it, and
+    the honest answer is then 404, so the phone keeps its copy and can send."""
+    if not _have_pillow():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        waiting, probe, upload, (during, after), _logs = _probe_during_filing(
+            Path(td), fail=True)
+        assert waiting, f"the probe answered while its job was filing: {probe}"
+        assert upload[1]["ok"] is False, upload
+        assert after is False, after
+        status, body = probe
+        assert status == 404, body
+        assert body["filed"] is False, body
+
+
+def test_a_probe_held_past_its_cap_says_filing_never_not_filed():
+    """A server thread is not held for ever, but running out of patience must
+    not turn into the one answer that sends the whole job again. Past the cap
+    the answer is 503 `filing: true` - not a receipt, and not a 404."""
+    if not _have_pillow():
+        return
+    with tempfile.TemporaryDirectory() as td:
+        _waiting, probe, _upload, _flight, _logs = _probe_during_filing(
+            Path(td), hold=0.3)
+        status, body = probe
+        assert status == 503, body
+        assert body["filed"] is False and body["filing"] is True, body
+        assert body["job_id"] == "20260923-094312-ab12cd", body
+
+
+def test_a_job_id_stays_in_flight_until_every_filing_of_it_ends():
+    """The phone can upload one job twice at the same time (JobShot 938df38:
+    no lock spans its screens). The first upload ending must not release the
+    hold the second still needs. A malformed id is never registered."""
+    from core import jobshot_index as ix
+    jid = "20261030-120000-twice1"
+    first = ix.begin_filing([jid, "../bad"])
+    second = ix.begin_filing([jid])
+    try:
+        assert first == [jid] and second == [jid], (first, second)
+        assert ix.is_filing(jid) and not ix.is_filing("../bad")
+        ix.end_filing(first)
+        assert ix.is_filing(jid), "one upload ending released the other's hold"
+        assert ix.wait_while_filing(jid, 0.1) is False
+    finally:
+        ix.end_filing(second)
+    assert not ix.is_filing(jid)
+    assert ix.wait_while_filing(jid, 0.1) is True
+
+
 def test_sidecar_refuses_an_oversized_or_malformed_body():
     """The caps are applied to the SERIALISED content, not to a claim in a
     header - and a body that is not the documented shape is 422, not a

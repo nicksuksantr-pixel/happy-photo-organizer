@@ -56,6 +56,56 @@ def valid_job_id(job_id: str) -> bool:
     return bool(_JOB_ID_RE.match(str(job_id or "")))
 
 
+# ─── jobs being filed right now ───
+#
+# The receipt is written when filing ENDS, so a probe asked while a job is
+# still landing found nothing and answered 404 - and on a 404 the phone sends
+# the whole job again. Measured 2026-10-30: 23 s of 404 on a 15-photo job, and
+# a resend in that window filed every photo twice. So a job being filed is
+# registered here, and §4 waits for it instead of answering (Nick, 2026-10-30).
+#
+# A count, not a set: the phone can upload one job twice at the same time
+# (JobShot 938df38), and the first upload ending must not release the second.
+# Memory only - after a restart nothing is being filed.
+
+_IN_FLIGHT: dict[str, int] = {}
+_FLIGHT = threading.Condition()
+
+
+def begin_filing(job_ids) -> list[str]:
+    """Register these jobs as being filed. Returns the ids actually registered
+    (malformed ones are dropped) - pass exactly that list to `end_filing`."""
+    ids = [str(j) for j in job_ids if valid_job_id(j)]
+    with _FLIGHT:
+        for j in ids:
+            _IN_FLIGHT[j] = _IN_FLIGHT.get(j, 0) + 1
+    return ids
+
+
+def end_filing(job_ids: list[str]) -> None:
+    """Release what `begin_filing` registered - on success AND on failure."""
+    with _FLIGHT:
+        for j in job_ids:
+            left = _IN_FLIGHT.get(j, 0) - 1
+            if left > 0:
+                _IN_FLIGHT[j] = left
+            else:
+                _IN_FLIGHT.pop(j, None)
+        _FLIGHT.notify_all()
+
+
+def is_filing(job_id: str) -> bool:
+    with _FLIGHT:
+        return str(job_id) in _IN_FLIGHT
+
+
+def wait_while_filing(job_id: str, timeout: float) -> bool:
+    """Wait until nothing is filing this job. True once it is not (or never
+    was); False if it is still being filed when `timeout` runs out."""
+    with _FLIGHT:
+        return _FLIGHT.wait_for(lambda: str(job_id) not in _IN_FLIGHT, timeout)
+
+
 def _load() -> dict:
     try:
         raw = INDEX_PATH.read_text(encoding="utf-8-sig")

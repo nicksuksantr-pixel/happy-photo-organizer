@@ -540,9 +540,15 @@ def import_job(
     arrival = _read_arrival(job_folder)
     if isinstance(arrival, ImportResult):
         return arrival
-    _file_group([arrival], dest_root,
-                target_kb_min=target_kb_min, target_kb_max=target_kb_max,
-                max_dim=max_dim, catalog=catalog, progress_cb=progress_cb)
+    from . import jobshot_index
+    flying = jobshot_index.begin_filing(
+        [arrival.result.job_id] if arrival.result.job_id else [])
+    try:
+        _file_group([arrival], dest_root,
+                    target_kb_min=target_kb_min, target_kb_max=target_kb_max,
+                    max_dim=max_dim, catalog=catalog, progress_cb=progress_cb)
+    finally:
+        jobshot_index.end_filing(flying)
     return arrival.result
 
 
@@ -578,6 +584,32 @@ def import_batch(
             arrivals.append(parsed)
             results[i] = parsed.result
 
+    # From here until the last group is filed, §4 waits instead of answering
+    # 404 for these jobs. Every route comes through here - LAN, drop zone,
+    # script - so a hand import is covered too (2026-10-30).
+    from . import jobshot_index
+    flying = jobshot_index.begin_filing(
+        [a.result.job_id for a in arrivals if a.result.job_id])
+    try:
+        _file_groups(arrivals, dest_root, target_kb_min=target_kb_min,
+                     target_kb_max=target_kb_max, max_dim=max_dim,
+                     catalog=catalog, progress_cb=progress_cb)
+    finally:
+        jobshot_index.end_filing(flying)
+
+    return [results[i] for i in range(len(job_folders))]
+
+
+def _file_groups(
+    arrivals: list[_Arrival],
+    dest_root: Path,
+    *,
+    target_kb_min: int,
+    target_kb_max: int,
+    max_dim: int,
+    catalog: JobCatalog | None,
+    progress_cb: Callable[[int, int, str], None] | None,
+) -> None:
     groups: dict[tuple[str, str], list[_Arrival]] = {}
     for arrival in arrivals:
         groups.setdefault(
@@ -596,8 +628,6 @@ def import_batch(
         _file_group(group, dest_root,
                     target_kb_min=target_kb_min, target_kb_max=target_kb_max,
                     max_dim=max_dim, catalog=catalog, progress_cb=progress_cb)
-
-    return [results[i] for i in range(len(job_folders))]
 
 
 def _file_group(
