@@ -4169,6 +4169,63 @@ def test_a_job_that_arrives_again_and_again_never_erases_an_earlier_arrival():
             for r in results[2:]:
                 assert any("arrived here before" in w for w in r.warnings), r.warnings
             assert not any("arrived here before" in w for w in results[1].warnings)
+
+            # The phone was last told about the LATEST arrival, so that is the
+            # draft it corrects - and the route must find that arrival's record,
+            # not whichever manifest sorts first (`-2` sorts before `-3`).
+            from core import jobshot_index, jobshot_receive as recv
+            res = recv.replace_sidecars(jid, {drafts[-1]: {"note": "FIXED"}}, dest)
+            assert res.ok, (res.status, res.error)
+            for draft, note in zip(drafts[:-1], notes[:-1]):
+                assert json.loads((folder / draft).read_text(
+                    encoding="utf-8"))["note"] == note, draft
+            # and the receipt, rebuilt from the archive, names the same draft
+            jobshot_index.INDEX_PATH.unlink(missing_ok=True)
+            assert jobshot_index.lookup(jid, dest)["extras"] == [drafts[-1]]
+        finally:
+            restore()
+
+
+def test_the_latest_arrival_is_the_jobs_record_whatever_the_names_sort_as():
+    """When one `job_id` has several manifests in a folder (it was sent more than
+    once), the job's record is the LAST arrival: the one the phone was last told
+    about and the one the receipt index names. Arrival order is in the names
+    this PC gives - `job.json`, `job-<id>.json`, `job-<id>-2.json`, ... - and
+    NOT in their sort order: `-3` sorts after `-2` but `-10` sorts before it.
+    """
+    from core import jobshot, jobshot_index
+    jid = "20260926-100000-aaaaaa"
+    other = "20260926-110000-bbbbbb"
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        restore = _sidecar_sandbox(tmp)
+        try:
+            for last in (3, 10):
+                dest = tmp / f"dest-{last}"
+                folder = dest / "26-09-26 Overhauled Air Compressor"
+                folder.mkdir(parents=True)
+                names = (["job.json", f"job-{jid}.json"] +
+                         [f"job-{jid}-{n}.json" for n in range(2, last + 1)])
+                for i, name in enumerate(names):
+                    draft = "emr.json" if i == 0 else \
+                        name.replace("job-", "emr-", 1)
+                    (folder / name).write_text(json.dumps({
+                        "jobshot": 1, "job_id": jid,
+                        "filed": {"extras": [draft], "filed_at": "2026-09-26T10:00:00"},
+                    }), encoding="utf-8")
+                # another job merged in here is never the answer for this one
+                (folder / f"job-{other}.json").write_text(json.dumps({
+                    "jobshot": 1, "job_id": other,
+                    "filed": {"extras": [f"emr-{other}.json"]}}), encoding="utf-8")
+
+                want = f"job-{jid}-{last}.json"
+                got = jobshot.find_manifest_path(folder, jid)
+                assert got is not None and got.name == want, (last, got)
+                assert jobshot.find_manifest_path(folder, other).name == \
+                    f"job-{other}.json"
+                jobshot_index.INDEX_PATH.unlink(missing_ok=True)
+                assert jobshot_index.lookup(jid, dest)["extras"] == \
+                    [f"emr-{jid}-{last}.json"], last
         finally:
             restore()
 

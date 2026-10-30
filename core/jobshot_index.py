@@ -129,22 +129,29 @@ def _scan(dest_root: Path, job_id: str) -> dict | None:
     for folder in folders:
         if jobshot.PENDING_MARKER in folder.name:
             continue
-        for manifest in jobshot._manifests_in(folder):
-            if str(manifest.get("job_id", "")) != str(job_id):
-                continue
-            photos = manifest.get("photos")
-            block = manifest.get("filed") or {}
-            # This manifest belongs to THIS job, so its `extras` are the files
-            # this job filed — which is the right answer even in a merged
-            # folder holding another job's draft as well.
-            extras = block.get("extras")
-            return {
-                "folder": folder.name,
-                "folder_path": str(folder),
-                "photos": len(photos) if isinstance(photos, list) else 0,
-                "extras": [str(e) for e in extras] if isinstance(extras, list) else [],
-                "filed_at": str(block.get("filed_at", "")),
-            }
+        # The same choice the sidecar route makes, so the two never disagree
+        # about which arrival is the job: a job sent more than once has several
+        # manifests here, and its record is the latest (2026-10-30).
+        path = jobshot.find_manifest_path(folder, job_id)
+        if path is None:
+            continue
+        try:
+            manifest = json.loads(path.read_text(encoding="utf-8-sig"))
+        except (OSError, ValueError):
+            continue
+        photos = manifest.get("photos")
+        block = manifest.get("filed") or {}
+        # This manifest belongs to THIS job, so its `extras` are the files
+        # this job filed — which is the right answer even in a merged
+        # folder holding another job's draft as well.
+        extras = block.get("extras")
+        return {
+            "folder": folder.name,
+            "folder_path": str(folder),
+            "photos": len(photos) if isinstance(photos, list) else 0,
+            "extras": [str(e) for e in extras] if isinstance(extras, list) else [],
+            "filed_at": str(block.get("filed_at", "")),
+        }
     return None
 
 

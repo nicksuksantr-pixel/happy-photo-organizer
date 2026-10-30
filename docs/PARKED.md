@@ -8,16 +8,25 @@ Everything below is in git. **Nothing of this project exists only in a session.*
 
 ---
 
-## 🔴 Waiting on Nick
+## 🔴 Waiting on Nick — nothing
 
-| # | Item | What a decision unblocks | Where |
-|---|---|---|---|
-| 1 | **Agent-cap hook: the loop gap.** `for`/`while` calling `agent()` directly is not blocked — 40 agents pass with `MAX_AGENTS: 3` declared. | Tighten it, or reword `CLAUDE.md` #16.1 so a reader does not count less carefully on the strength of it. **JobShot tightened theirs on Nick's instruction to them; I have not acted on a relayed instruction.** | `AGENT_CAP_HOOK_AUDIT.md` |
-| 2 | **Agent-cap hook: a false reason.** A named-array fan-out is refused with *"fans out over runtime data via `.map()`"* — the decision is right, the sentence is false, and it sends the reader hunting for runtime data in a literal array. | Same guard, so bundled with #1 rather than done separately. JobShot has fixed theirs and left the hard part written down: blank strings and comments **before** matching, keep template `${…}` holes, test the stripper. | same |
+**The two agent-cap hook items listed here until 2026-10-30 were already fixed.**
+They arrived through the master sync `e46ffd5` (2026-10-20, "agent cap gates D+E").
+This page was written the same day and never caught up. Re-measured 2026-10-30
+by driving `tools/workflow-agent-cap.mjs` with synthetic payloads, 0 agents:
 
-**Both are changes to the enforcement of a rule in `CLAUDE.md`, so a peer's
-suggestion is not grounds to make them.** They are scoped and ready; one word
-starts them.
+| Script | Now |
+|---|---|
+| `MAX_AGENTS: 3`, `for (let i=0;i<40;i++) await agent(…)` | **refused**: *"a for loop calls agent() 40 times, over 5"* (gate D) |
+| `MAX_AGENTS: 3`, `while (budget.remaining()>5) await agent(…)` | **refused** (gate D) |
+| `MAX_AGENTS: 3`, named literal of 10, `parallel(L.map(…))` | **refused, true reason**: *"fans out 10 ways, over 5"* |
+| `MAX_AGENTS: 1`, literal of 5 | **refused**: *"declares MAX_AGENTS: 1"* (gate E) |
+| `MAX_AGENTS: 3`, literal of 3 | allowed |
+| `MAX_AGENTS: 1`, `log("searching for things (quickly)")` + one `agent()` | allowed (strings are blanked before matching) |
+
+⚠ When driving it from Git Bash, pass the script inside the JSON, not as a bare
+`node -e` argument. The argument path drops the inner `"`, so a string turns into
+code and a false refusal appears that the hook does not actually give.
 
 ---
 
@@ -81,17 +90,20 @@ at that commit: `an-absence-is-not-a-fact` · `a-true-fact-is-not-evidence-for-t
 
 ---
 
-## 📦 On `main`, not released — ships with the next release (Nick, 2026-10-29: *"no release yet"*)
+## 📦 Shipped in v1.064 (2026-10-30, Nick: *"แก้ไขที่เห็นสมควรเลย … แล้วก็ออกเวอร์ชันใหม่ไปเลย"*)
+
+Held on `main` from 2026-10-29 (*"no release yet"*) until this release.
 
 | Item | State |
 |---|---|
-| **Sidecar route writes report drafts only**, and **the upload never files `report_history.json`** | Done, with JobShot's proposal and Nick's go. EMR v0.4.9 writes its own `report_history.json` into the job folder (CHAIN_ALIGNMENT §4). Before this, a phone file under that name would have been filed and listed in `filed.extras`, and a later correction could then have overwritten EMR's history. Now the upload skips the name case-insensitively, with a warning and no `extras` entry, and the correction route answers **409** for anything other than `emr.json` / `emr-*.json`. 2 new tests, both red on the old code; the multi-file tests now use `emr-notes.json` etc. instead of `notes.json`. **Needs a CHANGELOG entry at release.** |
-| **A resend never erases an earlier arrival**, and **the §4 probe's 404 says when it cannot be trusted** (Nick, 2026-10-30: *"1+2"*) | Both were found answering EMR's second-`emr.json` question (`CHAIN_ALIGNMENT_RESPONSE.md`, paths 2b and 2a). (1) `_copy_extras` / `_write_manifest` only checked the first name, so a third arrival of one `job_id` overwrote the second's `emr-<id>.json` and `job-<id>.json`. Now `_job_own_name` goes on to `-2`, `-3` and so on, and the warning says the job had arrived before. (2) `GET /jobshot/v1/job/<id>` now adds `unreadable_records` to its 404 when a `job*.json` cannot be parsed. This is the same field the sidecar route has had since 2026-10-02. It is additive, and the status is still 404. **JobShot reads it from JS v0.045 on** (`9b559fb`, per the Director 2026-10-30, mirror `a2c02a6`): when the field is present, the phone refuses to upload, keeps the job Ready, and tells the engineer to check HPO's log. **So the guard is live only once this release is on the ship's PC.** 2 new tests, both red on the old code. Photos still multiply on a resend, which is the `revision` work. **Needs a CHANGELOG entry at release.** |
+| **The latest arrival is the job's record** | Found while preparing this release, as a direct effect of the no-overwrite fix below. With 4+ arrivals of one `job_id`, `find_manifest_path` returned the first match in sort order (`-2` before `-3`, `-10` before `-2`). A phone correction to the latest draft was therefore refused with 409 *"this job did not file …"*, and with the index lost the receipt named a different draft. Now arrival order is read from the names, and `jobshot_index._scan` uses the same chooser, so the two routes cannot disagree. 2 tests, red first. |
+| **Sidecar route writes report drafts only**, and **the upload never files `report_history.json`** | Done, with JobShot's proposal and Nick's go. EMR v0.4.9 writes its own `report_history.json` into the job folder (CHAIN_ALIGNMENT §4). Before this, a phone file under that name would have been filed and listed in `filed.extras`, and a later correction could then have overwritten EMR's history. Now the upload skips the name case-insensitively, with a warning and no `extras` entry, and the correction route answers **409** for anything other than `emr.json` / `emr-*.json`. 2 new tests, both red on the old code; the multi-file tests now use `emr-notes.json` etc. instead of `notes.json`. CHANGELOG 1.064. |
+| **A resend never erases an earlier arrival**, and **the §4 probe's 404 says when it cannot be trusted** (Nick, 2026-10-30: *"1+2"*) | Both were found answering EMR's second-`emr.json` question (`CHAIN_ALIGNMENT_RESPONSE.md`, paths 2b and 2a). (1) `_copy_extras` / `_write_manifest` only checked the first name, so a third arrival of one `job_id` overwrote the second's `emr-<id>.json` and `job-<id>.json`. Now `_job_own_name` goes on to `-2`, `-3` and so on, and the warning says the job had arrived before. (2) `GET /jobshot/v1/job/<id>` now adds `unreadable_records` to its 404 when a `job*.json` cannot be parsed. This is the same field the sidecar route has had since 2026-10-02. It is additive, and the status is still 404. **JobShot reads it from JS v0.045 on** (`9b559fb`, per the Director 2026-10-30, mirror `a2c02a6`): when the field is present, the phone refuses to upload, keeps the job Ready, and tells the engineer to check HPO's log. **So the guard is live once v1.064 is on the ship's PC.** 2 new tests, both red on the old code. Photos still multiply on a resend, which is the `revision` work. CHANGELOG 1.064. |
 
 ## State of the tree, at the time of writing
 
-    VERSION 1.063 (2026-10-23 — "offline" no longer reads "up to date"), see CHANGELOG
-    181/181 tests green
+    VERSION 1.064 (2026-10-30 — a phone job sent twice no longer erases anything), see CHANGELOG
+    182/182 tests green
     working tree clean, 0 ahead / 0 behind origin
     releases go through tools/publish_release.py — 8 gates, each proven to refuse,
     and a `latest` that has not caught up is waited for, not reverted

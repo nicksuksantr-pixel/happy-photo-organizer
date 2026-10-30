@@ -1,5 +1,12 @@
 # What the agent-cap hook actually catches
 
+> **CLOSED — both defects below are fixed on this copy.** They came in through the
+> master sync `e46ffd5` (2026-10-20): gate D refuses an uncountable loop around
+> `agent()`, the named-array refusal now gives its true reason, and gate E checks
+> the declared number against the fan-out. Strings and comments are blanked before
+> matching. **Re-measured 2026-10-30, 0 agents**: the table is in `PARKED.md`.
+> What follows is the 2026-10-02 audit as it was written.
+
 **Audited 2026-10-02 · 0 agents spent · driven with synthetic `PreToolUse` payloads**
 
 `tools/workflow-agent-cap.mjs`, wired by the tracked `.claude/settings.json`, is

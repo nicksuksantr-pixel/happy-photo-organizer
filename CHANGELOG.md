@@ -9,6 +9,45 @@ Cosmetic / design / V2-scope items that survived round 6 + 7 + 8. All
 catalogued in detail at the bottom of this file under "Round 6
 deferred".
 
+## [1.064] — 2026-10-30 — A phone job sent twice no longer erases anything
+
+Three fixes to the phone (JobShot) receiver. All three were found by checking
+what happens to a job folder after EMR has already written its report.
+
+### Fixed
+- **A job that arrives again never overwrites its earlier arrival.** A third
+  arrival of the same job used to write over the second one's report draft
+  (`emr-<id>.json`) and record (`job-<id>.json`), and the warning gave no sign
+  of it. Now each arrival gets the next free name (`emr-<id>-2.json`,
+  `job-<id>-2.json`, `-3`, ...), and the warning says the job had arrived here
+  before.
+- **A correction from the phone reaches the latest arrival.** When a job had
+  several records in one folder, the correction route used whichever record's
+  name sorted first, and `-2` sorts before `-3`. A correction to the draft the
+  phone was last told about was refused with *"this job did not file …"*. Now the
+  latest arrival is the job's record, for the correction route and for the "was
+  this filed?" receipt alike.
+- **A phone file named `report_history.json` is never filed.** That name is
+  EMR's own record of the reports it wrote, and it lives in the job folder. The
+  phone keeps its copy and gets a warning. The correction route now writes report
+  drafts only (`emr.json` / `emr-*.json`) and answers 409 for any other name.
+
+### Added
+- **The "was this filed?" check can now say "I can't tell".** When it answers
+  "not filed" (404) and some job record in the archive cannot be read, the
+  answer now carries `unreadable_records`, and each damaged record is named in
+  the receiver log. JobShot v0.045 reads the field and holds the job instead of
+  sending it, and every photo, a second time. The status is still 404, and a
+  phone that does not read the field behaves as before.
+
+### Unchanged, on purpose
+- A resend is still filed, and its photos still land a second time. Refusing or
+  merging a resend is LAN_PROTOCOL v1.2 (`revision`), which needs all three
+  projects.
+
+### Tests
+182/182. Five new tests, each red on the code before it.
+
 ## [1.063] — 2026-10-23 — "Offline" no longer reads "Up to date"
 
 With no network, the update button said **"Up to date (1.062)"** and the manual

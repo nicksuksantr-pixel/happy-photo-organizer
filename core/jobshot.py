@@ -331,6 +331,14 @@ def find_manifest_path(folder: Path, job_id: str) -> Path | None:
     manifest and never create a second: EMR's guard counts the manifests in a
     folder and refuses when two of them claim a draft, so a second file turns
     one usable draft into none (their measurement, 2026-10-02).
+
+    A job sent more than once has several manifests here, and its record is
+    the LATEST arrival: the one the phone was last told about, and the one the
+    receipt index names. Arrival order is in the names `_job_own_name` gives -
+    `job.json`, `job-<id>.json`, `job-<id>-2.json`, ... - not in their sort
+    order, where `-10` comes before `-2`. Picking the first match in sort order
+    sent a correction for a 4th arrival's draft to the 3rd's manifest, which
+    then refused it as "this job did not file" (2026-10-30).
     """
     try:
         entries = sorted(folder.iterdir())
@@ -339,6 +347,9 @@ def find_manifest_path(folder: Path, job_id: str) -> Path | None:
     want = str(job_id or "")
     if not want:
         return None
+    arrival = re.compile(
+        rf"job-{re.escape(_SAFE_ID_RE.sub('-', want) or 'second')}(?:-(\d+))?\.json")
+    best: tuple[int, Path] | None = None
     for f in entries:
         if f.suffix.lower() != ".json":
             continue
@@ -350,8 +361,12 @@ def find_manifest_path(folder: Path, job_id: str) -> Path | None:
             continue
         if isinstance(data, dict) and data.get("jobshot") and \
                 str(data.get("job_id", "")) == want:
-            return f
-    return None
+            # job.json, or a name this PC did not give (renamed by hand): 0
+            m = arrival.fullmatch(f.name)
+            rank = (int(m.group(1)) if m.group(1) else 1) if m else 0
+            if best is None or rank > best[0]:
+                best = (rank, f)
+    return best[1] if best else None
 
 
 def find_filed_job(dest_root: Path, job_name: str,
