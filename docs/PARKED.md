@@ -11,9 +11,11 @@ Everything below is in git. **Nothing of this project exists only in a session.*
 ## 🔴 Waiting on Nick — nothing
 
 **The two agent-cap hook items listed here until 2026-10-30 were already fixed.**
-They arrived through the master sync `e46ffd5` (2026-10-20, "agent cap gates D+E").
-This page was written the same day and never caught up. Re-measured 2026-10-30
-by driving `tools/workflow-agent-cap.mjs` with synthetic payloads, 0 agents:
+They arrived through the master sync `e46ffd5` (2026-10-20, command_pattern
+**v3.19**, "agent cap gates D+E"). This page was written the same day and never
+caught up. Re-measured 2026-10-30 by driving `tools/workflow-agent-cap.mjs` with
+synthetic payloads, 0 agents. **The Director measured the same thing independently
+that day** and found this copy byte-identical to the live `~/.claude/hooks` one:
 
 | Script | Now |
 |---|---|
@@ -102,7 +104,7 @@ Held on `main` from 2026-10-29 (*"no release yet"*) until this release.
 
 ## State of the tree, at the time of writing
 
-    VERSION 1.064 (2026-10-30 — a phone job sent twice no longer erases anything), see CHANGELOG
+    VERSION 1.064 (2026-10-30 — RELEASED 02:45Z, verified from outside; a phone job sent twice no longer erases anything), see CHANGELOG
     182/182 tests green
     working tree clean, 0 ahead / 0 behind origin
     releases go through tools/publish_release.py — 8 gates, each proven to refuse,
