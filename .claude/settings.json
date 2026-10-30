@@ -9,6 +9,15 @@
             "command": "node \"$CLAUDE_PROJECT_DIR/tools/workflow-agent-cap.mjs\""
           }
         ]
+      },
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/tools/release-gate.mjs\""
+          }
+        ]
       }
     ]
   }
