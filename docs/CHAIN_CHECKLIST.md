@@ -1867,8 +1867,8 @@ Handed to the master in `memory/TO_PROMOTE.md` as its own row.
 
 ### §3.7 — **LAN_PROTOCOL v1.1.1 · `X-JobShot-Job-Ids` and the probe hold.** Agreed with JobShot 2026-10-30
 
-**Versions:** HPO **v1.065** reads it (released 2026-10-30 14:04Z; the ship PC
-is still recorded at v1.062) · JobShot **v0.047** sends it (JS `3985b0d`; on
+**Versions:** HPO **v1.065** reads it (released 2026-10-30 14:04Z; on the ship PC
+since 21:09, read from the phone, JS `fb2d69f`) · JobShot **v0.047** sends it (JS `3985b0d`; on
 Nick's phone since 2026-10-30 20:48, installed by adb with versionCode 2047
 read back, JS `66b59d9`). Optional on both
 sides, so either may ship first: an old HPO ignores the header, and without it

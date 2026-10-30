@@ -64,7 +64,7 @@ does not. All three of us had been pressing. §3.6.
 | HPO | implemented v1.060, hardened v1.062 |
 | JobShot | built and installed, v0.038+ |
 | EMR | v0.4.7 live; v0.4.2 refuses two drafts under one manifest |
-| **The real PC** | `DESKTOP-NPAM51V` · `192.168.110.167` · ship **`ENA CHALLENGER`** · **v1.062** |
+| **The real PC** | `DESKTOP-NPAM51V` · `192.168.110.192:8765` (was `.167`) · ship **`ENA CHALLENGER`** · **v1.065**, read from Nick's phone 2026-10-30 21:09: *"happy-photo-organizer 1.065 · ENA CHALLENGER — ready"* (JS `fb2d69f`) |
 | **This machine** | ship **`ENA Test`** — the **test** install. Its archive is not Nick's real one. |
 | Exercised in anger | **zero.** One cable test, 2026-10-03 06:49:14, on **v1.060** — 44 min before v1.062 existed. |
 
@@ -116,7 +116,7 @@ EMR takes the newest draft using v1.064's ranking rule.
 189/189, seven new tests (six red first, one guard).
 
 **Released 2026-10-30 14:04Z** with both items. All publish gates passed, including the check that a v1.064 user is offered it.
-The ship PC is still recorded at **v1.062**; it skips straight to v1.065 when Nick updates it.
+**The ship PC runs v1.065**, seen from Nick's phone at 21:09: JobShot Settings → Test read *"happy-photo-organizer 1.065 · ENA CHALLENGER — ready"*, and logcat showed `"version": "1.065"` (JS `fb2d69f`). So the hold, the 409, the header and v1.064's `unreadable_records` are live on the ship. **No job has been sent through it yet**; the first whole-job send over the ship's Wi-Fi is the first measurement of the hold there.
 JobShot v0.047, which sends the header, is on Nick's phone since 20:48 (EMR's report, 2026-10-30).
 
 ## State of the tree, at the time of writing
