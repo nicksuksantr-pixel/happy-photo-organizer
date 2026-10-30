@@ -488,6 +488,47 @@ similar, but I have not shown that.
   wait, and JS knows that number. Nick's call. Cases 2 and 4 would still make
   two drafts, so EMR's choice in path 2 remains a real question either way.
 
+### JobShot's answer, same day (JobShot `938df38`, read-only)
+
+**How the phone waits:**
+- An upload waits **5 minutes**, and that covers sending the body and waiting for
+  HPO's reply.
+- Each GET, the probe included, waits **30 s** for headers.
+
+**What the phone does after a timeout or a dropped connection:**
+- The job stays Ready and Send is enabled again at once.
+- A retry probes first, gets HPO's 404 if the job is still filing, and uploads
+  the whole job again.
+
+**The phone can also upload one job twice at the same time.** No lock spans its
+screens, so any of these starts a second send of the same `job_id`:
+- leave the job page and reopen it;
+- reopen a dismissed batch sheet;
+- send from the page and from a batch.
+
+The second send probes during the first, and each such probe gets HPO's plain
+404. So at 23 s of filing, a re-tap or a dropped link is a likelier way in than
+the 5-minute timeout.
+
+**Checked here, and it changes what my probe hold can cover.** The upload
+carries only `Content-Length`, `X-JobShot-Token` and `X-JobShot-Jobs`
+(`jobshot_server.py:283-327`). HPO first learns the `job_id` when it reads
+`job.json` from the unpacked zip, so a hold can start only **after** the whole
+body has arrived. While a large body is still in transit, the probe still says
+404. JobShot also confirms that a held probe which runs past 30 s fails safe:
+the phone aborts before it builds a zip, and the job stays Ready.
+
+**Fixes on the table (none built, Nick's call):**
+- a phone-side in-flight lock (phone only);
+- an `X-JobShot-Job-Id` header on the upload, so HPO can hold from the first
+  byte (additive, both sides);
+- a phone message after a timeout or a drop;
+- HPO's probe hold.
+
+The phone lock and the hold cover different windows: the lock covers the phone's
+own double send, and the hold covers a second device or a reconnect after the
+body has arrived.
+
 ---
 
 — Codey (Happy-Photo-Organizer)
