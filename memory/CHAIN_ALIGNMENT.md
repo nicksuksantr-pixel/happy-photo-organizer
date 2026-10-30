@@ -91,8 +91,10 @@ it retypes anything, except for a job captured before JS v0.026 (§9).
        (EMR `scripts/lan_probe.py`, `EMR-LAN-test.zip`; no admin rights, no install). That one run is also the
        firewall/admin check: whether a phone reaches the PC, whether Windows raised a firewall box or asked
        for an admin password, and the network profile (Public blocks by default). It picks the label
-       address. Only then does EMR step 4 start: the lookup endpoint, with its contract published as a
-       document that JS builds against (EMR, 2026-10-30);
+       address. The ship PC's DHCP address already moved (`.167` → `.192`, 2026-10-30), so **a label never
+       prints a raw IP**; the test's `<PC>.LOCAL` and `EMR.LOCAL` QRs decide (EMR). Only then does EMR step 4
+       start: the lookup endpoint, with its contract published as a document that JS builds against (EMR,
+       2026-10-30);
      - stage 2 (scan on New job, count at the first photo): stage 1, and a CHAIN_CHECKLIST line for
        `equipment_id`;
      - stage 3 (the "Last time" offer as `scanned`): the order above. Until then the phone shows no
@@ -240,7 +242,7 @@ the bytes on disk are complete.**
 **EMR guarantees:** it never writes to another project's files · a bad draft never fails a report · it
 refuses rather than half-fills an ambiguous folder · unconfirmed values are dropped, not printed ·
 `parts` photos are never tagged and never printed.
-**Since EMR v0.5.0** (`468d2de`; **published 2026-10-30**, SHA-256 `b2846ae1…`; v0.5.1 replaced it as Latest the same day and only fills the ship code in New machine (`CHL` for ENA Challenger, `58632af`), with no chain change; **v0.5.2 is Latest since 2026-10-30 12:51Z** (`EngineMaintenanceReport_v0.5.2.zip`, 41,857,513 bytes, SHA-256 `eada87a7…`; source `4a992ac`, test `7190965`) and changes path 2 only, below; Nick's two rulings on JS v0.044; these lines checked against the code by EMR, path 2 measured, `634f67f`):
+**Since EMR v0.5.0** (`468d2de`; **published 2026-10-30**, SHA-256 `b2846ae1…`; v0.5.1 replaced it as Latest the same day and only fills the ship code in New machine (`CHL` for ENA Challenger, `58632af`), with no chain change; **v0.5.2 is Latest since 2026-10-30 12:51Z** (`EngineMaintenanceReport_v0.5.2.zip`, 41,857,513 bytes, SHA-256 `eada87a7…`; source `4a992ac`, test `7190965`) and changes path 2 only, below; **v0.5.3 is Latest since 2026-10-30 14:15Z** (`EngineMaintenanceReport_v0.5.3.zip`, 41,866,907 bytes, SHA-256 `b6364f50…`; `99e7ba2`), with no chain change. **EMR now updates itself.** It looks one minute after start, then every 6 h. It downloads in the background, verified against SHA-256, and installs only when the window is closed, never over typing, a dialog or a report being written. It restarts hidden in the tray. `auto_update: false` turns this off. **v0.5.2 and older cannot update themselves: each PC needs one press of Check for updates to reach v0.5.3**; Nick's two rulings on JS v0.044; these lines checked against the code by EMR, path 2 measured, `634f67f`):
 - **The automatic road needs a tagged photo.** It writes a report only when at least one photo is tagged Before or After. Otherwise the status line says "need you: no photo is tagged Before or After yet".
 - **A newer phone draft is caught by content, not by clock, for a report made by v0.5.0 or later.** `report_history.json` records `made_by` and `draft_sha256`, a hash of every `emr*.json` in the folder when the form was filled (button road) or just before the draft was read (automatic road). A report from v0.4.9 or older records neither, so all three paths stay silent for it, as before. Nothing changes on the wire, and no file name is added.
 - **What happens depends on how the newer draft arrived** (the three paths, HPO `442f52d`):
