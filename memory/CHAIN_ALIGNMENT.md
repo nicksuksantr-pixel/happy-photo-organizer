@@ -87,8 +87,12 @@ it retypes anything, except for a job captured before JS v0.026 (§9).
      Measured why: EMR up to v0.5.1 (v0.5.2 did not change `TRUSTED_SOURCES`) drops a `scanned` section and blanks a `scanned` spare field, and the
      automatic road holds the job as "need you".
    - **Still before stages 1-3** (ADR-0008 §Stages; Nick's go passes no gate):
-     - stage 1 (EMR pairing, hello, register copy): the EMR-LAN-test, which chooses the label address,
-       and the lookup endpoint (EMR step 4), with a firewall/admin check on a ship PC;
+     - stage 1 (EMR pairing, hello, register copy): **Nick's EMR-LAN-test on a ship PC with real phones**
+       (EMR `scripts/lan_probe.py`, `EMR-LAN-test.zip`; no admin rights, no install). That one run is also the
+       firewall/admin check: whether a phone reaches the PC, whether Windows raised a firewall box or asked
+       for an admin password, and the network profile (Public blocks by default). It picks the label
+       address. Only then does EMR step 4 start: the lookup endpoint, with its contract published as a
+       document that JS builds against (EMR, 2026-10-30);
      - stage 2 (scan on New job, count at the first photo): stage 1, and a CHAIN_CHECKLIST line for
        `equipment_id`;
      - stage 3 (the "Last time" offer as `scanned`): the order above. Until then the phone shows no
