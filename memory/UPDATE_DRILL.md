@@ -92,6 +92,7 @@ to live.
 | **One download location**, swept on the ordinary start path (SHARED_LESSONS `an-updater-hoards-what-it-downloads`). | Disks fill on ships. |
 | **Exactly one instance** (a named mutex). The updater waits for the app to exit; it never kills work in progress. | Two copies fight over files; a killed app loses typing. |
 | **Moving an existing install into this layout is itself a release that must pass the drill FROM the old layout.** | The migration is where the mess happens. Users on the old layout must end with one app, working shortcuts and their data, through their own updater. |
+| **A migration moves everything keyed to the old path, and retires the old folder last.** That covers Desktop and Start-menu shortcuts, taskbar pins, autostart entries and firewall rules, which are keyed to the exe path. It deletes the old folder only after two things hold. First, the new shortcut reads back to the fixed path. Second, no process runs from the old folder, checked by executable PATH, because the old and new copies share one exe name. Every step resumes on the next start, and the migration never overwrites a newer install. Files the app did not ship are never deleted, and the user is told, in plain words, which folder still holds them. | A half-done move is found by the user, weeks later, on a ship. A folder left behind without a word is the same "two folders" complaint. |
 
 An installer (Inno Setup, per-user, no admin) is the simplest way to meet this table, but it is not required. A
 self-updater that keeps the table is fine. What is required is the table.
@@ -143,14 +144,17 @@ Add a check when a new failure class appears. That means adding it here **and** 
 
 ## 5 · The drill, step by step
 
-1. **FROM.** The version users actually run, normally the current Latest release. If the field is known to be older
-   (an unconfirmed ship PC), also drill from the oldest version still in use. Download its release file and record its
-   SHA-256.
+1. **FROM.** The version users actually run, normally the current Latest release. If the field may be older (a ship
+   PC whose version nobody has read), find out first: Nick reads it from the app. Until then, also drill from the
+   oldest version that could still be in use. An unknown field version is never assumed to be the Latest. Download
+   its release file and record its SHA-256.
 2. **A clean machine state.** Use a separate local **standard** (not admin) Windows user account named `drill`.
    - Windows 11 Home has no Sandbox and no Hyper-V.
    - A per-user install in another account cannot touch Nick's real one.
    - A standard account also proves the update needs no elevation; a hang at a UAC prompt is a fail.
    - Creating that account is Nick's one-time step: an account is not something Claude creates.
+   - If a field PC's profile path has a space or non-ASCII (Thai) characters, give the drill account the same kind
+     of name. An ASCII `drill` cannot catch a quoting bug in a swap script.
    - For a per-machine app, or a release that changes the install mode, use a VirtualBox VM with a snapshot.
 
    ⚠ **Run the harness OUTSIDE the Claude desktop app.** Claude's shell runs inside an MSIX container that
