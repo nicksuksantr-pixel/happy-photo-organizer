@@ -48,6 +48,21 @@ it retypes anything, except for a job captured before JS v0.026 (§9).
 **On the phone (JS)**
 
 1. Create the job: ship, date, name (action chips + equipment; optional ✨ Thai → the archive's English).
+   **Every job gets a new `job_id`, and none is ever reused.** Next month's routine on the same machine is a
+   new job with its own date. It is never an edit or a resend of last month's job (Nick, 2026-10-30, EMR
+   `ff79d2d`). Measured on 2026-10-30, reading the code, why it must stay so:
+   - HPO files by `job_name` + `work_date`, not by `job_id` (`find_filed_job`). A reused id with a new date
+     would still get a new folder.
+   - But the phone asks `GET /jobshot/v1/job/<id>` before it sends (step 15; JS `statusOf`). It would find
+     last month's filing, mark the new job filed and **never send it**, with no error anywhere.
+   - JS mints a new id for every job today, *Do it now* included (`JobStore.createJob`).
+   **Nick's direction, not yet agreed in the chain:** New job offers a QR scan. Scanning a machine's label
+   starts the job prefilled with that machine's name and the previous job's details, **never its date or
+   its `job_id`**, so it is a new job by construction and only the photos are new. HPO files it under its
+   own date like any other job; nothing is asked of HPO. The same `equipment_id`, and so the same name,
+   ties it to the earlier reports, and JobShot updates its routine record itself. Open, for JS: where the
+   previous details come from (its register copy, or EMR's LAN lookup once the EMR-LAN-test has run), and
+   the `scanned` provenance word.
 2. Photograph, and **tag each photo Before / After / part-label.** The phone cannot infer this.
 3. Optionally fill the report page: equipment / model / serial, preventive|breakdown, pass|fail, the
    four sections, spare parts.
