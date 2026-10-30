@@ -280,7 +280,9 @@ a `drill_repo` whose name lacks "drill" or that equals the real repo.
   - drafts;
   - emulator installs;
   - reading releases;
-  - editing notes.
+  - editing notes;
+  - a heredoc body or PowerShell here-string that only writes text, such as a chat_log entry that names
+    `adb … install` in a table. A body fed to a shell or to `iex` is still read as commands.
 - **Waiver: Nick's one-shot note.** `~/.claude/release-approval.json` holds `{"tag":"vX","reason":"…","expiresEpochMs":…}`
   and is consumed on use. Claude writes it only on Nick's explicit words for that tag. The hook reads it when the tag
   appears in the command. A publish script reads it through `--check --tag <tag> <assets>`.

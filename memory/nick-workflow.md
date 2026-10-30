@@ -66,11 +66,12 @@
 - **The rule.** Now: the previous packaged release must update itself to exactly the bytes being published, on a user-like layout, and pass `UPDATE_DRILL.md` §4.
 - **The lock.** `release-gate.mjs` refuses `gh release` / `adb install` without a matching receipt, the same way the agent-cap hook made #16 real.
 - **Plus** the install-layout standard (28.2) and the updater contract (28.1).
-- **Tested:** 74 cases (block, allow, chained commands, variables, raw API, adb emulator vs phone, wrapper scripts, the one-shot waiver, the CLI).
+- **Tested:** 85 cases (block, allow, chained commands, variables, raw API, adb emulator vs phone, wrapper scripts, the one-shot waiver, the CLI).
 - **Same night, holes the projects found:**
   - SM: a waiver could never pass through a gated publish script. Fixed: `--check --tag <tag>`.
   - JS: `"$ADB" … install` and `flutter install` to the phone walked past. Both are refused now, along with `gradlew install…Release` and `bundletool install-apks` to a phone.
   - SM: every delivery route is drilled. A station updating from its Server is a real path, not phase 2.
+  - JS: a heredoc that only WROTE prose naming `adb install` was refused (false positive). Heredoc bodies and here-strings are now data, unless fed to a shell or iex.
 
 ★ **2026-10-23** — **v3.22 · #21.2: what `undelivered` and `queued` mean.** `undelivered` = dropped (TTVC refused two in a row); `queued` = held, released late and out of order (NTWL's reply landed after a newer one). ⛔ **v3.21, an hour earlier, made "both ends must share a permission mode" the rule. That overstated it:** Ena, EMR and JS, all in *auto*, then reached the Director in *bypass* at once. The mode is now a suspect to check when one session alone fails, not a rule.
 

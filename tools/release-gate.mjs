@@ -178,10 +178,54 @@ function scriptRun(w) {
   return null
 }
 
+// A heredoc body or a PowerShell here-string is DATA: a chat_log entry naming `adb … install` in a table is not an
+// install (JS hit that false positive, 2026-10-30, and routed around the lock with the Edit tool — the habit a guard
+// must not teach). A body handed to a shell or to iex IS commands, so that one is still read.
+const RUNS_BODY = /^(bash|sh|zsh|dash|ksh|powershell|pwsh|cmd|iex|invoke-expression|invoke-command|ssh)$/i
+const PIPES_TO_SHELL = /\|\s*(bash|sh|zsh|dash|ksh|powershell|pwsh|cmd|iex|invoke-expression)\b/i
+// `<<` inside quotes, or a `<<<` here-string, opens no body: reading one there would hide the lines after it
+function insideQuotes(line, at) {
+  let q = null
+  for (let k = 0; k < at; k++) { const c = line[k]; if (q) { if (c === q) q = null } else if (c === '"' || c === "'") q = c }
+  return !!q
+}
+function stripDataBodies(cmd) {
+  const lines = String(cmd).split('\n'); const out = []
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    const hd = /(?<!<)<<(?!<)(-?)\s*(['"]?)([A-Za-z_][\w.-]*)\2/.exec(line)
+    if (hd && !insideQuotes(line, hd.index)) {
+      out.push(line)
+      const seg = line.slice(0, hd.index).split(/;|&&|\|\||\|/).pop().trim().split(/\s+/)
+      while (seg.length && /^[A-Z_][A-Z0-9_]*=/.test(seg[0])) seg.shift()
+      const consumer = path.basename(seg[0] || '').replace(/\.exe$/i, '')
+      if (RUNS_BODY.test(consumer) || PIPES_TO_SHELL.test(line.slice(hd.index))) continue
+      let j = i + 1
+      while (j < lines.length && (hd[1] ? lines[j].replace(/^\t+/, '') : lines[j]).trimEnd() !== hd[3]) j++
+      i = j                                                        // body and terminator dropped; no terminator = to the end
+      continue
+    }
+    const hs = /@(['"])\s*$/.exec(line)
+    if (hs) {
+      let j = i + 1
+      while (j < lines.length && !lines[j].startsWith(hs[1] + '@')) j++
+      const closing = j < lines.length ? lines[j] : ''
+      out.push(line.slice(0, hs.index))
+      // run through iex & co, the body IS commands: keep them, minus the quote marks (an open ' would swallow them)
+      if (/\b(iex|invoke-expression|invoke-command|powershell|pwsh|bash|scriptblock)\b/i.test(line + '\n' + closing)) out.push(...lines.slice(i + 1, j))
+      if (closing) out.push(closing.slice(2))                      // the rest of the command after '@ (| Set-Content …)
+      i = j
+      continue
+    }
+    out.push(line)
+  }
+  return out.join('\n')
+}
+
 /** What a command would publish: a list of {kind, …} the gate must clear. */
 export function publishIntents(cmd) {
   const found = []
-  for (const seg of splitSegments(String(cmd || ''))) {
+  for (const seg of splitSegments(stripDataBodies(String(cmd || '')))) {
     let w = words(seg); const env = {}
     while (w.length && (w[0] === '&' || w[0] === '.' || /^[A-Z_][A-Z0-9_]*=/.test(w[0]))) {
       const m = /^([A-Z_][A-Z0-9_]*)=(.*)$/.exec(w[0]); if (m) env[m[1]] = m[2]
