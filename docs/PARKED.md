@@ -102,7 +102,7 @@ Held on `main` from 2026-10-29 (*"no release yet"*) until this release.
 | **Sidecar route writes report drafts only**, and **the upload never files `report_history.json`** | Done, with JobShot's proposal and Nick's go. EMR v0.4.9 writes its own `report_history.json` into the job folder (CHAIN_ALIGNMENT §4). Before this, a phone file under that name would have been filed and listed in `filed.extras`, and a later correction could then have overwritten EMR's history. Now the upload skips the name case-insensitively, with a warning and no `extras` entry, and the correction route answers **409** for anything other than `emr.json` / `emr-*.json`. 2 new tests, both red on the old code; the multi-file tests now use `emr-notes.json` etc. instead of `notes.json`. CHANGELOG 1.064. |
 | **A resend never erases an earlier arrival**, and **the §4 probe's 404 says when it cannot be trusted** (Nick, 2026-10-30: *"1+2"*) | Both were found answering EMR's second-`emr.json` question (`CHAIN_ALIGNMENT_RESPONSE.md`, paths 2b and 2a). (1) `_copy_extras` / `_write_manifest` only checked the first name, so a third arrival of one `job_id` overwrote the second's `emr-<id>.json` and `job-<id>.json`. Now `_job_own_name` goes on to `-2`, `-3` and so on, and the warning says the job had arrived before. (2) `GET /jobshot/v1/job/<id>` now adds `unreadable_records` to its 404 when a `job*.json` cannot be parsed. This is the same field the sidecar route has had since 2026-10-02. It is additive, and the status is still 404. **JobShot reads it from JS v0.045 on** (`9b559fb`, per the Director 2026-10-30, mirror `a2c02a6`): when the field is present, the phone refuses to upload, keeps the job Ready, and tells the engineer to check HPO's log. **So the guard is live once v1.064 is on the ship's PC.** 2 new tests, both red on the old code. Photos still multiply on a resend, which is the `revision` work. CHANGELOG 1.064. |
 
-## 🔧 On `main`, not released — stopping one job being filed twice (Nick, 2026-10-30, via the Director)
+## 📦 Shipped in v1.065 — stopping one job being filed twice (Nick, 2026-10-30: *"Yes, I chose all four fixes. Release HPO v1.065 now"*)
 
 Nick took all four fixes for duplicate filings on 2026-10-30. HPO's part is
 items 1 and 2. JobShot builds the phone-side lock and the "wait" message, and
@@ -115,13 +115,14 @@ EMR takes the newest draft using v1.064's ranking rule.
 
 189/189, seven new tests (six red first, one guard).
 
-Release plan: one version with both items, so the ship PC takes one update.
-It still has to take v1.064 first.
+**Released 2026-10-30 14:04Z** with both items. All publish gates passed, including the check that a v1.064 user is offered it.
+The ship PC is still recorded at **v1.062**; it skips straight to v1.065 when Nick updates it.
+JobShot v0.047, which sends the header, is on Nick's phone since 20:48 (EMR's report, 2026-10-30).
 
 ## State of the tree, at the time of writing
 
-    VERSION 1.064 (2026-10-30 — RELEASED 02:45Z, verified from outside; a phone job sent twice no longer erases anything), see CHANGELOG
-    182/182 tests green
+    VERSION 1.065 (2026-10-30 — RELEASED 14:04Z, verified from outside; the "was this filed?" check waits for a job that is landing), see CHANGELOG
+    189/189 tests green
     working tree clean, 0 ahead / 0 behind origin
     releases go through tools/publish_release.py — 8 gates, each proven to refuse,
     and a `latest` that has not caught up is waited for, not reverted
