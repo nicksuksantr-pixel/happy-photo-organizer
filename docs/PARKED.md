@@ -25,10 +25,16 @@ lock `tools/release-gate.mjs`). Plan sent to the Director the same night. **Noth
 - **Bridge v1.066 =** the §3 contract (loopback feed, `update.log` with `STARTED`) plus the fixes: verify the
   API `digest`; stage → copy to rollback → replace file by file → remove leftovers → restore on failure; wait
   for exit instead of killing; auto-install only when idle; tests; the gate's `--check` in the publish script.
-- **Waiting on:**
-  - **Nick:** create a standard Windows account `drill`, plus one scheduled task that runs the harness as it.
-  - **Nick:** approve creating a public test repo.
-  - **Director:** how the gate lets the candidate into that test repo, and whether the §5a house kit is coming.
+- **The Director answered the same night:**
+  - **The gate lets a drill upload through.** `gh release … --repo <X>` needs no receipt only when
+    `drills/drill.json` declares `drill_repo: X`, X's name contains "drill", and X is not the `release_repo`
+    declared beside it. Anything else, the real repo included, still needs the receipt.
+  - **HPO's harness comes first and becomes the house kit.** PowerShell 5.1, `drills/drill.json`, results
+    through `C:\Users\Public\HappyDrill\`. Keep the generic parts (fake feed, runner, assertions) apart from the
+    HPO-only parts (install, fixtures, triggers), so the Director can lift them for EMR, SM and PLC.
+- **Still waiting on Nick:**
+  - create a standard Windows account `drill`, plus one scheduled task that runs the harness as it;
+  - approve creating the public test repo.
 
 ## 🔴 Waiting on Nick — nothing else
 
