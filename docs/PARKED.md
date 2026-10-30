@@ -11,7 +11,18 @@ Everything below is in git. **Nothing of this project exists only in a session.*
 ## 🔴 Waiting on Nick + the Director — rule #28, the update drill (2026-10-30)
 
 **No HPO release can ship until v1.065 has updated itself to it in a drill** (`memory/UPDATE_DRILL.md`,
-lock `tools/release-gate.mjs`). Plan sent to the Director the same night. **Nothing is built yet.**
+lock `tools/release-gate.mjs`). Plan sent to the Director the same night.
+
+**2026-10-31: v1.066 and the harness are built** (`log/log_v1.066.md`, `bug/bug_v1.066.md`, `drills/README.md`).
+U1–U7, U9, U10 fixed; U8 open. **Not released.** What is left, in order:
+1. Nick: go-ahead to create the public test repo `nicksuksantr-pixel/hpo-update-drill` and upload the candidate
+   to it (`drills/README.md`, "Each drill" step 2).
+2. Stage (`drills/kit/Stage-Drill.ps1`), then Nick runs `C:\Users\Public\HPO-drill\run.ps1` as `drill`
+   (the account exists; no session handles its password).
+3. Collect + `--validate`; a passing `drills/1.066.json` → commit → `tools/publish_release.py`.
+A failing check is a code fix and a new candidate (new bytes, new drill), never an edited receipt.
+
+The plan as it stood on 2026-10-30:
 
 - **Confirmed in the released bytes:** v1.065 (setup sha256 `46902c79…cb88`, the digest GitHub's API reports for
   it) reads `HAPPY_UPDATE_REPO`. So the bridge v1.066 can be drilled **before** it ships, from a public test repo,

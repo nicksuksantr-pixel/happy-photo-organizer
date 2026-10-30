@@ -9,6 +9,43 @@ Cosmetic / design / V2-scope items that survived round 6 + 7 + 8. All
 catalogued in detail at the bottom of this file under "Round 6
 deferred".
 
+## [1.066] — 2026-10-31 — The bridge: an update you can prove (built; ships only after its drill, #28)
+
+### Fixed
+- **An installer whose bytes are not the published ones is never run.** The app
+  takes only `HappyPhotoOrganizerSetup.exe` (no "first .exe" fallback), needs
+  GitHub's SHA-256 `digest` for it, checks the download against it, and checks
+  again right before running it. A bad download is deleted and not fetched again.
+- **An update no longer interrupts you.** It waits while a batch runs, a phone
+  job is arriving, Step 3 has folders not filed yet, or a dialog is open, and
+  installs by itself once the app is idle. "Install now" says why it is waiting.
+- **The installer replaces the app exactly, with a way back.** It waits for the
+  app to close (no more `taskkill`), unpacks and checks the update first, keeps
+  the old files aside, removes files the old version had and the new one does
+  not, and puts the old version back (and starts it) if anything goes wrong. An
+  update cut off half way is undone the next time.
+- **A failed update is not retried in a loop.** If an update does not come up
+  (the install failed, or never ran), that version is not downloaded and tried
+  again by itself every few minutes: the update button shows "Retry vX" and says
+  why it failed. A newer release still updates normally. A path too long for
+  Windows is now named as such in the log.
+- **A Desktop shortcut you deleted stays deleted** after an update.
+- **The update path writes a log** (`~/.happy-photo-organizer/logs/update.log`),
+  one line per step, from the app and from the installer.
+- The update confirmation no longer promises that Step 3 survives an update.
+
+### Added
+- The update-drill contract (rule #28, UPDATE_DRILL §3): a drill-only loopback
+  feed, `--check-update-now`, and the installer's `--fresh-into`.
+- `drills/`: the drill harness — a generic kit (`drills/kit/`, for every app in
+  the house) plus HPO's manifest and adapter.
+- `tools/publish_release.py` asks the #28 lock before tagging, and after
+  publishing checks the asset's digest and a re-download against the drilled file.
+
+### Not in this release
+- `data/job_catalog.json` still lives inside the install folder (U8): its own
+  release, drilled, after this one.
+
 ## [1.065] — 2026-10-30 — The "was this filed?" check waits for a job that is landing
 
 ### Fixed

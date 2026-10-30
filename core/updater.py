@@ -3,11 +3,18 @@ updater.py — Check GitHub Releases for newer version, download installer, rela
 
 Public API:
   • check_for_update(current_version, timeout=3.0) -> UpdateInfo | None
-      raises UpdateCheckFailed when GitHub could not be asked
+      raises UpdateCheckFailed when GitHub could not be asked, and
+      UpdateRefused (a subclass) when it answered with something not to install
   • download_installer(url, dest, progress_cb, cancel_event) -> bool
-  • launch_installer_and_exit(installer_path, silent=True)
+  • sha256_of(path) -> str
+  • launch_installer_and_exit(installer_path, silent=True, version="")
 
 Repo is configured via env var `HAPPY_UPDATE_REPO` (owner/name) or REPO constant.
+A drill (UPDATE_DRILL §3.1) can point the check at a loopback feed instead —
+`HAPPY_UPDATE_DRILL=1` plus `HAPPY_UPDATE_FEED=http://127.0.0.1:<port>/...` —
+and nothing else can: a feed that is not loopback, or set without the drill
+switch, is ignored and the line says so. Every stage is written to
+`core.update_log` (~/.happy-photo-organizer/logs/update.log).
 Never blocks app startup: the check runs on a background thread. A network
 error is NOT swallowed into "no update" (v1.063) — it raises UpdateCheckFailed,
 so the caller can say "offline" instead of "up to date".
@@ -17,6 +24,8 @@ exes have no stderr, so on-disk logging is the only way to diagnose failures.
 """
 from __future__ import annotations
 
+import hashlib
+import ipaddress
 import json
 import os
 import re
@@ -26,15 +35,20 @@ import tempfile
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from core import update_log
+
 # Default — Nick will replace via env var or by editing this line at release time
 REPO = os.environ.get("HAPPY_UPDATE_REPO", "nicksuksantr-pixel/happy-photo-organizer")
 INSTALLER_ASSET_NAME = "HappyPhotoOrganizerSetup.exe"
 GITHUB_API = "https://api.github.com"
+DRILL_ENV = "HAPPY_UPDATE_DRILL"
+FEED_ENV = "HAPPY_UPDATE_FEED"
 
 # ─── Debug log (breadcrumbs to %TEMP%) ───
 _LOG_PATH = Path(tempfile.gettempdir()) / "happy-photo-organizer-updater.log"
@@ -87,6 +101,7 @@ class UpdateInfo:
     html_url: str             # release page
     download_url: str         # direct .exe url
     size: int                 # bytes
+    sha256: str = ""          # from the asset's "digest" — required to offer it
 
 
 class UpdateCheckFailed(Exception):
@@ -96,6 +111,14 @@ class UpdateCheckFailed(Exception):
     None, which `check_for_update` already used for "nothing newer" — so with
     no network the button read "Up to date (1.062)" and the manual check logged
     "v1.062 is the latest". An unanswered question is not the answer no.
+    """
+
+
+class UpdateRefused(UpdateCheckFailed):
+    """GitHub answered, and the answer is not something to install: a newer
+    release whose installer carries no SHA-256 digest, or whose download URL is
+    not where installers come from. Not "up to date" either — the button says
+    refused, and the reason is in update.log as a REFUSED line (v1.066).
     """
 
 
@@ -129,8 +152,48 @@ def is_newer(current: str, latest: str) -> bool:
 # ─── GitHub Releases API ───
 
 
+# ─── Where the release feed is ───
+
+
+def drill_mode() -> bool:
+    return os.environ.get(DRILL_ENV, "").strip() == "1"
+
+
+def _is_loopback_http(url: str) -> bool:
+    """http:// to a literal loopback address. `localhost` is not accepted: a
+    hosts file can point it anywhere, and the point is that it cannot leave
+    the machine."""
+    try:
+        u = urllib.parse.urlsplit(url)
+        if u.scheme != "http" or not u.hostname:
+            return False
+        return ipaddress.ip_address(u.hostname).is_loopback
+    except ValueError:
+        return False
+
+
+_FEED_IGNORED_SAID = False
+
+
+def feed_url() -> tuple[str, bool]:
+    """(latest-release URL, is_drill_feed). Read at call time, not import, so a
+    drill's environment is honoured whenever the app was started with it."""
+    global _FEED_IGNORED_SAID
+    feed = os.environ.get(FEED_ENV, "").strip()
+    if feed:
+        if drill_mode() and _is_loopback_http(feed):
+            return feed, True
+        if not _FEED_IGNORED_SAID:
+            _FEED_IGNORED_SAID = True
+            why = ("it is not a loopback http URL" if drill_mode()
+                   else f"{DRILL_ENV}=1 is not set")
+            _debug_log(f"feed override ignored: {why}")
+            update_log.log("CHECK", "-", f"{FEED_ENV} ignored: {why}")
+    return f"{GITHUB_API}/repos/{REPO}/releases/latest", False
+
+
 def _fetch_latest_release(timeout: float) -> dict:
-    url = f"{GITHUB_API}/repos/{REPO}/releases/latest"
+    url, _drill = feed_url()
     # F8 (Tester 2026-06-04): record the resolved repo slug once per check so a
     # wrong/typo'd REPO (or unset HAPPY_UPDATE_REPO in the built exe) surfaces
     # as a diagnosable breadcrumb instead of a permanently-silent no-op updater.
@@ -162,44 +225,90 @@ def _fetch_latest_release(timeout: float) -> dict:
     return data
 
 
+_DIGEST_RE = re.compile(r"sha256:([0-9a-fA-F]{64})")
+
+
 def check_for_update(current_version: str, timeout: float = 3.0) -> UpdateInfo | None:
     """Returns UpdateInfo if a newer release exists, None if GitHub ANSWERED
     and nothing newer is installable. Raises UpdateCheckFailed when no answer
     came back (no network, rate limit, repo not found, a sign-in page) — the
-    caller must not report that as "up to date".
+    caller must not report that as "up to date" — and UpdateRefused when the
+    answer is a newer release that must not be installed.
+
+    v1.066: only the asset named INSTALLER_ASSET_NAME is ever taken. Until then
+    a release without it fell back to "the first .exe attached", so any .exe
+    on the release page became the thing installed over the user's app. And
+    the asset must carry GitHub's SHA-256 `digest`, which the download is held
+    to before it may run.
     """
-    data = _fetch_latest_release(timeout)
-    tag = str(data.get("tag_name") or "").strip()
-    if not tag:
-        raise UpdateCheckFailed("the latest release has no tag")
+    url, drill = feed_url()
+    try:
+        data = _fetch_latest_release(timeout)
+        tag = str(data.get("tag_name") or "").strip()
+        if not tag:
+            raise UpdateCheckFailed("the latest release has no tag")
+    except UpdateCheckFailed as e:
+        update_log.log("CHECK", current_version, f"could not check: {e} (feed {url})")
+        raise
     latest_ver = tag.lstrip("vV")
     if not is_newer(current_version, latest_ver):
+        update_log.log("CHECK", current_version, f"nothing newer: latest is {tag} (feed {url})")
         return None
 
     assets = data.get("assets") or []
-    asset = None
-    for a in assets:
-        if a.get("name") == INSTALLER_ASSET_NAME:
-            asset = a
-            break
-    if not asset:
-        # fallback: first .exe asset
-        for a in assets:
-            if str(a.get("name", "")).lower().endswith(".exe"):
-                asset = a
-                break
-    if not asset:
+    asset = next((a for a in assets if isinstance(a, dict)
+                  and a.get("name") == INSTALLER_ASSET_NAME), None)
+    if asset is None:
+        # a published release whose installer is not attached yet (mid-upload)
+        # offers nothing rather than a broken download
+        update_log.log("CHECK", current_version,
+                       f"{tag} has no {INSTALLER_ASSET_NAME} attached - nothing offered (feed {url})")
         return None
+    update_log.log("CHECK", current_version, f"{tag} is newer (feed {url})")
 
-    return UpdateInfo(
+    def refuse(why: str) -> UpdateRefused:
+        update_log.log("REFUSED", latest_ver, why)
+        _debug_log(f"check_for_update: REFUSED {tag}: {why}")
+        return UpdateRefused(f"v{latest_ver} refused: {why}")
+
+    m = _DIGEST_RE.fullmatch(str(asset.get("digest") or "").strip())
+    if not m:
+        raise refuse(f"{INSTALLER_ASSET_NAME} carries no sha256 digest")
+    download_url = str(asset.get("browser_download_url") or "")
+    if drill:
+        if not _is_loopback_http(download_url):
+            raise refuse(f"a drill feed offered a download that is not loopback: {download_url}")
+    elif urllib.parse.urlsplit(download_url).scheme != "https":
+        raise refuse(f"the download is not https: {download_url}")
+    try:
+        size = int(asset.get("size") or 0)
+    except (TypeError, ValueError):
+        size = 0
+
+    info = UpdateInfo(
         version=latest_ver,
         tag=tag,
         name=str(data.get("name") or tag),
         body=str(data.get("body") or "").strip(),
         html_url=str(data.get("html_url") or ""),
-        download_url=str(asset.get("browser_download_url") or ""),
-        size=int(asset.get("size") or 0),
+        download_url=download_url,
+        size=size,
+        sha256=m.group(1).lower(),
     )
+    update_log.log("FOUND", latest_ver, f"{INSTALLER_ASSET_NAME} {size} bytes sha256={info.sha256}")
+    return info
+
+
+def sha256_of(path: Path) -> str:
+    """Hex SHA-256 of a file, or "" if it cannot be read."""
+    h = hashlib.sha256()
+    try:
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(1024 * 1024), b""):
+                h.update(chunk)
+    except OSError:
+        return ""
+    return h.hexdigest()
 
 
 # ─── Download ───
@@ -384,13 +493,22 @@ def download_installer(
 # ─── Launch installer + exit ───
 
 
-def launch_installer_and_exit(installer_path: Path, silent: bool = True) -> None:
+def launch_installer_and_exit(installer_path: Path, silent: bool = True,
+                              version: str = "") -> None:
     """Spawn installer (detached) then exit current process.
     Silent mode passes --silent --upgrade so installer skips UI.
+
+    The installer waits for this process to be gone before it touches a file
+    (v1.066 — it used to `taskkill /F` it after half a second).
     """
     args: list[str] = [str(installer_path)]
     if silent:
         args.extend(["--silent", "--upgrade"])
+    if version:
+        # settled by the next start: anything but `version` coming up is a
+        # failed install, and that version is not handed over again by itself
+        update_log.begin_attempt(version)
+    update_log.log("HANDOVER", version or "?", f"{installer_path} {' '.join(args[1:])}".strip())
 
     try:
         # DETACHED_PROCESS = 0x00000008, CREATE_NEW_PROCESS_GROUP = 0x00000200

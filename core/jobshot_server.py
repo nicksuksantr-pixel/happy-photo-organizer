@@ -285,6 +285,14 @@ class _Handler(BaseHTTPRequestHandler):
         self._send(result.status, result.to_reply())
 
     def do_POST(self):                         # noqa: N802
+        # counted for the updater, which must not close the app mid-request
+        index.begin_receiving()
+        try:
+            self._post()
+        finally:
+            index.end_receiving()
+
+    def _post(self):
         if self.path == receive.SIDECAR_PATH:
             self._sidecar()
             return

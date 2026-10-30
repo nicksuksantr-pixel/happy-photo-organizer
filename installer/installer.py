@@ -26,6 +26,11 @@ import customtkinter as ctk
 import tkinter as tk
 from PIL import Image, ImageDraw, ImageFilter
 
+# core/ is bundled through the spec's pathex; from source, it is one level up
+if not getattr(sys, "frozen", False):
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from core import install_swap, update_log  # noqa: E402
+
 
 def enable_paste(widget):
     """Make Ctrl+V / right-click → Paste work on Thai keyboard layout.
@@ -342,8 +347,14 @@ class Installer:
         self.create_start_menu = True
         self.launch_after = True
 
-    def install(self, progress_cb=None) -> tuple[bool, str]:
-        """Execute full install. Returns (success, message)"""
+    def install(self, progress_cb=None, require_app_closed: bool = True) -> tuple[bool, str]:
+        """Execute full install. Returns (success, message)
+
+        v1.066: the files are replaced through `core.install_swap` — staged,
+        swapped in place, and rolled back on any failure — instead of being
+        extracted over the live tree. `require_app_closed` refuses while the
+        app is open; the silent upgrade has already waited for it to exit.
+        """
         try:
             assert self.install_dir is not None
             # start at 0% so user sees it animate from beginning
@@ -351,6 +362,10 @@ class Installer:
                 progress_cb(0, "Starting install...")
                 time.sleep(0.15)
                 progress_cb(3, "Preparing install directory...")
+            if require_app_closed and install_swap.app_running() \
+                    and not install_swap.wait_for_app_exit(timeout=5.0):
+                return False, (f"{APP_NAME} is still running. Close it first "
+                               f"(tray icon → Quit), then run Setup again.")
             self.install_dir.mkdir(parents=True, exist_ok=True)
 
             payload = get_payload_path()
@@ -369,15 +384,17 @@ class Installer:
                 progress_cb(8, "Reading payload...")
                 time.sleep(0.1)
                 progress_cb(12, "Extracting application files...")
-            with zipfile.ZipFile(payload, "r") as zf:
-                members = zf.namelist()
-                total = len(members)
-                for i, member in enumerate(members):
-                    zf.extract(member, str(self.install_dir))
-                    # update every file — smooth bar (was throttled every 20 → jumpy)
-                    if progress_cb:
-                        pct = 12 + int(74 * (i + 1) / total)
-                        progress_cb(pct, f"Extracting {Path(member).name[:40]}")
+
+            def _swap_progress(frac: float, msg: str) -> None:
+                if progress_cb:
+                    progress_cb(12 + int(73 * frac), msg)
+
+            ok, msg = install_swap.swap_in(
+                payload, self.install_dir,
+                from_version=self._installed_version(), to_version=APP_VERSION,
+                progress_cb=_swap_progress)
+            if not ok:
+                return False, msg
 
             if progress_cb:
                 progress_cb(85, "Restoring your saved job names...")
@@ -426,16 +443,13 @@ class Installer:
                 if self.create_desktop_shortcut:
                     if progress_cb:
                         progress_cb(89, "Creating Desktop shortcut...")
-                    self._create_shortcut(
-                        exe_path,
-                        Path.home() / "Desktop" / f"{APP_NAME}.lnk",
-                    )
+                    self._create_shortcut(exe_path, desktop_shortcut_path())
                 if self.create_start_menu:
                     if progress_cb:
                         progress_cb(93, "Adding to Start Menu...")
-                    start_menu = Path(os.environ.get("APPDATA", "")) / "Microsoft" / "Windows" / "Start Menu" / "Programs"
-                    start_menu.mkdir(parents=True, exist_ok=True)
-                    self._create_shortcut(exe_path, start_menu / f"{APP_NAME}.lnk")
+                    link = start_menu_shortcut_path()
+                    link.parent.mkdir(parents=True, exist_ok=True)
+                    self._create_shortcut(exe_path, link)
 
             # Create uninstaller + register in Windows Add/Remove Programs
             if progress_cb:
@@ -540,7 +554,9 @@ exit
         if not self.install_dir or not self.install_dir.exists():
             return []
         try:
-            return sorted(self.install_dir.rglob("job_catalog.json"))
+            # never the rollback copy under .update\ — an older catalog
+            return sorted(p for p in self.install_dir.rglob("job_catalog.json")
+                          if install_swap.UPDATE_DIR not in p.relative_to(self.install_dir).parts)
         except Exception:
             return []
 
@@ -600,12 +616,29 @@ exit
         return carried
 
     def _find_exe(self) -> Path | None:
-        """Locate HappyPhotoOrganizer.exe in install_dir (possibly nested)"""
+        """Locate HappyPhotoOrganizer.exe in install_dir (possibly nested).
+        The payload's own place first: an `rglob` alone could as well return
+        the rollback copy under `.update\\` while it still exists."""
         if not self.install_dir:
             return None
+        direct = self.install_dir / "HappyPhotoOrganizer" / APP_EXE_NAME
+        if direct.is_file():
+            return direct
         for p in self.install_dir.rglob(APP_EXE_NAME):
-            return p
+            if install_swap.UPDATE_DIR not in p.parts:
+                return p
         return None
+
+    def _installed_version(self) -> str:
+        """DisplayVersion of the install being replaced, or "none"."""
+        try:
+            import winreg
+            key_path = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\HappyPhotoOrganizer"
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path) as k:
+                v, _ = winreg.QueryValueEx(k, "DisplayVersion")
+                return str(v) or "?"
+        except OSError:
+            return "none"
 
     def _create_shortcut(self, target: Path, link: Path) -> None:
         """Create Windows .lnk via COM (pywin32) or fallback to .bat"""
@@ -958,6 +991,29 @@ class SetupWindow(ctk.CTk):
         self.destroy()
 
 
+def desktop_shortcut_path() -> Path:
+    """The Desktop the shell really uses — it can be redirected (OneDrive, a
+    roaming profile), and then `~/Desktop` is not where the user looks."""
+    try:
+        from win32com.client import Dispatch
+        d = Dispatch("WScript.Shell").SpecialFolders("Desktop")
+        if d and Path(d).is_dir():
+            return Path(d) / f"{APP_NAME}.lnk"
+    except Exception:
+        pass
+    return Path.home() / "Desktop" / f"{APP_NAME}.lnk"
+
+
+def start_menu_shortcut_path() -> Path:
+    return (Path(os.environ.get("APPDATA", "")) / "Microsoft" / "Windows"
+            / "Start Menu" / "Programs" / f"{APP_NAME}.lnk")
+
+
+def _shortcut_exists(link: Path) -> bool:
+    """A shortcut made by `_create_shortcut` — the .lnk, or its .bat fallback."""
+    return link.exists() or link.with_suffix(".bat").exists()
+
+
 def _detect_existing_install_dir() -> Path | None:
     """Find a prior install location via Add/Remove Programs registry. Used by --upgrade."""
     try:
@@ -974,41 +1030,88 @@ def _detect_existing_install_dir() -> Path | None:
 
 
 def _run_silent_upgrade() -> int:
-    """Headless install — used by app's auto-updater. No UI, reuse prior settings."""
-    print(f"[silent-upgrade] {APP_NAME} v{APP_VERSION}")
+    """Headless install — used by app's auto-updater. No UI, reuse prior settings.
+
+    v1.066 (bugs U4, U6, U7):
+    - waits for the app to exit by itself — it hands over and exits — instead
+      of `taskkill /F` after half a second; an app whose window is still open
+      after the wait is left alone and nothing changes;
+    - every outcome goes to update.log (it used to be `print()` from a
+      windowed exe: written nowhere);
+    - re-creates only the shortcuts the user still has. It used to put the
+      Desktop icon back on every update, even one the user had deleted;
+    - comes back by itself either way: the new build on success, the old one
+      (rolled back) on failure.
+    """
+    existing = _detect_existing_install_dir()
     installer = Installer()
-    installer.install_dir = _detect_existing_install_dir() or DEFAULT_INSTALL_DIR
+    installer.install_dir = existing or DEFAULT_INSTALL_DIR
     installer.api_key = ""  # preserved from prior config — installer.install() merges
-    installer.create_desktop_shortcut = True
-    installer.create_start_menu = True
+    desk, start = desktop_shortcut_path(), start_menu_shortcut_path()
+    if existing is None:            # nothing installed yet: a fresh silent install
+        installer.create_desktop_shortcut = installer.create_start_menu = True
+    else:
+        installer.create_desktop_shortcut = _shortcut_exists(desk)
+        installer.create_start_menu = _shortcut_exists(start)
     installer.launch_after = True
-    print(f"[silent-upgrade] target dir: {installer.install_dir}")
+    if not install_swap.wait_for_app_exit(timeout=60.0):
+        if install_swap.app_window_open():
+            why = "the app was still open after 60 s - nothing was changed"
+            update_log.log("FAILED", APP_VERSION, why)
+            update_log.note_attempt_failed(APP_VERSION, why)
+            return 1
+        # its window is gone and it has not exited: not work in progress any
+        # more. Go on; a file it still holds fails the swap, which rolls back.
 
-    # Best-effort: stop a running instance so we can overwrite files
-    try:
-        import subprocess as _sp
-        _sp.run(
-            ["taskkill", "/F", "/IM", APP_EXE_NAME],
-            stdout=_sp.DEVNULL, stderr=_sp.DEVNULL, timeout=5,
-        )
-        time.sleep(0.5)
-    except Exception:
-        pass
-
-    def _cb(pct: int, msg: str):
-        print(f"[silent-upgrade] {pct:3d}%  {msg}")
-
-    ok, msg = installer.install(progress_cb=_cb)
+    ok, msg = installer.install(require_app_closed=False)
     if not ok:
-        print(f"[silent-upgrade] FAILED: {msg}")
+        # The relaunched build must not hand straight back to this installer.
+        # From v1.066 it reads the failure from update-attempt.json; an older
+        # one cannot, so its update checks are pointed nowhere for the session
+        # it is relaunched into (the next start by hand tries once more).
+        paused = not update_log.note_attempt_failed(APP_VERSION, f"install failed: {msg}")
+        if paused:
+            os.environ["HAPPY_UPDATE_REPO"] = update_log.PAUSED_REPO
+        update_log.log("FAILED", APP_VERSION,
+                       f"install failed: {msg}; relaunching what is installed"
+                       + (" with its update checks paused for this session (it predates"
+                          " v1.066 and cannot remember a failed install)" if paused else ""))
+        installer.launch_app()
         return 1
-    print(f"[silent-upgrade] OK — relaunching app")
     installer.launch_app()
+    return 0
+
+
+def _run_fresh_into(target: Path) -> int:
+    """Drill only (UPDATE_DRILL §4 `tree_matches_fresh_install`): install this
+    payload into an empty folder the way a fresh install lays it out — no
+    shortcuts, no registry, no launch, no key — so the drill can hash it
+    against the updated install. Refused without HAPPY_UPDATE_DRILL=1."""
+    if os.environ.get("HAPPY_UPDATE_DRILL", "").strip() != "1":
+        return 2
+    target = Path(target)
+    if target.exists() and any(target.iterdir()):
+        return 3
+    installer = Installer()
+    installer.install_dir = target
+    payload = get_payload_path()
+    if not payload or not payload.exists():
+        return 4
+    update_log.set_enabled(False)      # a reference tree, not an update
+    ok, _msg = install_swap.swap_in(payload, target, from_version="none",
+                                    to_version=APP_VERSION)
+    if not ok:
+        return 1
+    install_swap._rmtree(target / install_swap.UPDATE_DIR)  # what CLEANED leaves
+    installer._write_uninstaller()
     return 0
 
 
 def main() -> int:
     args = sys.argv[1:]
+    if "--fresh-into" in args:
+        i = args.index("--fresh-into")
+        return _run_fresh_into(Path(args[i + 1])) if i + 1 < len(args) else 2
     if "--silent" in args or "--upgrade" in args:
         return _run_silent_upgrade()
     app = SetupWindow()

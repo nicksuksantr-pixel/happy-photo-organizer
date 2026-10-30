@@ -70,6 +70,11 @@ def valid_job_id(job_id: str) -> bool:
 
 _IN_FLIGHT: dict[str, int] = {}
 _FLIGHT = threading.Condition()
+# Requests being received right now, named or not. A phone older than
+# LAN_PROTOCOL v1.1.1 sends no job ids, so `_IN_FLIGHT` cannot see its upload
+# while the body is still crossing the link — this can (v1.066: the updater
+# must not close the app in the middle of one).
+_RECEIVING = 0
 
 
 def begin_filing(job_ids) -> list[str]:
@@ -97,6 +102,25 @@ def end_filing(job_ids: list[str]) -> None:
 def is_filing(job_id: str) -> bool:
     with _FLIGHT:
         return str(job_id) in _IN_FLIGHT
+
+
+def begin_receiving() -> None:
+    global _RECEIVING
+    with _FLIGHT:
+        _RECEIVING += 1
+
+
+def end_receiving() -> None:
+    global _RECEIVING
+    with _FLIGHT:
+        _RECEIVING = max(0, _RECEIVING - 1)
+
+
+def any_filing() -> bool:
+    """Anything arriving from a phone or being filed right now. The updater
+    asks this before it closes the app (v1.066)."""
+    with _FLIGHT:
+        return bool(_IN_FLIGHT) or _RECEIVING > 0
 
 
 def wait_while_filing(job_id: str, timeout: float) -> bool:

@@ -28,6 +28,7 @@ sys.path.insert(0, str(ROOT))
 # ─── core ──────────────────────────────────────────────────────
 from core import auth
 from core import jobshot
+from core import jobshot_index
 from core import jobshot_receive
 from core import jobshot_server
 from core.catalog import JobCatalog
@@ -204,7 +205,10 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         self._restore_dest()
         self._refresh_step_states()
         self._check_auth_on_start()
-        self.update_worker.start()
+        self.update_worker.start(check_now="--check-update-now" in sys.argv[1:])
+        # An update just ran: once this build has been up a few seconds, its
+        # rollback copy and staging folder are no longer needed (v1.066).
+        self.after(10_000, self._finish_update_if_any)
 
         # Hide-to-tray on X button; real quit only via tray menu
         self.protocol("WM_DELETE_WINDOW", self._on_main_close)
@@ -675,11 +679,45 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         """Host contract for UpdateWorker — flag teardown before installer runs."""
         self._real_quit_requested = True
 
+    def busy_reason(self) -> str:
+        """Host contract for UpdateWorker (v1.066) — why an install must wait.
+
+        An install closes the app. Before v1.066 only a running batch held it
+        off, so it could close Settings mid-typing, cut a phone job off half
+        received, or throw away a Step 3 plan that had not been filed — the
+        plan lives in memory only, and nothing brings it back after a restart.
+        """
+        if self._batch_running:
+            return "a batch is running"
+        if jobshot_index.any_filing():
+            return "a phone job is arriving"
+        if self.plan is not None and self._pending_rows():
+            return "Step 3 has folders that are not filed yet"
+        for w in self.winfo_children():
+            if isinstance(w, tk.Toplevel):
+                try:
+                    if w.winfo_exists() and w.winfo_viewable():
+                        return f"the {w.title() or 'dialog'} window is open"
+                except tk.TclError:
+                    pass
+        return ""
+
+    def _finish_update_if_any(self) -> None:
+        if getattr(self, "_destroyed", False):
+            return
+        try:
+            from core import install_swap
+            install_swap.finish_after_start(APP_VERSION)
+        except Exception:
+            pass
+
     # kinds come from UpdateWorker.describe(); the window only picks a colour
     _UPDATE_COLOURS = {
         "ready": COLOR_PRIMARY,
         "available": COLOR_PRIMARY,
         "offline": COLOR_WARN,
+        "refused": COLOR_WARN,
+        "failed": COLOR_WARN,
     }
 
     def _poll_update_button(self):
@@ -705,12 +743,19 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         w = self.update_worker
         if w.pending_installer and w.pending_installer.exists():
             v = w.pending_installer_version or "?"
+            busy = w.busy_reason()
+            if busy:
+                # Said BEFORE asking, not after: until v1.066 this dialog
+                # promised Step 3 would "still be there afterwards", and a
+                # plan that is not filed lives only in memory — it would not.
+                self._log(f"Not installing v{v} yet: {busy}. It installs by "
+                          f"itself once that is done.", "warn")
+                return
             if not messagebox.askyesno(
                     "Install update",
                     f"Install v{v} now?\n\nHappy Photo Organizer will close, "
-                    f"update, and open again. Anything you have not committed "
-                    f"in Step 3 will still be there afterwards — the folders on "
-                    f"disk are not touched by an update."):
+                    f"update, and open again in a few seconds. Your settings, "
+                    f"catalog and filed folders are not touched by an update."):
                 return
             started, why = w.install_pending_now()
             if not started:
@@ -721,6 +766,18 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
             self._log(f"Update downloading — {w.download_pct}%", "info")
             return
         if w.checking:
+            return
+        if w.failed_info is not None:
+            v = w.failed_info.version
+            why = (w.failed_attempt or {}).get("reason") or "no reason was recorded"
+            if not messagebox.askyesno(
+                    "Retry update",
+                    f"The last install of v{v} did not finish:\n\n{why}\n\n"
+                    f"Download it again and install it? Happy Photo Organizer "
+                    f"closes for the install once nothing is in progress, and "
+                    f"opens again by itself. The details are in update.log."):
+                return
+            w.retry_failed()
             return
 
         self._log("Checking for updates...", "info")
@@ -736,6 +793,9 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
             return
         if w.last_error:
             self._log(f"Update check failed: {w.last_error}", "warn")
+        elif w.failed_info is not None:
+            self._log(f"v{w.failed_info.version} is available, but its last install "
+                      f"did not finish — press Retry to try it again", "warn")
         elif w.pending_installer or w.pending_info or w.in_progress:
             pass          # the worker logs its own progress from here
         else:
@@ -2191,6 +2251,16 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
 def main() -> int:
     if not ensure_single_instance():
         return 0
+    # UPDATE_DRILL §3.3: every start says which build and from where, before
+    # anything else can fail — the drill and the next bug report both read it.
+    # After the single-instance gate, so a second click that only raises the
+    # open window is not counted as a start.
+    try:
+        from core import update_log
+        update_log.started(APP_VERSION, sys.executable if getattr(sys, "frozen", False)
+                           else str(Path(__file__).resolve()))
+    except Exception:
+        pass
     # Sweep cached installer .exe files from previous runs.
     # Failed-install leftovers used to accumulate at ~/.happy-photo-organizer/updates/
     # because launch_installer_and_exit only fires on the happy path.

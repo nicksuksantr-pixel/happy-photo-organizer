@@ -36,6 +36,48 @@ from core import jobshot_index as _jobshot_index
 _jobshot_index.INDEX_PATH = (
     Path(tempfile.gettempdir()) / "hpo_test_jobshot_filed.json")
 
+# Same rule for the update log (v1.066): every update check writes a line, and
+# a test run must not write them into Nick's ~/.happy-photo-organizer/logs.
+try:
+    from core import update_log as _update_log
+    _UPDATE_LOG_DIR = Path(tempfile.mkdtemp(prefix="hpo-test-update-log-"))
+    _update_log.log_path = lambda: _UPDATE_LOG_DIR / "update.log"
+except ImportError:                     # before v1.066 there is no update log
+    _update_log = None
+
+# Never the internet, never Nick's update cache, never a real installer
+# (2026-10-31, bug_v1.066 T1). test_manual_check_marks_itself_as_checking
+# polled the real GitHub as v1.049 and found the published release; its fake
+# host runs callbacks inline, so the real installer was downloaded into
+# ~/.happy-photo-organizer/updates and run with --silent --upgrade over the
+# installed app (whose installer kills the running app). sys.exit() in the
+# download thread ended only that thread: every suite run since v1.050 could
+# do this unseen. Loopback stays open — the JobShot server tests use it.
+import urllib.parse as _urlparse
+import urllib.request as _urlreq
+from core import updater as _updater
+
+_REAL_URLOPEN = _urlreq.urlopen
+
+
+def _loopback_only(req, *a, **k):
+    url = getattr(req, "full_url", None) or str(req)
+    host = _urlparse.urlsplit(url).hostname or ""
+    if host not in ("127.0.0.1", "localhost", "::1"):
+        raise _urlreq.URLError(f"tests never reach the internet ({host})")
+    return _REAL_URLOPEN(req, *a, **k)
+
+
+def _never_run_an_installer(path, silent=True, version=""):
+    raise AssertionError(f"a test tried to run an installer: {path}")
+
+
+_urlreq.urlopen = _loopback_only
+_UPDATE_CACHE = Path(tempfile.mkdtemp(prefix="hpo-test-update-cache-"))
+_updater.cache_dir = lambda: _UPDATE_CACHE
+_REAL_LAUNCH_INSTALLER = _updater.launch_installer_and_exit
+_updater.launch_installer_and_exit = _never_run_an_installer
+
 from core.version import read_version
 
 
@@ -2275,10 +2317,14 @@ def _answers(body, status=200):
     return lambda _req: _FakeReply(raw, status)
 
 
-def _release(tag, asset="HappyPhotoOrganizerSetup.exe"):
+_DIGEST = "sha256:" + "ab" * 32
+
+
+def _release(tag, asset="HappyPhotoOrganizerSetup.exe", digest=_DIGEST):
+    # GitHub puts a "digest" on every asset it stores; v1.066 requires it
     assets = [] if asset is None else [{
         "name": asset, "browser_download_url": f"https://example.invalid/{tag}/{asset}",
-        "size": 1234}]
+        "size": 1234, "digest": digest}]
     return {"tag_name": tag, "assets": assets, "body": ""}
 
 
@@ -5433,7 +5479,8 @@ def test_a_latest_that_has_not_caught_up_is_waited_for_not_reverted():
     and nothing printed on the way may tell anyone to revert.
     """
     mod = _release_tool()
-    good = {"name": mod.ASSET, "state": "uploaded", "size": 100}
+    good = {"name": mod.ASSET, "state": "uploaded", "size": 100,
+            "digest": "sha256:" + "ab" * 32}
     answers = [{"tag_name": "v1.062", "draft": False, "assets": [good]}] * 2 + [
         {"tag_name": "v1.063", "draft": False, "assets": [good]}]
     fetched = []
@@ -5447,11 +5494,17 @@ def test_a_latest_that_has_not_caught_up_is_waited_for_not_reverted():
             return json.dumps({"assets": [good], "isDraft": True})
         return ""
 
-    names = ("run", "local_gates", "_fetch_latest",
-             "gate_the_app_would_offer_it", "SETTLE_DELAYS")
+    # v1.066: publish() also asks the #28 lock first and reads back by sha256;
+    # both have their own tests, and here they are only in the way
+    names = ("run", "local_gates", "_fetch_latest", "gate_the_app_would_offer_it",
+             "SETTLE_DELAYS", "gate_a_drill_saw_these_bytes", "sha256_file",
+             "gate_the_download_is_the_drilled_file")
     saved = {n: getattr(mod, n) for n in names}
     mod.run, mod.local_gates, mod._fetch_latest = gh, (lambda v: 100), fetch
-    mod.gate_the_app_would_offer_it = lambda v, p: None
+    mod.gate_the_app_would_offer_it = lambda v, p, **_k: None
+    mod.gate_a_drill_saw_these_bytes = lambda tag, **_k: None
+    mod.sha256_file = lambda _p: "ab" * 32
+    mod.gate_the_download_is_the_drilled_file = lambda v, s: None
     mod.SETTLE_DELAYS = (0, 0, 0, 0)
     try:
         _, printed = _quietly(lambda: mod.publish("1.063", "1.062", "notes"))
@@ -5758,6 +5811,860 @@ def test_the_invisible_byte_guards_still_cover_every_kind_of_file_here():
     for pattern in ("*.py", "*.spec", "*.json", "*.mjs", "*.js"):
         assert f'"{pattern}"' in guard, (
             f"{pattern} is listed here as scanned but is not in the guard")
+
+
+# --- v1.066: the update path itself (rule #28, bugs U1-U10) ------------------
+#
+# Until v1.066 no test touched `installer/` at all, and the silent `--upgrade`
+# path had no record of ever being run from an old packaged build to a new one.
+# These drive the pieces the drill (drills/) then drives for real: the feed
+# override, the digest, the install gate, the swap and its way back.
+
+
+def _update_lines() -> list[str]:
+    p = _update_log.log_path()
+    return p.read_text(encoding="utf-8").splitlines() if p.exists() else []
+
+
+def _env(**kv):
+    """Set (or with None, unset) environment variables; returns a restorer."""
+    import os
+    old = {k: os.environ.get(k) for k in kv}
+    for k, v in kv.items():
+        if v is None:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = v
+
+    def restore():
+        for k, v in old.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+    return restore
+
+
+def test_the_update_log_writes_one_parseable_line_per_stage():
+    """UPDATE_DRILL §3.3: `<ISO> UPDATE <STAGE> <version> <detail>` and
+    `<ISO> STARTED <version> <exe>`. The drill parses these and so does the
+    next bug report, so a newline inside a detail must not split a line."""
+    import re
+    before = len(_update_lines())
+    _update_log.log("FOUND", "1.066", "two\nlines  and   spaces")
+    _update_log.started("1.066", r"C:\Users\A B\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe")
+    _update_log.log("NOT-A-STAGE", "1.066", "x")
+    new = _update_lines()[before:]
+    assert len(new) == 3, new
+    iso = r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:[+-]\d\d:\d\d|Z)"
+    assert re.fullmatch(iso + r" UPDATE FOUND 1\.066 two lines and spaces", new[0]), new[0]
+    assert re.fullmatch(iso + r" STARTED 1\.066 C:\\Users\\A B\\.+\.exe", new[1]), new[1]
+    # an unknown stage is never written as if it were a known one
+    assert " UPDATE FAILED 1.066 (unknown stage NOT-A-STAGE)" in new[2], new[2]
+
+
+def test_the_drill_feed_is_honoured_only_on_loopback_with_the_drill_switch():
+    """§3.1: the override exists so a drill can serve N, a corrupt N and a
+    fake N+1 without publishing anything — and for nothing else. Anything that
+    could point a ship PC at another machine is ignored."""
+    from core import updater
+    real = f"{updater.GITHUB_API}/repos/{updater.REPO}/releases/latest"
+    cases = [
+        ({"HAPPY_UPDATE_DRILL": "1", "HAPPY_UPDATE_FEED": "http://127.0.0.1:8765/latest"}, True),
+        ({"HAPPY_UPDATE_DRILL": "1", "HAPPY_UPDATE_FEED": "http://[::1]:8765/latest"}, True),
+        ({"HAPPY_UPDATE_DRILL": None, "HAPPY_UPDATE_FEED": "http://127.0.0.1:8765/latest"}, False),
+        ({"HAPPY_UPDATE_DRILL": "0", "HAPPY_UPDATE_FEED": "http://127.0.0.1:8765/latest"}, False),
+        ({"HAPPY_UPDATE_DRILL": "1", "HAPPY_UPDATE_FEED": "http://192.168.1.5:8765/latest"}, False),
+        ({"HAPPY_UPDATE_DRILL": "1", "HAPPY_UPDATE_FEED": "http://localhost:8765/latest"}, False),
+        ({"HAPPY_UPDATE_DRILL": "1", "HAPPY_UPDATE_FEED": "https://127.0.0.1:8765/latest"}, False),
+        ({"HAPPY_UPDATE_DRILL": "1", "HAPPY_UPDATE_FEED": "http://127.0.0.1.evil.example/latest"}, False),
+    ]
+    for env, honoured in cases:
+        restore = _env(**env)
+        try:
+            url, drill = updater.feed_url()
+        finally:
+            restore()
+        if honoured:
+            assert drill and url == env["HAPPY_UPDATE_FEED"], (env, url)
+        else:
+            assert not drill and url == real, (env, url)
+
+
+def test_only_the_named_installer_is_ever_offered():
+    """U2: a newer release WITHOUT HappyPhotoOrganizerSetup.exe used to fall
+    back to 'the first .exe attached' — any .exe on the release page became
+    what was installed over the user's app."""
+    from core import updater
+    rel = _release("v9.000", asset="SomethingElse.exe")
+    got = _with_github(_answers(rel), lambda: updater.check_for_update("1.066", timeout=1))
+    assert got is None, got
+
+
+def test_a_newer_release_without_a_digest_is_refused_not_offered():
+    """U2: nothing checked the download against anything but its size. Now the
+    asset's GitHub digest is required, and its absence is a refusal — which is
+    neither 'offered' nor 'up to date'."""
+    from core import updater
+    for digest in (None, "", "md5:abc", "sha256:xyz", "sha256:" + "a" * 63):
+        rel = _release("v9.000", digest=digest)
+        try:
+            got = _with_github(_answers(rel), lambda: updater.check_for_update("1.066", timeout=1))
+        except updater.UpdateRefused as e:
+            assert "digest" in str(e), e
+            continue
+        raise AssertionError(f"digest {digest!r}: offered {got!r}")
+    assert any(" UPDATE REFUSED 9.000 " in ln for ln in _update_lines()), _update_lines()[-3:]
+
+    info = _with_github(_answers(_release("v9.000")),
+                        lambda: updater.check_for_update("1.066", timeout=1))
+    assert info is not None and info.sha256 == "ab" * 32, info
+
+
+def test_a_download_url_that_is_not_where_installers_come_from_is_refused():
+    from core import updater
+    rel = _release("v9.000")
+    rel["assets"][0]["browser_download_url"] = "http://example.invalid/x.exe"
+    try:
+        _with_github(_answers(rel), lambda: updater.check_for_update("1.066", timeout=1))
+    except updater.UpdateRefused:
+        pass
+    else:
+        raise AssertionError("a plain-http download was offered from the real feed")
+
+    # and a drill feed may only hand out loopback downloads
+    restore = _env(HAPPY_UPDATE_DRILL="1", HAPPY_UPDATE_FEED="http://127.0.0.1:1/latest")
+    try:
+        rel = _release("v9.000")              # https://example.invalid/...
+        try:
+            _with_github(_answers(rel), lambda: updater.check_for_update("1.066", timeout=1))
+        except updater.UpdateRefused:
+            pass
+        else:
+            raise AssertionError("a drill feed handed out a non-loopback download")
+        rel["assets"][0]["browser_download_url"] = "http://127.0.0.1:1/HappyPhotoOrganizerSetup.exe"
+        info = _with_github(_answers(rel), lambda: updater.check_for_update("1.066", timeout=1))
+        assert info is not None, info
+    finally:
+        restore()
+
+
+class _RecordingHost(_FakeUpdateHost):
+    """`after` keeps callbacks instead of running them, so a test can drive
+    the clock; `busy` is what busy_reason() answers."""
+
+    def __init__(self):
+        super().__init__()
+        self.scheduled = []
+        self.busy = ""
+        self.before_install = 0
+
+    def after(self, ms, fn=None, *a):
+        if fn is not None:
+            self.scheduled.append((ms, fn))
+        return f"after-{len(self.scheduled)}"
+
+    def busy_reason(self):
+        return self.busy
+
+    def on_before_install(self):
+        self.before_install += 1
+
+
+def _ready_worker(tmp: Path, payload: bytes = b"installer bytes"):
+    """A worker holding a downloaded, verified installer, with the launch
+    patched out. Returns (worker, launched-list, restore)."""
+    import hashlib
+    from core import updater
+    from core.update_worker import UpdateWorker
+    w = UpdateWorker(_RecordingHost(), "1.065")
+    f = tmp / "HappyPhotoOrganizerSetup-v1.066.exe"
+    f.write_bytes(payload)
+    w.pending_installer, w.pending_installer_version = f, "1.066"
+    w.pending_installer_sha = hashlib.sha256(payload).hexdigest()
+    launched = []
+    real = updater.launch_installer_and_exit
+    updater.launch_installer_and_exit = lambda p, silent=True, version="": launched.append((p, version))
+
+    def restore():
+        updater.launch_installer_and_exit = real
+    return w, launched, restore
+
+
+def test_an_update_waits_while_the_app_is_busy_and_installs_once_idle():
+    """U5: the install fired the moment the download landed unless a batch was
+    running — it could close Settings mid-typing or cut a phone job in half.
+    Now it waits for busy_reason() to be empty, and looks again every minute."""
+    with tempfile.TemporaryDirectory() as td:
+        w, launched, restore = _ready_worker(Path(td))
+        try:
+            w.host.busy = "a phone job is arriving"
+            w._install_now("1.066")
+            assert launched == [] and w.host.before_install == 0
+            assert any("waiting: a phone job is arriving" in m for _l, m in w.host.logs), w.host.logs
+            retries = [(ms, fn) for ms, fn in w.host.scheduled if ms == w.IDLE_RETRY_MS]
+            assert len(retries) == 1, w.host.scheduled
+
+            w._install_now("1.066")                       # still busy: no second timer
+            assert len([1 for ms, _ in w.host.scheduled if ms == w.IDLE_RETRY_MS]) == 1
+
+            w.host.busy = ""
+            retries[0][1]()                               # the minute passes
+            assert launched and launched[0][1] == "1.066", launched
+            assert w.host.before_install == 1
+        finally:
+            restore()
+
+
+def test_the_install_button_refuses_while_busy_and_says_why():
+    with tempfile.TemporaryDirectory() as td:
+        w, launched, restore = _ready_worker(Path(td))
+        try:
+            w.host.busy = "Step 3 has folders that are not filed yet"
+            started, why = w.install_pending_now()
+            assert not started and "Step 3" in why, why
+            assert launched == []
+        finally:
+            restore()
+
+
+def test_an_installer_changed_after_it_was_verified_is_not_run():
+    """The file sits in a user-writable folder between the download and the
+    install — minutes, or until a batch ends. It is hashed again just before
+    it runs, and a changed file is deleted, logged REFUSED, and not run."""
+    with tempfile.TemporaryDirectory() as td:
+        w, launched, restore = _ready_worker(Path(td))
+        try:
+            w.pending_installer.write_bytes(b"something else")
+            w._install_now("1.066")
+            assert launched == [], launched
+            assert w.pending_installer is None
+            assert not (Path(td) / "HappyPhotoOrganizerSetup-v1.066.exe").exists()
+            assert w.describe()[1] == "refused", w.describe()
+            assert any(" UPDATE REFUSED 1.066 " in ln for ln in _update_lines())
+        finally:
+            restore()
+
+
+def test_a_download_that_does_not_match_its_digest_is_refused_and_not_fetched_again():
+    """bad_download_refused (§4): a corrupt asset is refused, the old build keeps
+    running, and it is not fetched again every five minutes (90 MB a time)."""
+    import time as _t
+    from core import updater
+    from core.update_worker import UpdateWorker
+    with tempfile.TemporaryDirectory() as td:
+        cache = Path(td)
+        real_cache, real_dl = updater.cache_dir, updater.download_installer
+        calls = []
+
+        def fake_download(url, dest, progress_cb=None, expected_size=0, **_kw):
+            calls.append(url)
+            dest.write_bytes(b"flipped byte")
+            return True, "ok"
+
+        updater.cache_dir = lambda: cache
+        updater.download_installer = fake_download
+        try:
+            w = UpdateWorker(_RecordingHost(), "1.065")
+            info = updater.UpdateInfo("1.066", "v1.066", "", "", "",
+                                      "https://example.invalid/x.exe", 12, "cd" * 32)
+            w._begin_download(info)
+            deadline = _t.time() + 10
+            while w.in_progress and _t.time() < deadline:
+                _t.sleep(0.05)
+            assert not w.in_progress
+            assert not list(cache.iterdir()), list(cache.iterdir())   # deleted
+            assert w.describe()[1] == "refused", w.describe()
+            assert not any(fn.__name__ == "<lambda>" and ms == 0 for ms, fn in w.host.scheduled
+                           if "ready" in repr(fn)), "a refused download reached _on_ready"
+            assert w.pending_installer is None
+
+            # the next poll finds the same release: refused again, not re-fetched
+            rel = _release("v1.066", digest="sha256:" + "cd" * 32)
+            _with_github(_answers(rel), w._poll_github)
+            assert w.describe()[1] == "refused", w.describe()
+            assert not [fn for ms, fn in w.host.scheduled if ms == 0 and "_on_available" in repr(fn)]
+            assert len(calls) == 1, calls
+        finally:
+            updater.cache_dir, updater.download_installer = real_cache, real_dl
+
+
+def test_check_now_works_even_with_automatic_checks_off():
+    """§3.2: a drill starts the app and must not need a click — and a field PC
+    with automatic checks turned off must still be drillable."""
+    from core.update_worker import UpdateWorker
+    real = auth.load_config
+    auth.load_config = lambda: {"auto_check_updates": False}
+    try:
+        w = UpdateWorker(_RecordingHost(), "1.066")
+        w.start()
+        assert w.host.scheduled == [], "auto checks off, no check_now: nothing scheduled"
+        w.start(check_now=True)
+        assert [ms for ms, _ in w.host.scheduled] == [0], w.host.scheduled
+        restore = _env(HAPPY_UPDATE_DRILL="1")
+        try:
+            w2 = UpdateWorker(_RecordingHost(), "1.066")
+            w2.start()
+            assert [ms for ms, _ in w2.host.scheduled] == [0], w2.host.scheduled
+        finally:
+            restore()
+    finally:
+        auth.load_config = real
+
+
+def test_a_phone_upload_counts_as_busy_from_its_first_byte():
+    """An old phone (before LAN_PROTOCOL v1.1.1) names no job ids, so the
+    per-job registry cannot see its upload while the body crosses the link.
+    The updater asks `any_filing()`, which counts every request in flight."""
+    from core import jobshot_index as ji
+    assert not ji.any_filing()
+    ji.begin_receiving()
+    try:
+        assert ji.any_filing()
+    finally:
+        ji.end_receiving()
+    assert not ji.any_filing()
+    held = ji.begin_filing(["J-2026-10-30-0001"])
+    try:
+        assert ji.any_filing()
+    finally:
+        ji.end_filing(held)
+    assert not ji.any_filing()
+
+
+def test_the_install_dialog_no_longer_promises_step3_survives():
+    """v1.050's confirm text said an uncommitted Step 3 'will still be there
+    afterwards'. The plan lives in memory only; it would not."""
+    src = (ROOT / "main.py").read_text(encoding="utf-8")
+    assert "will still be there afterwards" not in src
+    assert "def busy_reason(self)" in src
+
+
+# --- the swap ---
+
+
+def _payload(path: Path, files: dict) -> Path:
+    import zipfile
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
+        for rel, data in files.items():
+            z.writestr(f"HappyPhotoOrganizer/{rel}", data)
+    return path
+
+
+def _tree(root: Path) -> dict:
+    return {p.relative_to(root).as_posix(): p.read_bytes()
+            for p in root.rglob("*") if p.is_file()}
+
+
+_V1 = {"HappyPhotoOrganizer.exe": b"exe v1", "_internal/old_only.dll": b"gone in v2",
+       "_internal/data/job_catalog.json": b'{"jobs": []}', "_internal/same.pyd": b"same"}
+_V2 = {"HappyPhotoOrganizer.exe": b"exe v2", "_internal/new_only.dll": b"new in v2",
+       "_internal/data/job_catalog.json": b'{"jobs": [1]}', "_internal/same.pyd": b"same"}
+
+
+def test_an_update_replaces_the_tree_exactly_and_keeps_a_way_back():
+    """U3: extract-over never removed a file the old version shipped, so the
+    tree drifted from every version ever built. After a swap the app's folder
+    is exactly the new payload; the old files wait in .update\\old\\ until
+    the new build has started, then go (CLEANED)."""
+    from core import install_swap as sw
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        inst = td / "HappyPhotoOrganizer"
+        ok, msg = sw.swap_in(_payload(td / "v1.zip", _V1), inst, "none", "1.065")
+        assert ok, msg
+        (inst / "uninstall.bat").write_text("beside the tree, never pruned")
+        ok, msg = sw.swap_in(_payload(td / "v2.zip", _V2), inst, "1.065", "1.066")
+        assert ok, msg
+
+        assert _tree(inst / "HappyPhotoOrganizer") == _V2, sorted(_tree(inst / "HappyPhotoOrganizer"))
+        assert (inst / "uninstall.bat").exists()
+        old = inst / ".update" / "old" / "HappyPhotoOrganizer"
+        assert _tree(old) == _V1, sorted(_tree(old))     # everything replaced or pruned
+        lines = _update_lines()
+        assert any(" UPDATE STAGED 1.066 4 files" in ln for ln in lines), lines[-4:]
+        assert any(" UPDATE SWAPPED 1.066 " in ln and "pruned 1" in ln for ln in lines), lines[-4:]
+
+        assert sw.finish_after_start("1.065", inst) == ""            # not this build's update
+        assert (inst / ".update").exists()
+        assert sw.finish_after_start("1.066", inst) == "cleaned"
+        assert not (inst / ".update").exists()
+        assert any(" UPDATE CLEANED 1.066 " in ln for ln in _update_lines())
+
+
+def test_a_swap_that_fails_half_way_puts_the_old_version_back():
+    """U4: a failed extract returned 1 with no relaunch and no rollback,
+    leaving half of each version. Now a failure — here a file held open by
+    another process, as antivirus or a slow exit does — rolls every file back."""
+    from core import install_swap as sw
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        inst = td / "HappyPhotoOrganizer"
+        assert sw.swap_in(_payload(td / "v1.zip", _V1), inst, "none", "1.065")[0]
+        before = _tree(inst / "HappyPhotoOrganizer")
+        real_wait = sw.LOCK_RETRY_SECONDS
+        sw.LOCK_RETRY_SECONDS = 0.5
+        held = open(inst / "HappyPhotoOrganizer" / "_internal" / "same.pyd", "rb")
+        try:
+            ok, msg = sw.swap_in(_payload(td / "v2.zip", _V2), inst, "1.065", "1.066")
+        finally:
+            held.close()
+            sw.LOCK_RETRY_SECONDS = real_wait
+        assert not ok and "rolled back" in msg, msg
+        assert _tree(inst / "HappyPhotoOrganizer") == before
+        assert not (inst / ".update").exists()
+        assert any(" UPDATE FAILED 1.066 swap failed" in ln and "rolled back" in ln
+                   for ln in _update_lines()), _update_lines()[-3:]
+
+
+def test_a_damaged_payload_changes_nothing():
+    """A corrupt download that got past the hash (or a bad build) fails while
+    STAGING, before a single installed file has been touched."""
+    from core import install_swap as sw
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        inst = td / "HappyPhotoOrganizer"
+        assert sw.swap_in(_payload(td / "v1.zip", _V1), inst, "none", "1.065")[0]
+        before = _tree(inst / "HappyPhotoOrganizer")
+        good = _payload(td / "v2.zip", _V2).read_bytes()
+        for at in (len(good) // 3, len(good) // 2):  # a header, then the data
+            bad = bytearray(good)
+            bad[at] ^= 0xFF
+            (td / "v2.zip").write_bytes(bytes(bad))
+            ok, msg = sw.swap_in(td / "v2.zip", inst, "1.065", "1.066")
+            assert not ok, (at, msg)
+            assert _tree(inst / "HappyPhotoOrganizer") == before, at
+        assert any(" UPDATE FAILED 1.066 staging failed, nothing was changed" in ln
+                   for ln in _update_lines()), _update_lines()[-2:]
+
+
+def test_an_interrupted_swap_is_rolled_back_by_the_next_run():
+    """Power cut mid-swap: the journal says "swapping". The next installer run
+    restores the old tree first, then installs."""
+    from core import install_swap as sw
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        inst = td / "HappyPhotoOrganizer"
+        assert sw.swap_in(_payload(td / "v1.zip", _V1), inst, "none", "1.065")[0]
+        before = _tree(inst / "HappyPhotoOrganizer")
+        real_rollback, real_wait = sw.rollback, sw.LOCK_RETRY_SECONDS
+        sw.rollback = lambda *a, **k: (False, "the power went out")   # crash: nothing rolled back
+        sw.LOCK_RETRY_SECONDS = 0.5
+        held = open(inst / "HappyPhotoOrganizer" / "_internal" / "same.pyd", "rb")
+        try:
+            assert not sw.swap_in(_payload(td / "v2.zip", _V2), inst, "1.065", "1.066")[0]
+        finally:
+            held.close()
+            sw.rollback, sw.LOCK_RETRY_SECONDS = real_rollback, real_wait
+        assert _tree(inst / "HappyPhotoOrganizer") != before          # half and half
+        assert sw.recover_interrupted(inst) == "rolled back an interrupted update"
+        assert _tree(inst / "HappyPhotoOrganizer") == before
+
+
+def test_a_file_the_installer_did_not_put_there_is_never_pruned():
+    """From v1.066 the installer records what it installed, and later updates
+    prune only files on that record (UPDATE_DRILL §2: files the app did not
+    ship are never deleted)."""
+    from core import install_swap as sw
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        inst = td / "HappyPhotoOrganizer"
+        assert sw.swap_in(_payload(td / "v1.zip", _V1), inst, "none", "1.065")[0]
+        (inst / "HappyPhotoOrganizer" / "notes-nick-wrote.txt").write_text("mine")
+        assert sw.swap_in(_payload(td / "v2.zip", _V2), inst, "1.065", "1.066")[0]
+        assert (inst / "HappyPhotoOrganizer" / "notes-nick-wrote.txt").read_text() == "mine"
+        assert not (inst / "HappyPhotoOrganizer" / "_internal" / "old_only.dll").exists()
+
+
+def test_a_payload_with_files_outside_one_top_folder_is_refused():
+    """Pruning is bounded by the payload's top folder; a payload without one
+    would make the whole install folder (uninstall.bat, .update) prunable."""
+    import zipfile
+    from core import install_swap as sw
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        z = td / "flat.zip"
+        with zipfile.ZipFile(z, "w") as zf:
+            zf.writestr("HappyPhotoOrganizer.exe", b"x")
+        ok, msg = sw.swap_in(z, td / "inst", "none", "1.066")
+        assert not ok and "top folder" in msg, msg
+
+
+def _installer_module():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "hpo_installer_under_test", ROOT / "installer" / "installer.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_the_silent_upgrade_waits_keeps_deleted_shortcuts_deleted_and_comes_back():
+    """U4 + U7, driven through the real `_run_silent_upgrade`:
+    - it never runs `taskkill` (it waits for the app to exit by itself);
+    - it re-creates only the shortcuts the user still has — it used to put the
+      Desktop icon back on every update;
+    - it relaunches either way: the new build, or the rolled-back old one."""
+    import subprocess
+    mod = _installer_module()
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        (td / "start").mkdir()
+        (td / "start" / "Happy Photo Organizer.lnk").write_bytes(b"lnk")
+        seen = {}
+        real_run = subprocess.run
+
+        def no_taskkill(args, *a, **k):
+            raise AssertionError(f"the upgrade ran {args!r}")
+
+        mod._detect_existing_install_dir = lambda: td / "inst"
+        mod.desktop_shortcut_path = lambda: td / "Desktop" / "Happy Photo Organizer.lnk"
+        mod.start_menu_shortcut_path = lambda: td / "start" / "Happy Photo Organizer.lnk"
+        mod.install_swap.wait_for_app_exit = lambda timeout=60.0: True
+
+        def fake_install(self, progress_cb=None, require_app_closed=True):
+            seen.update(desktop=self.create_desktop_shortcut, start=self.create_start_menu,
+                        require=require_app_closed)
+            return seen.get("result", (True, "ok"))
+
+        mod.Installer.install = fake_install
+        mod.Installer.launch_app = lambda self: seen.__setitem__("launched", seen.get("launched", 0) + 1)
+        subprocess.run = no_taskkill
+        try:
+            assert mod._run_silent_upgrade() == 0
+            assert seen["desktop"] is False and seen["start"] is True, seen
+            assert seen["require"] is False and seen["launched"] == 1, seen
+
+            seen["result"] = (False, "boom")
+            restore = _env(HAPPY_UPDATE_REPO=None)
+            try:
+                assert mod._run_silent_upgrade() == 1
+            finally:
+                restore()
+                _update_log.clear_attempt()
+            assert seen["launched"] == 2, "a failed update must bring the old app back"
+        finally:
+            subprocess.run = real_run
+
+
+# ─── a failed install is remembered, not looped (v1.066) ───
+#
+# Found 2026-10-31 while smoke-testing the build: nothing recorded a failed
+# install. The installer rolled back and relaunched the old build, which found
+# the same release, downloaded 90 MB and handed over again — every few minutes,
+# for good, on a PC where that install cannot succeed.
+
+
+def _attempt_clean():
+    _update_log.clear_attempt()
+    p = _update_log.log_path()
+    if p.exists():
+        p.unlink()
+
+
+def _log_lines():
+    p = _update_log.log_path()
+    return p.read_text(encoding="utf-8").splitlines() if p.exists() else []
+
+
+def test_the_suite_cannot_reach_the_internet_or_run_an_installer():
+    """bug_v1.066 T1: a test once downloaded the published installer into
+    Nick's cache and ran it over his install. The fence must stay up."""
+    import urllib.request
+    from core import updater
+    assert str(Path.home() / ".happy-photo-organizer") not in str(updater.cache_dir())
+    try:
+        urllib.request.urlopen("https://api.github.com/", timeout=1)
+    except urllib.error.URLError as e:
+        assert "never reach the internet" in str(e), e
+    else:
+        raise AssertionError("a test reached the internet")
+    try:
+        updater.launch_installer_and_exit(Path("C:/x/setup.exe"), version="9.999")
+    except AssertionError as e:
+        assert "tried to run an installer" in str(e), e
+    else:
+        raise AssertionError("an installer launch was not refused")
+
+
+def test_a_handover_that_does_not_come_up_is_recorded_once_as_failed():
+    _attempt_clean()
+    try:
+        _update_log.begin_attempt("1.067")
+        assert _update_log.read_attempt()["state"] == "handover"
+        # the old build started again: the installer never got as far as a word
+        d = _update_log.settle_attempt("1.066")
+        assert d and d["state"] == "failed" and d["version"] == "1.067", d
+        assert "did not finish" in d["reason"], d
+        assert _update_log.settle_attempt("1.066")["version"] == "1.067"   # still remembered
+        failed = [ln for ln in _log_lines() if " UPDATE FAILED 1.067 " in ln]
+        assert len(failed) == 1, failed            # said once, not on every start
+    finally:
+        _attempt_clean()
+
+
+def test_the_build_that_came_up_or_a_newer_one_clears_the_attempt():
+    _attempt_clean()
+    try:
+        for running in ("1.067", "1.068"):
+            _update_log.begin_attempt("1.067")
+            assert _update_log.settle_attempt(running) is None, running
+            assert _update_log.read_attempt() is None, running
+        assert not [ln for ln in _log_lines() if " FAILED " in ln], _log_lines()
+    finally:
+        _attempt_clean()
+
+
+def test_a_failed_version_waits_for_retry_and_a_newer_one_does_not():
+    """The worker must not download or hand over a version whose install
+    failed until the user presses Retry; a newer release is not held back."""
+    from core import updater
+    from core.update_worker import UpdateWorker
+    real = auth.load_config
+    auth.load_config = lambda: {"auto_check_updates": False}
+    _attempt_clean()
+    try:
+        _update_log.begin_attempt("1.067")
+        w = UpdateWorker(_RecordingHost(), "1.066")
+        w.start()                                  # settles the attempt
+        assert w.failed_attempt and w.failed_attempt["version"] == "1.067"
+        fetched = []
+        w._begin_download = lambda info: fetched.append(info.version)
+        v67 = updater.UpdateInfo("1.067", "v1.067", "", "", "",
+                                 "https://example.invalid/x.exe", 10, "ab" * 32)
+        w._on_available(v67)
+        w._on_available(v67)                       # the next 5-minute check
+        assert fetched == [], fetched
+        assert w.describe() == ("Retry v1.067", "failed", True), w.describe()
+        said = [m for _l, m in w.host.logs if "did not install last time" in m]
+        assert len(said) == 1, w.host.logs
+
+        w.retry_failed()                           # the user pressed Retry
+        assert fetched == ["1.067"], fetched
+        assert _update_log.read_attempt() is None
+        assert w.describe()[1] != "failed", w.describe()
+
+        _update_log.begin_attempt("1.067")
+        w2 = UpdateWorker(_RecordingHost(), "1.066")
+        w2.start()
+        got = []
+        w2._begin_download = lambda info: got.append(info.version)
+        w2._on_available(updater.UpdateInfo("1.068", "v1.068", "", "", "",
+                                            "https://example.invalid/y.exe", 10, "cd" * 32))
+        assert got == ["1.068"] and w2.failed_info is None, (got, w2.describe())
+    finally:
+        auth.load_config = real
+        _attempt_clean()
+
+
+def test_the_handover_writes_the_attempt_before_the_installer_runs():
+    import subprocess
+    import sys as _sys
+    from core import updater
+    _attempt_clean()
+    real_popen, real_exit = subprocess.Popen, _sys.exit
+    seen = {}
+
+    def fake_popen(args, **_k):
+        seen["attempt"] = _update_log.read_attempt()
+
+    class _Exited(Exception):
+        pass
+
+    def fake_exit(code=0):
+        raise _Exited()
+
+    subprocess.Popen, _sys.exit = fake_popen, fake_exit
+    try:
+        try:
+            _REAL_LAUNCH_INSTALLER(Path("C:/nowhere/setup.exe"), version="1.067")
+        except _Exited:
+            pass
+        assert seen["attempt"] and seen["attempt"]["version"] == "1.067", seen
+    finally:
+        subprocess.Popen, _sys.exit = real_popen, real_exit
+        _attempt_clean()
+
+
+def test_a_failed_silent_upgrade_says_why_and_never_hands_straight_back():
+    """The installer writes the reason the Retry dialog shows. An app from
+    before v1.066 cannot read it, so that one is relaunched with its update
+    checks pointed nowhere for the session — or it would hand over at once."""
+    import os
+    mod = _installer_module()
+    v = mod.APP_VERSION
+    seen = {}
+    restore = _env(HAPPY_UPDATE_REPO=None)
+    _attempt_clean()
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            td = Path(td)
+            mod._detect_existing_install_dir = lambda: td / "inst"
+            mod.desktop_shortcut_path = lambda: td / "Desktop" / "x.lnk"
+            mod.start_menu_shortcut_path = lambda: td / "Start" / "x.lnk"
+            mod.install_swap.wait_for_app_exit = lambda timeout=60.0: True
+            mod.Installer.install = lambda self, progress_cb=None, require_app_closed=True: (False, "boom")
+            mod.Installer.launch_app = lambda self: seen.__setitem__(
+                "repo_at_launch", os.environ.get("HAPPY_UPDATE_REPO"))
+
+            # handed over by a v1.066+ app: it reads the reason, nothing paused
+            _update_log.begin_attempt(v)
+            assert mod._run_silent_upgrade() == 1
+            d = _update_log.read_attempt()
+            assert d["state"] == "failed" and "boom" in d["reason"], d
+            assert seen["repo_at_launch"] is None, seen
+
+            # handed over by an older app: no attempt on record
+            _update_log.clear_attempt()
+            assert mod._run_silent_upgrade() == 1
+            assert seen["repo_at_launch"] == _update_log.PAUSED_REPO, seen
+            assert any("paused for this session" in ln for ln in _log_lines()), _log_lines()
+
+            # still open after the wait: nothing changed, nothing relaunched
+            os.environ.pop("HAPPY_UPDATE_REPO", None)
+            seen.clear()
+            mod.install_swap.wait_for_app_exit = lambda timeout=60.0: False
+            mod.install_swap.app_window_open = lambda: True
+            assert mod._run_silent_upgrade() == 1
+            assert "still open" in _update_log.read_attempt()["reason"]
+            assert "repo_at_launch" not in seen, seen
+    finally:
+        restore()
+        _attempt_clean()
+
+
+def test_a_path_too_long_to_stage_is_named_as_such():
+    """Measured 2026-10-31: a long install folder made staging fail with a
+    FileNotFoundError naming a file that is plainly in the payload. The swap
+    already changed nothing; now it also says why."""
+    import zipfile
+    from core import install_swap as sw
+    assert sw.too_long(Path("C:/short"), ["HappyPhotoOrganizer/a.dll"]) == ""
+    long_name = "HappyPhotoOrganizer/_internal/" + "d" * 240 + ".dll"
+    assert "too long" in sw.too_long(Path("C:/x/.update/new"), [long_name])
+    real = zipfile.ZipFile.extract
+
+    def refuse(self, member, path=None, pwd=None):
+        raise FileNotFoundError(2, "No such file or directory", str(path))
+
+    _attempt_clean()
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        z = td / "p.zip"
+        with zipfile.ZipFile(z, "w") as zf:
+            zf.writestr(long_name, b"x")
+            zf.writestr("HappyPhotoOrganizer/HappyPhotoOrganizer.exe", b"exe")
+        zipfile.ZipFile.extract = refuse
+        try:
+            ok, msg = sw.swap_in(z, td / "inst", "1.065", "1.066")
+        finally:
+            zipfile.ZipFile.extract = real
+        assert not ok and "too long" in msg, msg
+        assert not (td / "inst" / sw.UPDATE_DIR).exists()
+        assert any("too long" in ln for ln in _log_lines() if " FAILED " in ln), _log_lines()
+    _attempt_clean()
+
+
+def test_the_installer_reads_the_live_catalog_not_the_rollback_copy():
+    """`.update\\old\\` holds the previous catalog until the new build cleans
+    it; read first, it would bring back an older list of the user's jobs."""
+    mod = _installer_module()
+    with tempfile.TemporaryDirectory() as td:
+        inst = Path(td)
+        live = inst / "HappyPhotoOrganizer" / "_internal" / "data" / "job_catalog.json"
+        stale = inst / ".update" / "old" / "HappyPhotoOrganizer" / "_internal" / "data" / "job_catalog.json"
+        for p, jobs in ((live, [{"name": "LIVE"}]), (stale, [{"name": "STALE"}])):
+            p.parent.mkdir(parents=True)
+            p.write_text(json.dumps({"jobs": jobs}), encoding="utf-8")
+        i = mod.Installer()
+        i.install_dir = inst
+        assert i._catalog_paths() == [live], i._catalog_paths()
+        assert i._read_installed_catalog()["jobs"][0]["name"] == "LIVE"
+
+
+def test_fresh_into_is_refused_outside_a_drill():
+    """`--fresh-into` exists for the drill's reference tree only."""
+    mod = _installer_module()
+    with tempfile.TemporaryDirectory() as td:
+        restore = _env(HAPPY_UPDATE_DRILL=None)
+        try:
+            assert mod._run_fresh_into(Path(td) / "ref") == 2
+        finally:
+            restore()
+        assert not (Path(td) / "ref").exists()
+
+
+
+# --- v1.066: the publish script asks the #28 lock, and reads back by SHA-256 ---
+
+
+def test_publishing_asks_the_drill_lock_before_anything_is_tagged():
+    """U10: publish_release.py never called `release-gate.mjs --check`, so the
+    lock would refuse to run it at all. The lock is asked before a tag, a draft
+    or an upload exists — a refusal leaves nothing behind to clean up."""
+    mod = _release_tool()
+    calls = []
+    real = (mod.local_gates, mod.run, mod.gate_a_drill_saw_these_bytes)
+
+    def lock(tag, **_k):
+        calls.append(["LOCK", tag])
+        raise mod.Refused("no drill receipt lists these bytes")
+
+    mod.local_gates = lambda v: 123
+    mod.run = lambda args, **_k: calls.append(list(args)) or ""
+    mod.gate_a_drill_saw_these_bytes = lock
+    try:
+        try:
+            mod.publish("1.066", "1.065", "notes")
+        except mod.Refused:
+            pass
+        else:
+            raise AssertionError("published without a drill receipt")
+        assert calls == [["LOCK", "v1.066"]], calls
+    finally:
+        mod.local_gates, mod.run, mod.gate_a_drill_saw_these_bytes = real
+
+
+def test_the_drill_lock_is_asked_with_the_tag_and_a_lock_that_cannot_run_refuses():
+    mod = _release_tool()
+    seen = []
+    mod.gate_a_drill_saw_these_bytes("v1.066", installer=Path("dist/x.exe"),
+                                     runner=lambda a: seen.append(a) or "PASS")
+    assert seen[0][0] == "node" and seen[0][1].endswith("release-gate.mjs"), seen
+    assert seen[0][2:] == ["--check", "--tag", "v1.066", str(Path("dist/x.exe"))], seen
+
+    def no_node(_a):
+        raise FileNotFoundError("node")
+
+    def says_no(_a):
+        raise mod.Refused("node … exited 1: no drill receipt")
+
+    for runner in (no_node, says_no):
+        _refuses(mod.gate_a_drill_saw_these_bytes, "v1.066",
+                 installer=Path("dist/x.exe"), runner=runner)
+    # and the hook can see it: a publish script must carry the --check line
+    src = (ROOT / "tools" / "publish_release.py").read_text(encoding="utf-8")
+    import re
+    assert re.search(r"release-gate\.mjs[^\n]*--check", src)
+
+
+def test_a_published_asset_with_the_wrong_digest_is_refused():
+    """Size alone matched v1.061's stale build; the receipt is by SHA-256, so
+    the read-back is too. No digest at all is refused as well: from v1.066 the
+    app will not install an asset without one."""
+    mod = _release_tool()
+    good = "ab" * 32
+
+    def body(digest):
+        return {"tag_name": "v1.066", "draft": False, "assets": [{
+            "name": mod.ASSET, "state": "uploaded", "size": 10, "digest": digest}]}
+
+    mod.gate_published("1.066", expect_bytes=10, expect_sha256=good,
+                       fetch=lambda: body("sha256:" + good))
+    for digest in ("sha256:" + "cd" * 32, None, ""):
+        msg = _refuses(mod.gate_published, "1.066", expect_bytes=10,
+                       expect_sha256=good, fetch=lambda d=digest: body(d))
+        assert "digest" in msg, msg
 
 
 def main() -> int:

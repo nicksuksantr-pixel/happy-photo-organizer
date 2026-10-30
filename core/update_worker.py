@@ -12,6 +12,7 @@ Host contract — the constructor's `host` argument must provide:
   - host.log(msg: str, level: str = "ok")            # write to UI log
   - host.is_batch_running -> bool                    # property
   - host.on_before_install()                         # set teardown flag
+  - host.busy_reason() -> str     (optional, v1.066) # "" when idle
 
 Design notes:
   - Periodic check fires every UPDATE_INTERVAL_MS (5 min) and survives the
@@ -21,6 +22,18 @@ Design notes:
   - All worker callbacks marshal back to the Tk thread via host.after(0, ...).
   - is_batch_running gates downloads AND installs — if a batch is running we
     only log the discovery and defer. resume_deferred() picks it up later.
+  - v1.066: an install also waits for `host.busy_reason()` to be empty — a
+    phone job being filed, a dialog open, a Step 3 plan not applied. Until
+    then the install fired the moment the download landed unless a batch was
+    running, so it could close Settings mid-typing or cut a JobShot filing in
+    half. While busy it looks again every IDLE_RETRY_MS.
+  - v1.066: the download is held to the release's SHA-256 twice — when it
+    lands, and again just before it is run. A mismatch is deleted, logged
+    REFUSED, and not fetched again this session.
+  - v1.066: a version whose install did not bring it up (update_log's
+    attempt record) is not downloaded or handed over again by itself — that
+    was a loop: relaunch, download 90 MB, hand over, fail, relaunch. The
+    button shows "Retry vX" and retry_failed() is the only way back to it.
 """
 from __future__ import annotations
 
@@ -40,6 +53,7 @@ class UpdateWorker:
 
     UPDATE_INTERVAL_MS = 5 * 60 * 1000  # 5 minutes
     FIRST_CHECK_DELAY_MS = 3_000         # snappy first paint
+    IDLE_RETRY_MS = 60_000               # busy → look again in a minute
 
     def __init__(self, host, current_version: str) -> None:
         self.host = host
@@ -48,6 +62,7 @@ class UpdateWorker:
         # Pending state (set when a check finds something, cleared when applied)
         self.pending_installer: Path | None = None
         self.pending_installer_version: str | None = None
+        self.pending_installer_sha: str = ""
         self.pending_info: UpdateInfo | None = None  # download deferred mid-batch
 
         # Bookkeeping
@@ -63,6 +78,15 @@ class UpdateWorker:
         # transitions (ok→fail / fail→ok), not every 5-min poll while down.
         # Round-6 BUG-M6 (Cos review 2026-05-24).
         self._last_poll_ok: bool | None = None
+        # (tag, sha256) whose download did not match — never fetched again in
+        # this session, or a corrupt asset is 90 MB every five minutes
+        self._refused_downloads: set[tuple[str, str]] = set()
+        self._idle_retry_id = None
+        self._waiting_said = ""
+        # the last install that did not come up (update_log.settle_attempt),
+        # and the release it was, once a check has found it again
+        self.failed_attempt: dict | None = None
+        self.failed_info: UpdateInfo | None = None
 
         # ─── what the UI shows (v1.050) ───
         # None of this drives a decision; it exists so the update can be
@@ -72,6 +96,7 @@ class UpdateWorker:
         self.checking = False
         self.last_check_at: float | None = None
         self.last_error: str = ""
+        self.last_refused = False        # last_error is a refusal, not "offline"
         self.latest_version: str | None = None
         self.download_pct: int = 0
 
@@ -87,12 +112,23 @@ class UpdateWorker:
 
     # ─── Public lifecycle ────────────────────────────────────
 
-    def start(self) -> None:
-        """Kick off the periodic check. Respects auth.auto_check_updates."""
+    def start(self, check_now: bool = False) -> None:
+        """Kick off the periodic check. Respects auth.auto_check_updates.
+
+        `check_now` (the `--check-update-now` argument) or a drill environment
+        (UPDATE_DRILL §3.2) checks at once, and even with automatic checks
+        turned off — a drill must not need a click.
+        """
+        from core import updater, update_log
+        self.failed_attempt = update_log.settle_attempt(self.current_version)
+        check_now = check_now or updater.drill_mode()
         cfg = auth.load_config()
         if not cfg.get("auto_check_updates", True):
+            if check_now:
+                self.host.after(0, self.manual_check)
             return
-        self._after_id = self.host.after(self.FIRST_CHECK_DELAY_MS, self.tick)
+        self._after_id = self.host.after(
+            0 if check_now else self.FIRST_CHECK_DELAY_MS, self.tick)
 
     def cancel(self) -> None:
         """Stop the periodic check. Idempotent."""
@@ -130,9 +166,13 @@ class UpdateWorker:
             return f"Downloading {self.download_pct}%", "downloading", False
         if self.checking:
             return "Checking…", "checking", False
+        if self.failed_info is not None:
+            return f"Retry v{self.failed_info.version}", "failed", True
         if self.pending_info is not None:
             return f"Update v{self.pending_info.version}", "available", True
         if self.last_error:
+            if self.last_refused:
+                return "Update refused", "refused", True
             return "Updates: offline", "offline", True
         if self.last_check_at is None:
             return "Check for updates", "idle", True
@@ -145,8 +185,39 @@ class UpdateWorker:
             return False, "a batch is running — it will install when that finishes"
         if not (self.pending_installer and self.pending_installer.exists()):
             return False, "nothing has been downloaded yet"
+        busy = self.busy_reason()
+        if busy:
+            return False, f"{busy} — it will install when that is done"
+        if not self._still_verified():
+            return False, self.last_error
         self._install_now(self.pending_installer_version)
         return True, ""
+
+    def retry_failed(self) -> None:
+        """The user asked for the version whose install failed: forget the
+        failure and fetch it again. It installs the usual way — at once, or
+        when the app is next idle."""
+        info = self.failed_info
+        if info is None:
+            return
+        from core import update_log
+        update_log.clear_attempt()
+        self.failed_attempt = None
+        self.failed_info = None
+        self.host.log(f"Trying v{info.version} again", "ok")
+        self._on_available(info)
+
+    def busy_reason(self) -> str:
+        """Why an install must wait, or "" — the host's own answer if it has
+        one, else just the batch (the pre-v1.066 rule)."""
+        ask = getattr(self.host, "busy_reason", None)
+        if callable(ask):
+            try:
+                return str(ask() or "")
+            except Exception as e:
+                # cannot tell whether the app is busy, so it is not idle
+                return f"cannot tell whether the app is busy ({type(e).__name__})"
+        return "a batch is running" if self.host.is_batch_running else ""
 
     def resume_deferred(self) -> None:
         """Call after a batch ends. Resumes whichever stage was deferred."""
@@ -170,20 +241,30 @@ class UpdateWorker:
         to the Tk loop. Only logs on reachability state transitions.
         """
         ok = False
+        from core import updater
         try:
-            from core import updater
             info = updater.check_for_update(self.current_version, timeout=5.0)
             ok = True
             # Bookkeeping for the button, never a decision: `info is None`
             # means "nothing newer", which is the answer a person most wants
             # after pressing Check.
             self.latest_version = info.version if info is not None else self.current_version
-            self.last_error = ""
+            if info is not None and (info.tag, info.sha256) in self._refused_downloads:
+                # answered, and the answer is the download already refused —
+                # "up to date" would be a lie, and fetching it again a waste
+                self.last_error = (f"v{info.version} was refused: its download "
+                                   f"did not match its sha256")
+                self.last_refused = True
+                info = None
+            else:
+                self.last_error = ""
+                self.last_refused = False
             if info is not None:
                 self.host.after(0, lambda i=info: self._on_available(i))
         except Exception as e:
             ok = False
-            self.last_error = str(e)[:120] or "could not reach GitHub"
+            self.last_error = str(e)[:160] or "could not reach GitHub"
+            self.last_refused = isinstance(e, updater.UpdateRefused)
         finally:
             self.checking = False
             self.last_check_at = time.time()
@@ -208,6 +289,20 @@ class UpdateWorker:
         pending_info so resume_deferred picks it up after the active download
         completes (or after the batch ends).
         """
+        # A version whose install already failed waits for the button (v1.066).
+        fa = self.failed_attempt
+        if fa is not None and str(fa.get("version")) == info.version:
+            if self.failed_info is None:
+                self.failed_info = info
+                self.host.log(
+                    f"Update v{info.version} did not install last time "
+                    f"({fa.get('reason') or 'no reason recorded'}). It is not "
+                    f"tried again by itself — press Retry to try it again.",
+                    "warn",
+                )
+            return
+        self.failed_info = None          # something newer has superseded it
+
         # Dedup same version FIRST — avoid noisy re-logs across ticks regardless
         # of in_progress / batch state.
         if self.pending_info is not None and self.pending_info.tag == info.tag:
@@ -254,9 +349,29 @@ class UpdateWorker:
                 progress_cb=_pct,
                 expected_size=info.size,
             )
+            if ok:
+                from core import update_log
+                got = updater.sha256_of(dest)
+                update_log.log("DOWNLOADED", info.version,
+                               f"{dest} {dest.stat().st_size if dest.exists() else 0} bytes")
+                if not info.sha256 or got != info.sha256:
+                    try:
+                        dest.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+                    why = (f"the download's sha256 {got or '(unreadable)'} is not "
+                           f"the release's {info.sha256 or '(none given)'}")
+                    update_log.log("REFUSED", info.version, why)
+                    self._refused_downloads.add((info.tag, info.sha256))
+                    self.last_error = f"v{info.version} refused: {why}"[:160]
+                    self.last_refused = True
+                    ok, msg = False, f"refused — {why}"
+                else:
+                    update_log.log("VERIFIED", info.version, f"sha256={got}")
             self.in_progress = False
             if ok:
-                self.host.after(0, lambda d=dest, v=info.version: self._on_ready(d, v))
+                self.host.after(0, lambda d=dest, v=info.version, h=info.sha256:
+                                self._on_ready(d, v, h))
             else:
                 self.host.after(
                     0,
@@ -265,7 +380,7 @@ class UpdateWorker:
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _on_ready(self, installer_path: Path, version: str) -> None:
+    def _on_ready(self, installer_path: Path, version: str, sha256: str = "") -> None:
         """Download finished — install, defer, or download a newer pending tag."""
         # If a newer tag arrived during this download, drop the just-downloaded
         # installer and start fetching the newer one. Cheaper than installing
@@ -301,6 +416,7 @@ class UpdateWorker:
 
         self.pending_installer = installer_path
         self.pending_installer_version = version
+        self.pending_installer_sha = sha256
         # The lighter "info-only" pending marker is superseded by a ready file
         self.pending_info = None
 
@@ -313,10 +429,22 @@ class UpdateWorker:
         self._install_now(version)
 
     def _install_now(self, version: str | None = None) -> None:
-        """Launch installer (silent) and exit. Guarded against mid-batch fire."""
+        """Launch installer (silent) and exit — only when the app is idle and
+        the file is still the one that was verified."""
         if self.host.is_batch_running:
             return
         if not self.pending_installer or not self.pending_installer.exists():
+            return
+        busy = self.busy_reason()
+        if busy:
+            if busy != self._waiting_said:
+                self._waiting_said = busy
+                self.host.log(f"Update v{version or '?'} is ready — waiting: {busy}", "info")
+            self._schedule_idle_retry()
+            return
+        self._waiting_said = ""
+        if not self._still_verified():
+            self.host.log(f"Update not installed: {self.last_error}", "warn")
             return
         try:
             from core import updater
@@ -325,8 +453,45 @@ class UpdateWorker:
                 "ok",
             )
             self.host.on_before_install()  # let host set its teardown flag
-            updater.launch_installer_and_exit(self.pending_installer, silent=True)
+            updater.launch_installer_and_exit(self.pending_installer, silent=True,
+                                              version=version or "")
         except SystemExit:
             raise
         except Exception as e:
             self.host.log(f"Install failed: {str(e)[:120]}", "warn")
+
+    def _still_verified(self) -> bool:
+        """Re-hash the pending installer right before it would run: the file sat
+        in a user-writable folder since it was verified. On a mismatch it is
+        deleted and forgotten, and last_error says why."""
+        from core import updater, update_log
+        path, version = self.pending_installer, self.pending_installer_version or "?"
+        if path is None:
+            return False
+        got = updater.sha256_of(path)
+        if self.pending_installer_sha and got == self.pending_installer_sha:
+            return True
+        why = (f"the installer changed after it was verified (sha256 {got or 'unreadable'}"
+               f", expected {self.pending_installer_sha or 'none recorded'})")
+        update_log.log("REFUSED", version, why)
+        try:
+            path.unlink(missing_ok=True)
+        except Exception:
+            pass
+        self.pending_installer = None
+        self.pending_installer_version = None
+        self.pending_installer_sha = ""
+        self.last_error = f"v{version} refused: {why}"[:160]
+        self.last_refused = True
+        return False
+
+    def _schedule_idle_retry(self) -> None:
+        if self._idle_retry_id is not None:
+            return
+
+        def again():
+            self._idle_retry_id = None
+            if self.pending_installer and self.pending_installer.exists():
+                self._install_now(self.pending_installer_version)
+
+        self._idle_retry_id = self.host.after(self.IDLE_RETRY_MS, again)

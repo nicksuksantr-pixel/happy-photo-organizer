@@ -1,0 +1,72 @@
+{
+  "_about": "Happy Photo Organizer's drill manifest (UPDATE_DRILL 5a). Read by drills/kit/Invoke-Drill.ps1; the HPO-specific steps are in drills/hpo.ps1. No secrets here, ever.",
+  "app": "Happy Photo Organizer",
+  "profile": "desktop-self-update",
+  "adapter": "hpo.ps1",
+  "release_repo": "nicksuksantr-pixel/happy-photo-organizer",
+  "drill_repo": "nicksuksantr-pixel/hpo-update-drill",
+  "stage_dir": "C:\\Users\\Public\\HPO-drill",
+  "asset_name": "HappyPhotoOrganizerSetup.exe",
+  "exe_name": "HappyPhotoOrganizer.exe",
+  "process_model": "pyinstaller-onedir",
+  "install_scope": "per-user",
+  "version_probe": "update.log: '<ISO> STARTED <version> <exe>' written by every start (v1.066+)",
+  "update_trigger": "automatic: checked at start (drill mode) and every 5 minutes; installs by itself once downloaded, verified and the app is idle",
+  "install_dir": "%LOCALAPPDATA%\\HappyPhotoOrganizer",
+  "app_dir": "%LOCALAPPDATA%\\HappyPhotoOrganizer\\HappyPhotoOrganizer",
+  "app_dir_rel": "HappyPhotoOrganizer",
+  "install_glob": [
+    "%LOCALAPPDATA%\\HappyPhotoOrganizer*",
+    "%LOCALAPPDATA%\\Programs\\HappyPhotoOrganizer*"
+  ],
+  "uninstall_key": "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\HappyPhotoOrganizer",
+  "user_data_dir": "%USERPROFILE%\\.happy-photo-organizer",
+  "update_log": "%USERPROFILE%\\.happy-photo-organizer\\logs\\update.log",
+  "sentinels": [
+    "jobshot_filed.json"
+  ],
+  "_sentinels_note": "byte-identical files only. auth.json is NOT one: the app saves its window position into it on every start, so it is checked field by field in Get-FixtureReport instead.",
+  "shortcuts": [
+    "%USERPROFILE%\\Desktop\\Happy Photo Organizer.lnk",
+    "%DESKTOP%\\Happy Photo Organizer.lnk",
+    "%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Happy Photo Organizer.lnk",
+    "%APPDATA%\\Microsoft\\Internet Explorer\\Quick Launch\\User Pinned\\TaskBar\\Happy Photo Organizer.lnk"
+  ],
+  "tree_allowlist": [
+    "uninstall.bat",
+    "HappyPhotoOrganizer/_internal/data/job_catalog.json"
+  ],
+  "_tree_allowlist_note": "uninstall.bat names its own folder; the catalog carries the job the user taught the app (until a later release moves it out of the install tree - bug U8).",
+  "relaunch": "the installer's launch_app() after the swap",
+  "busy_description": "Settings dialog open - no API key saved, so the app opens Settings at start",
+  "busy_window_prefix": "Settings",
+  "drill_user_like": "drill*",
+  "not_covered": [
+    "profile path: the drill account is plain ASCII 'drill' (C:\\Users\\drill); the ship PC's Windows username has not been read, so a profile path with a space or Thai characters is NOT covered by this drill (UPDATE_DRILL 5.2)",
+    "the 'Install now' button: in v1.066 it matters only while the app is busy, where it refuses (unit test test_the_install_button_refuses_while_busy_and_says_why), so it is not driven here",
+    "v1.066's own updater against real GitHub: every check on v1.066 runs through the loopback feed; tools/publish_release.py reads the real endpoint back after publishing",
+    "a failed install: the attempt record (update-attempt.json), no automatic retry of that version, the Retry button, and a pre-v1.066 app relaunched with its update checks paused for that session are unit-tested only; the drill runs the success path"
+  ],
+  "feed": {
+    "port": 47665,
+    "drill_env": "HAPPY_UPDATE_DRILL",
+    "feed_env": "HAPPY_UPDATE_FEED"
+  },
+  "from_route": {
+    "kind": "repo-env",
+    "env": "HAPPY_UPDATE_REPO"
+  },
+  "_from_route_note": "v1.065 has no drill feed; it does honour HAPPY_UPDATE_REPO, so its own updater fetches the candidate from the public test repo drill_repo. From v1.066 on, kind 'feed' (the loopback feed) is enough.",
+  "from": {
+    "version": "1.065",
+    "sha256": "46902c7913499f5dd303825593d2e10781abe237e1d5b6101c5f1fe861bccb88"
+  },
+  "timeouts": {
+    "update_s": 1800,
+    "start_s": 90,
+    "cleanup_s": 60,
+    "busy_hold_s": 90,
+    "idle_retry_s": 150,
+    "lock_wait_s": 3600
+  }
+}

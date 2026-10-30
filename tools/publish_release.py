@@ -24,12 +24,21 @@ caused this file is a named test.
 
 Nick's standing authorisation covers publishing without asking. It does not cover
 publishing something broken, which is the only thing this refuses.
+
+v1.066 (rule #28, memory/UPDATE_DRILL.md §5.7): before anything is tagged or
+uploaded it asks the lock — `node tools/release-gate.mjs --check --tag <tag>
+<installer>` — which passes only bytes a drill receipt in drills/ has seen
+update a real old install. And it reads the release back by SHA-256, not just
+by size: GitHub's digest must be the local build's, the app's own updater must
+be offered that digest, and the asset re-downloaded must hash to it.
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import subprocess
+import tempfile
 import sys
 import time
 import urllib.request
@@ -163,6 +172,33 @@ def gate_bundle_is_not_stale(*, installer: Path = INSTALLER,
                       "installer was not rebuilt from it")
 
 
+def sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+# the lock, exactly as UPDATE_DRILL §5.7 writes it; the hook reads this line
+GATE_CMD = ["node", str(ROOT / "tools" / "release-gate.mjs"), "--check"]
+
+
+def gate_a_drill_saw_these_bytes(tag: str, *, installer: Path = INSTALLER,
+                                 runner=run) -> None:
+    """Rule #28: no update drill, no release. Asked FIRST, before a tag or a
+    draft exists. With `--tag`, Nick's one-shot waiver for this tag (if he
+    gave one) is honoured — and consumed, so a publish that then fails needs
+    a new one. A missing `node` is a refusal, not a pass: a lock that cannot
+    be asked has not said yes."""
+    try:
+        out = runner(GATE_CMD + ["--tag", tag, str(installer)])
+    except FileNotFoundError as e:
+        raise Refused(f"cannot run node ({e}) — the release lock cannot be "
+                      f"asked, so nothing is published") from e
+    print(f"  {out.strip() or 'release-gate: passed'}")
+
+
 def gate_asset_is_named_correctly(*, installer: Path = INSTALLER) -> None:
     """The auto-updater matches on this exact name (updater.py:33). A renamed
     asset is a release nobody can install, and it looks fine on the page."""
@@ -174,12 +210,15 @@ def gate_asset_is_named_correctly(*, installer: Path = INSTALLER) -> None:
 # ─── the gate the whole file exists for ───
 
 
-def gate_published(version: str, *, expect_bytes: int, fetch=None) -> dict:
+def gate_published(version: str, *, expect_bytes: int, fetch=None,
+                   expect_sha256: str = "") -> dict:
     """After publishing: is it REALLY there, and is it the right bytes?
 
     Refuses: still a draft · no asset · more than one · an asset still
     uploading · a size that does not match what was built locally · a `latest`
-    that names a different tag.
+    that names a different tag · (v1.066) a digest that is not the local
+    build's SHA-256, or none at all — from v1.066 the app refuses an asset
+    without one, so a release without it is a release nobody can install.
 
     **"Revert it to a draft" is only ever said about THIS release.** Reverting
     changes what users are served only when `latest` already names it; when
@@ -228,10 +267,17 @@ def gate_published(version: str, *, expect_bytes: int, fetch=None) -> dict:
     if int(a.get("size") or 0) != int(expect_bytes):
         raise Refused(f"the published asset is {a.get('size')} bytes and the "
                       f"local build is {expect_bytes} — not the same file")
+    if expect_sha256:
+        digest = str(a.get("digest") or "")
+        if digest.lower() != f"sha256:{expect_sha256.lower()}":
+            raise Refused(f"the published asset's digest is {digest or 'missing'!r}, "
+                          f"not sha256:{expect_sha256[:12]}… — not the drilled file, "
+                          f"or one the updater will refuse. **Revert it to a draft now.**")
     return body
 
 
-def gate_the_app_would_offer_it(version: str, previous: str) -> None:
+def gate_the_app_would_offer_it(version: str, previous: str, *,
+                                expect_sha256: str = "") -> None:
     """Ask the APP, not the API. The updater is the only consumer that matters,
     and it is the one that silently found nothing on 2026-10-02."""
     from core import updater
@@ -265,10 +311,39 @@ def gate_the_app_would_offer_it(version: str, previous: str) -> None:
         raise Refused(msg)
     if not getattr(info, "download_url", ""):
         raise Refused("the updater found the release but no download URL")
+    if expect_sha256 and getattr(info, "sha256", "") != expect_sha256.lower():
+        raise Refused(f"the updater would hold the download to sha256 "
+                      f"{getattr(info, 'sha256', '')[:12] or 'nothing'}…, not the drilled "
+                      f"{expect_sha256[:12]}…")
     current = ask(version)
     if current is not None:
         raise Refused(f"a v{version} user is offered {current.version!r} — "
                       f"the version comparison is wrong")
+
+
+def gate_the_download_is_the_drilled_file(version: str, expect_sha256: str) -> None:
+    """§5.7: re-download the asset the way the field does — through the app's
+    own updater, from the URL `latest` gives — and hash it."""
+    from core import updater
+    try:
+        info = updater.check_for_update("0", timeout=15.0)
+    except updater.UpdateCheckFailed as e:
+        raise NotYetKnown(f"could not ask for `latest` ({e})",
+                          now="the updater could not ask GitHub") from e
+    if info is None or info.version != version:
+        raise NotYetKnown(f"`latest` does not offer v{version} yet",
+                          now=f"`latest` offers {getattr(info, 'version', None)}")
+    with tempfile.TemporaryDirectory() as td:
+        dest = Path(td) / ASSET
+        ok, msg = updater.download_installer(info.download_url, dest,
+                                             expected_size=info.size)
+        if not ok:
+            raise NotYetKnown(f"re-download failed: {msg}", now="re-download failed")
+        got = sha256_file(dest)
+    if got != expect_sha256.lower():
+        raise Refused(f"the asset re-downloaded from `latest` hashes to {got[:12]}…, "
+                      f"not the drilled {expect_sha256[:12]}… — **revert it to a draft now**")
+    print(f"  re-downloaded from `latest`: sha256 {got[:12]}… = the drilled file")
 
 
 def _fetch_latest() -> dict:
@@ -293,6 +368,8 @@ def local_gates(version: str) -> int:
 def publish(version: str, previous: str, notes: str) -> None:
     size = local_gates(version)
     tag = f"v{version}"
+    gate_a_drill_saw_these_bytes(tag)
+    sha = sha256_file(INSTALLER)
 
     existing = run(["git", "tag", "-l", tag]).strip()
     if not existing:
@@ -319,9 +396,10 @@ def publish(version: str, previous: str, notes: str) -> None:
 
     run(["gh", "release", "edit", tag, "--draft=false"])
     # settle(): the first read after publishing can still be the old `latest`
-    settle(lambda: gate_published(version, expect_bytes=size))
-    settle(lambda: gate_the_app_would_offer_it(version, previous))
-    print(f"  PUBLISHED and verified from outside · v{version}")
+    settle(lambda: gate_published(version, expect_bytes=size, expect_sha256=sha))
+    settle(lambda: gate_the_app_would_offer_it(version, previous, expect_sha256=sha))
+    settle(lambda: gate_the_download_is_the_drilled_file(version, sha))
+    print(f"  PUBLISHED and verified from outside · v{version} · sha256 {sha[:12]}…")
 
 
 def main() -> int:
@@ -336,8 +414,9 @@ def main() -> int:
     try:
         if a.check:
             size = INSTALLER.stat().st_size if INSTALLER.is_file() else 0
-            body = settle(lambda: gate_published(a.check, expect_bytes=size)
-                          ) if size else None
+            sha = sha256_file(INSTALLER) if size else ""
+            body = settle(lambda: gate_published(a.check, expect_bytes=size,
+                                                 expect_sha256=sha)) if size else None
             if body:
                 print(f"  v{a.check} published, asset matches the local build")
             if a.previous:

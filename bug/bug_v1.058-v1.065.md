@@ -25,6 +25,9 @@ None of these has reached a user as a known failure, but none has ever been run 
 to end either. The silent `--upgrade` path has no record of ever being run from an
 old packaged build to a new one. **Fix planned as the v1.066 bridge** (`docs/PARKED.md`).
 
+**2026-10-31: U1–U7, U9 and U10 are fixed in v1.066** (built, not yet released: it waits for its drill). U8 is
+still open. Detail in `bug/bug_v1.066.md`.
+
 | # | Where | Defect |
 |---|---|---|
 | U1 | `tests/` | No test touches `installer/` at all, not even `_merge_catalog`. |
