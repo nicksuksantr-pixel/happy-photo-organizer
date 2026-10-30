@@ -206,6 +206,19 @@ build. Turning on hardware acceleration (WHPX) is a Windows setting, so it is Ni
 thing #28 needs the emulator for: whether each change is ALSO tested on it day to day stays each project's own
 rule (NotiWallet: unit tests + analyze, Nick 2026-06-11).
 
+**Measured on Nick's PC (JS, 2026-10-30):**
+- **Acceleration:** `emulator -accel-check` reports WHPX installed and usable, so nothing has to be switched on.
+- **Image:** android-35 `google_apis` x86_64. It runs an arm64-only APK through ARM translation (`abilist=x86_64,arm64-v8a`).
+- **Boot:** headless with `-no-snapshot -gpu swiftshader_indirect`; `boot_completed` took about 3 minutes.
+- **Under translation the app is slow.** `am start -W` times out at about 13 s, and plugins attach about 30 s
+  after the engine starts. Poll the screen for up to about 90 s instead of trusting `-W`.
+- **`adb root` works on a `google_apis` image,** so `user_data_intact` can hash `/data/data/<package>/`.
+  Android itself rewrites `cache/`, `code_cache/` and `files/profileinstaller*` on an update, so leave those out.
+- **One drill AVD per app,** named `drill_<app>`, wiped (`-wipe-data`) at the start of every drill, so the FROM
+  install is clean and two apps never share a device. It holds nothing but drill data, so the wipe is part of the
+  drill. Never use or wipe Nick's own AVDs (`Pixel6_API35`).
+- **Disk:** about 3.5 GB per AVD, plus 3.5 GB for the image and 1.1 GB for the emulator, shared.
+
 **Android (`android`, sideloaded with adb or delivered by Play).** On the emulator:
 - install the FROM APK (its release file) and create real jobs;
 - `adb install -r` the TO APK;
