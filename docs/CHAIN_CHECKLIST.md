@@ -1868,7 +1868,8 @@ Handed to the master in `memory/TO_PROMOTE.md` as its own row.
 ### §3.7 — **LAN_PROTOCOL v1.1.1 · `X-JobShot-Job-Ids` and the probe hold.** Agreed with JobShot 2026-10-30
 
 **Versions:** HPO **v1.065** reads it (built on `main`, not released) · JobShot
-**v0.047** sends it (agreed and being built, 2026-10-30). Optional on both
+**v0.047** sends it (JS `3985b0d`, built 2026-10-30, not yet on Nick's phone,
+which runs v0.045). Optional on both
 sides, so either may ship first: an old HPO ignores the header, and without it
 the hold starts when the zip is unpacked. Called v1.1.1 because v1.2 is already the name of
 `revision` in all three repos.
