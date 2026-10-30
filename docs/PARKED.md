@@ -8,7 +8,29 @@ Everything below is in git. **Nothing of this project exists only in a session.*
 
 ---
 
-## 🔴 Waiting on Nick — nothing
+## 🔴 Waiting on Nick + the Director — rule #28, the update drill (2026-10-30)
+
+**No HPO release can ship until v1.065 has updated itself to it in a drill** (`memory/UPDATE_DRILL.md`,
+lock `tools/release-gate.mjs`). Plan sent to the Director the same night. **Nothing is built yet.**
+
+- **Confirmed in the released bytes:** v1.065 (setup sha256 `46902c79…cb88`, the digest GitHub's API reports for
+  it) reads `HAPPY_UPDATE_REPO`. So the bridge v1.066 can be drilled **before** it ships, from a public test repo,
+  with no waiver.
+- **Gaps confirmed in the code:** no test touches `installer/`; no hash check plus a first-`.exe` fallback
+  (`updater.py:185`); extract-over that never removes old files (`installer.py:372`); `taskkill /F` with one
+  0.5 s wait and no rollback (`installer.py:987`); zero-click install guarded by the batch flag only, so it
+  can kill a JobShot filing (`update_worker.py:307`); the installer's `print()` log goes nowhere
+  (`console=False`); `--upgrade` re-creates a Desktop shortcut the user deleted; `job_catalog.json` is user
+  data inside the install tree (§2, its own later release).
+- **Bridge v1.066 =** the §3 contract (loopback feed, `update.log` with `STARTED`) plus the fixes: verify the
+  API `digest`; stage → copy to rollback → replace file by file → remove leftovers → restore on failure; wait
+  for exit instead of killing; auto-install only when idle; tests; the gate's `--check` in the publish script.
+- **Waiting on:**
+  - **Nick:** create a standard Windows account `drill`, plus one scheduled task that runs the harness as it.
+  - **Nick:** approve creating a public test repo.
+  - **Director:** how the gate lets the candidate into that test repo, and whether the §5a house kit is coming.
+
+## 🔴 Waiting on Nick — nothing else
 
 **The two agent-cap hook items listed here until 2026-10-30 were already fixed.**
 They arrived through the master sync `e46ffd5` (2026-10-20, command_pattern
