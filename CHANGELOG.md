@@ -9,7 +9,7 @@ Cosmetic / design / V2-scope items that survived round 6 + 7 + 8. All
 catalogued in detail at the bottom of this file under "Round 6
 deferred".
 
-## [Unreleased] — on `main` — The "was this filed?" check waits for a job that is landing
+## [1.065] — 2026-10-30 — The "was this filed?" check waits for a job that is landing
 
 ### Fixed
 - **A job still being filed is no longer reported as "not filed".** The
