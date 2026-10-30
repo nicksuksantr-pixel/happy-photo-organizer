@@ -60,9 +60,16 @@ it retypes anything, except for a job captured before JS v0.026 (§9).
    starts the job prefilled with that machine's name and the previous job's details, **never its date or
    its `job_id`**, so it is a new job by construction and only the photos are new. HPO files it under its
    own date like any other job; nothing is asked of HPO. The same `equipment_id`, and so the same name,
-   ties it to the earlier reports, and JobShot updates its routine record itself. Open, for JS: where the
-   previous details come from (its register copy, or EMR's LAN lookup once the EMR-LAN-test has run), and
-   the `scanned` provenance word.
+   ties it to the earlier reports, and JobShot updates its routine record itself.
+   **JS answered (`eb1eb30`, review only): agreed, with conditions.**
+   - The scan is a prefill, not a lock: everything stays editable before Create.
+   - Source: EMR's live lookup, which alone has the report as filed. With the PC off, the register copy
+     gives the machine's facts only. The phone's own old draft is never used.
+   - `scanned` = copied from EMR because of a scan, accepted, and unchanged since. Any edit makes it
+     `typed`. Sections and spare fields only.
+   **Open for Nick:** the carry list in JS's answer, and whether the routine round counts at the job's first
+   photo (JS's proposal) or at the scan. Also open: the EMR-LAN-test, and the go for ADR-0008.
+   **Open for EMR:** confirm it prints `scanned`, unlike `ai`. **Not the chain's agreement until then.**
 2. Photograph, and **tag each photo Before / After / part-label.** The phone cannot infer this.
 3. Optionally fill the report page: equipment / model / serial, preventive|breakdown, pass|fail, the
    four sections, spare parts.
@@ -191,7 +198,7 @@ written last · photos byte-for-byte with EXIF intact · `emr.json` absent when 
 names in `emr.json` true at write time · **`source` written for every spare row and every section** ·
 **`equipment` stays a bare string** · **only `typed` or `ai_confirmed` is ever written.** Any change to
 the last three goes on the chain sheet **with a version, before a line of code is written.**
-**Since JS v0.044** (`b151235`, 2026-10-30, not on the phone yet): `emr.json` goes whenever the equipment name is known or a photo is tagged, so most phone jobs now arrive with at least `equipment`. There are no new keys, and HPO and `job.json` are unchanged. **Nick's decision, as revised on 2026-10-30: always send, and EMR auto-reports a job once at least one photo is tagged Before or After.** His first answer was "auto-report every job". He changed it after EMR measured a name-only job's report coming out with 0 of its 5 photos (EMR `4220598`). The text boxes may still be empty. **Release order: EMR v0.5.0 reaches the ships before JS v0.044.** EMR v0.5.0 was published first (2026-10-30), so put v0.044 on the phone only once the ship's PC shows v0.5.0. An older EMR's `Draft.is_empty` counts a name, so its `auto_reports` (on by default) writes a name-only job's report at once, with blank boxes, no photos and Preventive/Pass by default.
+**Since JS v0.044** (`b151235`, 2026-10-30, not on the phone yet): `emr.json` goes whenever the equipment name is known or a photo is tagged, so most phone jobs now arrive with at least `equipment`. There are no new keys, and HPO and `job.json` are unchanged. **Nick's decision, as revised on 2026-10-30: always send, and EMR auto-reports a job once at least one photo is tagged Before or After.** His first answer was "auto-report every job". He changed it after EMR measured a name-only job's report coming out with 0 of its 5 photos (EMR `4220598`). The text boxes may still be empty. **Release order: EMR v0.5.0 reaches the ships before JS v0.044.** EMR v0.5.0 was published first (2026-10-30), so put v0.044 on the phone only once the ship's PC shows v0.5.0 or later. An older EMR's `Draft.is_empty` counts a name, so its `auto_reports` (on by default) writes a name-only job's report at once, with blank boxes, no photos and Preventive/Pass by default.
 **JS v0.045** (`675fc02` + `9b559fb`, 2026-10-30, on Nick's go; not on the phone yet, same install order): no wire change. The correction card and its confirmation say the PC replaced the **draft** and point at EMR's status line. A new exit nudge fires once, without blocking, when photos exist and none is tagged Before or After; it skips filed jobs, and a Part tag does not count. **Its four sentences about EMR were confirmed by EMR against v0.5.0** (EMR `bb6fd22`) and hold only on EMR v0.5.0 or later. **Known gap, shipped knowingly (Nick):** EMR's status line counts jobs and never names them ("1 remade · 1 need you"), so "if EMR does not say it remade the report" cannot point at a particular job. EMR offered to name the job, and **Nick did not take it up (2026-10-30): the status line will not name the job.** Phone wording must not assume it does. It reads "N remade… · N need you: <reason> (+k more)". Nick also kept hand-made reports flagged, never remade ("I'll fix anything wrong by hand"), so for those the phone's honest sentence stays "the PC was told".
 
 **HPO guarantees:** `emr.json` carried byte-for-byte · `extras` naming what is on disk · `renamed`
@@ -206,7 +213,7 @@ the bytes on disk are complete.**
 **EMR guarantees:** it never writes to another project's files · a bad draft never fails a report · it
 refuses rather than half-fills an ambiguous folder · unconfirmed values are dropped, not printed ·
 `parts` photos are never tagged and never printed.
-**Since EMR v0.5.0** (`468d2de`; **published 2026-10-30**, Latest on EMR-releases, SHA-256 `b2846ae1…`; Nick's two rulings on JS v0.044; these lines checked against the code by EMR, path 2 measured, `634f67f`):
+**Since EMR v0.5.0** (`468d2de`; **published 2026-10-30**, SHA-256 `b2846ae1…`; v0.5.1 replaced it as Latest the same day and only fills the ship code in New machine (`CHL` for ENA Challenger, `58632af`), with no chain change; Nick's two rulings on JS v0.044; these lines checked against the code by EMR, path 2 measured, `634f67f`):
 - **The automatic road needs a tagged photo.** It writes a report only when at least one photo is tagged Before or After. Otherwise the status line says "need you: no photo is tagged Before or After yet".
 - **A newer phone draft is caught by content, not by clock, for a report made by v0.5.0 or later.** `report_history.json` records `made_by` and `draft_sha256`, a hash of every `emr*.json` in the folder when the form was filled (button road) or just before the draft was read (automatic road). A report from v0.4.9 or older records neither, so all three paths stay silent for it, as before. Nothing changes on the wire, and no file name is added.
 - **What happens depends on how the newer draft arrived** (the three paths, HPO `442f52d`):
