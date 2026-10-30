@@ -21,7 +21,15 @@
 
 - **Fast Path:** new/cleared chat → read `[project]\memory\MEMORY.md` + latest 1 file in `chat_log\` → work. Full MASTER chain ONLY on "อ่าน MASTER" / first onboarding.
 - **Language:** chat with Nick = Thai · all written records = English (#17) · **Nick's quotes too — paraphrase to English, no verbatim Thai** (triggers are the only exception).
-- **chat_log:** append 1 essence entry (asked/done/decisions/pending) after every task (#18).
+- **Task done = records first, then commit (#20.0, 2026-10-30).** Before the commit, write:
+  - `chat_log/`: 1 essence entry for every task (asked / done / decisions / pending) (#18);
+  - `log/`: for every version or session that changed the project (#9);
+  - `bug/`: for every bug found or fixed (#10);
+  - `MEMORY.md`: on a bug or risk (#4);
+  - `V-Log.md`: for every version (#11);
+  - rotate over-quota records to `_trash/` (#7).
+  - The final report shows **one line**: `📝 records: chat_log ✓ · log vX ✓ · bug — · MEMORY ✓ · V-Log ✓ · commit <sha>`.
+  - **Why:** Nick saw no one doing it. This brief carried only chat_log, so `log/` and `bug/` silently stopped (EMR's `log/` since 2026-08-20, SM's since 09-19, HPO's since 09-26).
 - **Records:** 20 entries/file · keep 2 files/category · older → `_trash\` · never read `_trash\` (#6–#8).
 - **Versioning (#14.7, compact form 2026-08-27):** **`vX.NNN` — ONE dot.** The digits after it are the old `Y.Z.W` run together: `1.3.4.8` → **`1.348`**; each place is still 0–9 and still carries (`1.349`→`1.350`). **Exactly three digits — never four** (this brief said a 4th was allowed for one day; it was wrong. SHIP-MONITORING's `_COMPACT` took `\d{3,4}` while `_parse` truncated to 3, so `1.3481` and `1.348` became the SAME tuple and a hotfix would have stranded the fleet on *"already up to date"* for ever. A rule permitting a shape the comparator cannot order is a fleet-strand waiting to happen. Owner settled it: the tail is the three components after the leading unit; a 4th digit = a 5th component = a different system; `1.999→2.000` carries into the leading unit, which is why that unit exists). 📌 **Before writing any version shape into a rule, run the project's real `_parse`/`is_newer` over two examples of it** — a rule that disagrees with the comparator is a shipping bug, not a documentation bug. ⚠ **`1.348` is not a decimal — `1.35` is NOT newer**; compare by components, never as a float. ⛔ **Changing the version SHAPE is a fleet operation, not a cosmetic edit:** the installed build's comparator is the one copy you cannot change, and SHIP-MONITORING *measured* that a naive switch made every field unit answer "already up to date" for ever. Ship a **bridge release in the OLD shape whose payload is the tolerant comparator** first, move to the new shape only for machines already on the bridge, and pin the direction with a test asked **from the field's side** (`test_the_installed_generation_can_still_see_the_next_release` + a `PREV_RELEASE` constant bumped every release). ❌ Never skip the bridge. *(History: 2-digit 06-11 → 3-digit 06-12 → 4-part in SM → compact 08-27; move projects forward at their next release, never backwards.)*
 - **Cost discipline for triggers (#26.1, 2026-08-27):** **cheap checker BEFORE agents.** After any edit to the trigger scripts run `check-triggers.mjs` (in `tools/`, ~1 s, 0 tokens) — it settles the mechanical class (a guard deleted, a sibling set left incomplete, a doc contradicting the code, syntax) that a review round otherwise pays ~600 k tokens to find; `sync-rules-to-projects.ps1` runs it as a **gate** and copies nothing to any repo if it is red. **Stop criterion: a round with 0 BLOCKER and 0 corroborated MAJOR is a PASS — ship it**, never open another round to chase MINORs (a review always finds more; "nothing left" is not reachable). **Max 2 rounds per target**, a 3rd is Nick's call with the first two rounds' numbers in front of him. **Aim a run at ONE layer, not a whole repo** — 3 firms over 43k lines never meet, so the cross-check they were bought for does not happen (measured: 1.48 M tokens → 17 findings, 1 corroborated). Report the token bill and what it bought.
@@ -61,7 +69,11 @@
 
 ## Latest changes (newest first — keep max 10, move older lines to the bottom note)
 
-★ **2026-10-30 (newest)** — **v3.23 · #28 NO UPDATE DRILL, NO RELEASE — and a lock that enforces it.**
+★ **2026-10-30 (newest)** — **v3.24 · #20.0 records first, then commit.**
+- **What happened.** The rules never changed. This brief and CLAUDE.md carried chat_log but never log/ or bug/, so sessions stopped writing them.
+- **The fix.** A task is done only with its records written, and the final report shows a `📝 records:` line.
+
+★ **2026-10-30** — **v3.23 · #28 NO UPDATE DRILL, NO RELEASE — and a lock that enforces it.**
 - **What happened.** EMR v0.5.3 ("the app updates itself") went out with its own report saying the packaged exe was never drilled. On Nick's PC it renamed his Desktop folder to `_previous` and added a second folder; the old one kept the icon's place, so he opened the old build. Nick: *"so basic — prescribe the strong medicine."*
 - **The rule.** Now: the previous packaged release must update itself to exactly the bytes being published, on a user-like layout, and pass `UPDATE_DRILL.md` §4.
 - **The lock.** `release-gate.mjs` refuses `gh release` / `adb install` without a matching receipt, the same way the agent-cap hook made #16 real.

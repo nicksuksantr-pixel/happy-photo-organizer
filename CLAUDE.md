@@ -65,3 +65,13 @@ See PROJECT_SUMMARY.md § "V2 Roadmap" for the brief.
 
 ## 🚫 #28 No update drill, no release (house rule, 2026-10-30)
 `tools/release-gate.mjs` refuses `gh release` / `adb install` to a phone / a Play deploy unless a passing `drills/<version>.json` matches those exact bytes. The previous packaged release must update itself to them, laid out like the user's, and pass every check in `memory/UPDATE_DRILL.md`. Never hand-write a receipt or route around the lock; only Nick waives it, once per tag.
+
+## 📝 #20.0 Records first, then commit (house rule, 2026-10-30)
+A task is done only when its records are written:
+- `chat_log/` every task;
+- `log/` and `V-Log.md` every version;
+- `bug/` every bug;
+- `memory/MEMORY.md` on a risk;
+- over-quota files moved to `_trash/`.
+
+Then commit and push. The final report to Nick shows one line: `📝 records: chat_log ✓ · log vX ✓ · bug — · MEMORY ✓ · V-Log ✓ · commit <sha>`.
