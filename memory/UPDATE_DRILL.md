@@ -155,6 +155,14 @@ Add a check when a new failure class appears. That means adding it here **and** 
    - Creating that account is Nick's one-time step: an account is not something Claude creates.
    - If a field PC's profile path has a space or non-ASCII (Thai) characters, give the drill account the same kind
      of name. An ASCII `drill` cannot catch a quoting bug in a swap script.
+     Read the field PC's username (and its version, folder and whether its Desktop is redirected) BEFORE Nick
+     creates the account, or it may have to be created twice.
+   - **`drill` cannot read Nick's profile.** `C:\Users\NickSuksanTr` is open only to SYSTEM, Administrators and
+     Nick, and that is where the repos, the release files and the per-user Python and node live (EMR measured,
+     2026-10-30). So write the harness in PowerShell, or check first that its runtime is reachable from `drill`.
+     Stage its inputs (FROM and TO release files, fixtures, the harness) in a folder `drill` can read, such as
+     `C:\Users\Public\<App>-drill\`, and remove that folder afterwards. Every user on the PC can read it, so
+     never stage a key, token or password there. Copy the results back into the repo from Nick's side.
    - For a per-machine app, or a release that changes the install mode, use a VirtualBox VM with a snapshot.
 
    ⚠ **Run the harness OUTSIDE the Claude desktop app.** Claude's shell runs inside an MSIX container that
