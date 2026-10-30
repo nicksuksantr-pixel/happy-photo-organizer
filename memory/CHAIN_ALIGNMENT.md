@@ -175,7 +175,7 @@ written last · photos byte-for-byte with EXIF intact · `emr.json` absent when 
 names in `emr.json` true at write time · **`source` written for every spare row and every section** ·
 **`equipment` stays a bare string** · **only `typed` or `ai_confirmed` is ever written.** Any change to
 the last three goes on the chain sheet **with a version, before a line of code is written.**
-**Since JS v0.044** (`b151235`, 2026-10-30, not on the phone yet): `emr.json` goes whenever the equipment name is known or a photo is tagged, so most phone jobs now arrive with at least `equipment`. There are no new keys, and HPO and `job.json` are unchanged. **Nick's decision: always send, and EMR auto-reports every job.** EMR's `Draft.is_empty` counts a name, so `auto_reports` (on by default) writes such a job's report with blank boxes and Preventive/Pass by default.
+**Since JS v0.044** (`b151235`, 2026-10-30, not on the phone yet): `emr.json` goes whenever the equipment name is known or a photo is tagged, so most phone jobs now arrive with at least `equipment`. There are no new keys, and HPO and `job.json` are unchanged. **Nick's decision, as revised on 2026-10-30: always send, and EMR auto-reports a job once at least one photo is tagged Before or After.** His first answer was "auto-report every job". He changed it after EMR measured a name-only job's report coming out with 0 of its 5 photos (EMR `4220598`). The text boxes may still be empty. **Release order: EMR v0.5.0 reaches the ships before JS v0.044.** An older EMR's `Draft.is_empty` counts a name, so its `auto_reports` (on by default) writes a name-only job's report at once, with blank boxes, no photos and Preventive/Pass by default.
 
 **HPO guarantees:** `emr.json` carried byte-for-byte · `extras` naming what is on disk · `renamed`
 mapping every filed photo (v1.055+; earlier folders have no map and cannot get one) · a key absent from
@@ -187,6 +187,11 @@ the bytes on disk are complete.**
 **EMR guarantees:** it never writes to another project's files · a bad draft never fails a report · it
 refuses rather than half-fills an ambiguous folder · unconfirmed values are dropped, not printed ·
 `parts` photos are never tagged and never printed.
+**Since EMR `468d2de`** (2026-10-30, ships as v0.5.0, **not released yet**; Nick's two rulings on JS v0.044):
+- **The automatic road needs a tagged photo.** It writes a report only when at least one photo is tagged Before or After. Otherwise the status line says "need you: no photo is tagged Before or After yet".
+- **A newer phone draft is caught by content, not by clock.** `report_history.json` records `made_by` and `draft_sha256`, a hash of every `emr*.json` the report was built from. That catches all three ways a newer draft reaches a folder that already holds a `.docx` (HPO `442f52d`): the sidecar route replacing `emr.json` in place, the routine one since JS v0.044; a resend of the same `job_id` adding `emr-<id>.json`; and a folder with no manifest merged by name. Nothing changes on the wire, and no file name is added.
+- **A report the automatic road made is remade** ("N remade from a newer phone draft"). **One made by hand is only flagged, never remade**, because it may hold tags and text entered at the PC. A report from v0.4.9 or older records neither field and is never remade.
+- **For the phone's wording** (`emr_promises_test`): once this EMR is installed, "the PC replaced the report" is true for a report EMR made automatically. For one made by hand, the true sentence is "the PC was told".
 
 ---
 
