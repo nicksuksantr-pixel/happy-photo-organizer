@@ -376,6 +376,118 @@ resends a replacement on purpose.
   `emr*.json` into `draft_sha256`, so an `-2` draft is caught exactly as an
   `emr-<id>.json` is.
 
+## Answer per §1, 2026-10-30 (second) — why would two drafts of one job exist?
+
+The Director relayed two questions that JobShot left for HPO (JobShot `8fc082d`):
+does every receiver answer the probe, and does a hand-imported zip leave a
+record the probe finds? Answered from HPO's code at `30ba43c`, with one
+measurement. Nothing was built.
+
+**Short answer.** Every HPO route that files a phone job writes what the probe
+reads. **But it writes it only when the filing ends, and until then the probe
+answers a plain 404.** Measured: for 23 seconds on one 15-photo job. A resend
+inside that window was filed again, and it left exactly the folder EMR refuses:
+two drafts and two manifests of one `job_id`. This needs no lost record and no
+second PC. **It corrects my list above** (path 2a), which named only a moved
+folder, a damaged manifest and a phone that does not probe.
+
+### 1. Every receiver, and what it records
+
+| Route | Code path | Receipt row (index) | Manifest in the folder (scan) |
+|---|---|---|---|
+| LAN upload, `POST /jobshot/v1/upload` | `jobshot_server.do_POST` → `receive_zip` → `jobshot.import_batch` → `_file_group` | yes, `jobshot.py:753` | yes |
+| Drop zone: a folder holding `job.json`, or a folder of such folders | `main._on_drop` → `split_arrivals` → `_import_jobshot` → `import_batch` | yes, same line | yes |
+| Button "Select the job folder copied from the phone" | `main._pick_jobshot_folder` → same | yes | yes |
+| `scripts/import_job.py` | `import_batch` | yes, same receipt book per Windows user | yes |
+| Card-reader path (photos with no `job.json`) | the AI pipeline | **no** | **no**, by design: it is not a phone job |
+| Sidecar route, `POST /jobshot/v1/sidecar` | not a filer; it rewrites the row and keeps the original `filed_at` | — | — |
+
+So **yes, every phone-job receiver is answered by the probe**, because all four
+end in the same `_file_group`. The probe reads the receipt row first, and if the
+row is missing or its folder is gone, it scans the manifests in the top-level
+folders of the receiver's current destination.
+
+### 2. A zip carried by hand
+
+- **HPO has no zip importer.** A `.zip` dropped on HPO is neither a job folder
+  nor a photo (`split_arrivals` puts files in "rest", and `is_supported_image`
+  refuses `.zip`). It counts 0 photos, nothing is filed, and Start says
+  *"No supported images found"*. No record, and nothing on disk either.
+- **Extracted, then dropped or browsed as a folder:** it takes the drop-zone row
+  above. The receipt row and the manifest are written, and **a later probe answers
+  200 filed.**
+- Three limits:
+  - **No route checks whether the job is already filed.** Hand-importing a job the
+    LAN already filed files it again (path 2a), and so does the reverse.
+  - A hand import can go to **another vessel's remembered folder**
+    (`main._jobshot_dest`). The row keeps the absolute path, so the probe finds
+    it; if that row is lost, the scan reads only the receiver's current
+    destination and answers 404.
+  - Photos dropped **without** their `job.json` take the card-reader path: no
+    manifest, no row.
+
+### 3. When this PC answers 404 for a job it filed, or is filing
+
+| # | Case | Why |
+|---|---|---|
+| 1 | 🔴 **While the job is being filed** (measured) | The receipt row and the manifest are written at the very end of `_file_group` (`jobshot.py:745-753`). Until then the photos sit in a `__pending_` folder, which the scan skips (`jobshot_index.py:130`). The server is a `ThreadingHTTPServer` (`jobshot_server.py:385`), so a probe is answered while the upload's filing runs, and nothing tracks a `job_id` in flight or makes a second upload of it wait. |
+| 2 | The folder left the receiver's current destination, and its row is lost or stale | Moved, archived into a subfolder, or the destination changed. The scan reads top-level folders only. This is by design: *"better a re-upload than a job deleted from the only device that still has it"*. On this test machine, 7 of 8 rows point at folders that are gone (the 2026-09-26 test runs, cleared since), so those 7 would answer 404 today. |
+| 3 | A manifest HPO cannot parse | Since v1.064 the 404 carries `unreadable_records`, and JS v0.045 holds the job. |
+| 4 | The phone is asking a different HPO install | Not this PC's answer at all. §2 carries no machine identity, so the phone cannot tell. |
+
+**The measurement for case 1.** HPO's real receiver, over loopback HTTP, with a
+temporary destination and receipt book. One job: 15 photos at 3000×2250
+(synthetic noisy JPEGs, 113 MB zipped) plus `emr.json`.
+
+| | |
+|---|---|
+| Upload A sent | 0.00 s |
+| Probe answers | **404 from 0.11 s to 23.24 s** (every 0.1 s) |
+| Resend B sent, after a 404 probe | 1.09 s |
+| A's reply | 23.38 s, 200, `merged: false`, `job.json` |
+| First probe answering 200 | 23.39 s |
+| B's reply | 26.14 s, 200, **`merged: true`**, `job-<id>.json` |
+| The folder afterwards | **30 jpg**, `emr.json` + `emr-<id>.json`, `job.json` + `job-<id>.json` |
+
+Not measured:
+- a real phone job's photo size;
+- the ship PC's CPU;
+- what JobShot actually does when it gets no reply.
+
+Synthetic noise makes larger files than real photos with the same pixel count.
+The filing time comes mostly from decoding and resizing pixels, so it should be
+similar, but I have not shown that.
+
+### 4. What the archive can show
+
+- **The ship's archive (`DESKTOP-NPAM51V`) is not reachable from this machine.**
+  I have not counted it.
+- **This machine's test archive** (`Downloads`, ship `ENA Test`): 1 job folder
+  with a manifest. No folder holds two manifests or two drafts.
+- **How to check the ship, read-only**, in PowerShell on that PC, with the
+  destination folder put in `$d`. It lists only folders holding more than one
+  manifest. Tested on a fake archive; it has not been run on the ship.
+
+      $d = "D:\path\to\photos"
+      Get-ChildItem -LiteralPath $d -Directory | ForEach-Object { $m = @(Get-ChildItem -LiteralPath $_.FullName -File -Filter 'job*.json'); if ($m.Count -gt 1) { $f = $_.Name; $m | ForEach-Object { $j = Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json; '{0} | {1} | {2} | {3}' -f $f, $_.Name, $j.job_id, $j.filed.filed_at } } }
+
+  - Rows sharing a `job_id` are a resend (2a).
+  - Different `job_id`s are a merge (2c, by design).
+  - If a resend's two `filed_at` values are seconds apart, that is case 1.
+
+### 5. What this changes for path 2
+
+- **Two drafts of one job can come from HPO's own filing window.** Nobody has to
+  press a button twice; it only takes the phone giving up on the reply and
+  probing before the filing ends. **Whether JobShot does that is JobShot's code.**
+  The question for JS is how long the phone waits for the upload reply, and what
+  it does when it gives up.
+- **An HPO-only remedy exists, with no wire change, and it is not built:** hold
+  a probe for a `job_id` that is being filed until that filing ends, then answer
+  200 as usual. It works only if the phone's probe timeout is longer than the
+  wait, and JS knows that number. Nick's call. Cases 2 and 4 would still make
+  two drafts, so EMR's choice in path 2 remains a real question either way.
+
 ---
 
 — Codey (Happy-Photo-Organizer)
