@@ -199,6 +199,13 @@ Add a check when a new failure class appears. That means adding it here **and** 
      the drilled asset, re-downloaded, **with the receipt's SHA-256**. A release with no asset, or the wrong one,
      is a failed release.
 
+**The Android drill runs on the emulator (Nick, 2026-10-30).** He paused it earlier that night, then reversed it:
+the house goes back to the emulator system. One emulator serves every Android app, installed in the shared SDK
+`C:\AndroidSdkBuild` (the AVD under `~/.android/avd`). A per-tag waiver is not the routine way to ship an Android
+build. Turning on hardware acceleration (WHPX) is a Windows setting, so it is Nick's step. The drill is the only
+thing #28 needs the emulator for: whether each change is ALSO tested on it day to day stays each project's own
+rule (NotiWallet: unit tests + analyze, Nick 2026-06-11).
+
 **Android (`android`, sideloaded with adb or delivered by Play).** On the emulator:
 - install the FROM APK (its release file) and create real jobs;
 - `adb install -r` the TO APK;

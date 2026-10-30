@@ -60,6 +60,7 @@
   - **The receipt.** The drill writes `drills/<version>.json` (`update-drill/1`) with the SHA-256 of each published file, plus its log.
   - **The lock is `tools/release-gate.mjs`**, a PreToolUse hook on Bash/PowerShell, global plus every repo's `.claude/settings.json`. It refuses publishing without a passing receipt for **those exact bytes**. Drafts and emulator installs pass. `node tools/release-gate.mjs --validate <receipt>` checks one receipt.
   - **Never hand-write a receipt and never route around the lock.** Only Nick waives it, once per tag, via `~/.claude/release-approval.json`.
+  - **Android drills run on the emulator** (Nick, 2026-10-30, reversing a pause the same night): one emulator for every Android app, in the shared SDK `C:\AndroidSdkBuild`. A per-tag waiver is not the routine way to ship. Turning on WHPX is Nick's step. Day-to-day emulator testing stays each project's own rule.
   - **28.1 updater contract:** a loopback-only feed override (`HAPPY_UPDATE_DRILL=1` + `HAPPY_UPDATE_FEED`), check-at-start, and `update.log` with one line per stage plus `STARTED <version>`.
   - **28.2 install layout:** one fixed per-user folder (never the Desktop or a versioned name) · installer-made shortcuts · update in place, never renaming the folder an icon or shortcut points at (a renamed folder takes the user's icon with it) · data outside the install folder · one download location · one instance.
   - **Migrating a layout is itself a release, drilled FROM the old one.**
