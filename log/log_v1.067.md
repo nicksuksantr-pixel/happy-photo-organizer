@@ -1,9 +1,17 @@
 # Log — v1.067 (2026-11-01) — No key to set up: the built-in free key is the only key
 
-**Drill run 4 PASSED every check** (`drills/1.067.json`). It updated the released v1.066 (`93c4d69c...`) to these
-exact bytes, `bf807b97243c71b3e3b72239e6275afdd1aab9b63b07eb7c32b87f545d429364`, and proved the built-in key works
-from the updated build. The release goes out through `tools/publish_release.py`, which asks the lock first and
-reads the release back from outside afterwards.
+**RELEASED 2026-11-01 00:15** (tag `v1.067` at `6875f01`), after drill run 4 PASSED every check
+(`drills/1.067.json`). The drill updated the released v1.066 (`93c4d69c...`) to these exact bytes,
+`bf807b97243c71b3e3b72239e6275afdd1aab9b63b07eb7c32b87f545d429364`, and proved the built-in key works from the
+updated build. It was published through `tools/publish_release.py`, and every gate passed:
+- the lock passed;
+- the draft was uploaded first, and its asset size was verified;
+- after publishing, the copy re-downloaded from `latest` hashes to the drilled file.
+
+**Not drilled, and live on Nick's PC: v1.065 → v1.067.** Nick's PC still ran v1.065, not v1.066. At 00:16 its old
+updater found v1.067 and downloaded it, finishing at 00:28:54 (91,707,238 bytes). The drill proves the previous
+release (v1.066) updating. A machine on v1.065 skips v1.066 and runs v1.065's old update path with v1.067's
+installer. That path was drilled only to v1.066 (the bridge), never to these bytes. The ship PC is also on v1.065.
 
 **Asked:** build Nick's free Gemini key into the app and hide the key page (*"it is a free key"*). Then: the safest
 way is that the key never enters git, test the failure cases hard, and send the tests to the Director. Then the

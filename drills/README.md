@@ -31,6 +31,12 @@ the keyboard. Every run is **Switch user**, done by Nick, never `runas` and neve
      and passes the harness's exit code on (0 only on a pass).
    - It asks nothing of Nick (no `DRILL-NEEDS-NICK`): the fixtures write the API key, so Settings never waits for
      him, and the busy step closes Settings itself.
+   - **WATCH mode (Director, on Nick's word, 2026-11-01):** once Nick has started "Run update drills" in `drill`, it
+     stays open and runs every launcher the moment it is staged. A Startup shortcut restarts it when `drill` logs
+     in, and `C:\Users\Public\Drills\STOP-WATCH` stops it. So **staging IS starting a run**: do not ask Nick to
+     click. If `results.txt` shows nothing 2 minutes after staging, tell the Director (the watcher may not be
+     running). Re-staging while a run is going is refused by Stage-Drill's lock guard. A wrong stage still runs at
+     once, so stage only what should be drilled.
    - Nick switches back while it runs, so the drill runs in a disconnected session. The harness uses no input and
      no screen capture, only `EnumWindows` and `PostMessage`, which work there. That is read from the code; the
      first run's result is the proof.
@@ -49,7 +55,7 @@ gh release download v1.066 --repo nicksuksantr-pixel/happy-photo-organizer -p Ha
 #    drill feed. From FROM v1.066 on the kit's loopback feed serves it; nothing is published.)
 # 3. stage where the drill account can read it (no secrets are ever staged); also writes C:\Users\Public\Drills\HPO.cmd
 .\drills\kit\Stage-Drill.ps1 -Manifest .\drills\drill.json -FromSetup "$env:TEMP\hpo-from\HappyPhotoOrganizerSetup.exe" -ToSetup .\dist\HappyPhotoOrganizerSetup.exe -ToVersion 1.067
-# 4. tell Nick one line: "a drill is waiting in drill" (his part: Switch user to drill, run "Run update drills")
+# 4. the WATCH-mode runner starts it by itself; watch results.txt (nothing within 2 min = tell the Director)
 # 5. when results.txt has the HPO line: receipt + logs into drills\, validated, stage removed
 .\drills\kit\Collect-Drill.ps1 -Manifest .\drills\drill.json -ToVersion 1.067
 ```

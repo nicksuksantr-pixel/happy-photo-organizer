@@ -187,6 +187,7 @@ session รีสตาร์ท และชื่อ "Coddy" ไม่โผ�
       - 🚨 **RISK (K14, 2026-10-31): re-staging deleted a RUNNING drill's folder.** My guard looked for the lock at `Public\Drills\drill-busy.txt`; the house lock is **`C:\Users\Public\drill-busy.txt`**.
         - Since master d12865e (adopted), Stage-Drill refuses while that lock names this app with a live pid. It was tested on the live run-3 lock.
         - Still check it yourself before a re-stage: the lock absent, and the last `HPO.cmd` accounted for. That means either it is still waiting, or its result line is in `results.txt`.
+      - ⚠ **WATCH mode (2026-11-01): staging = starting a run.** The drill account's runner stays open and runs a launcher the moment it is staged, so do not ask Nick to click. If `results.txt` shows nothing within 2 minutes, tell the Director. A wrong stage runs at once, and a hung run is stopped by creating `<stage>\out\STOP` (kit 80052c3+). `STOP-WATCH` in `C:\Users\Public\Drills` stops the watcher itself.
       - `Get-EmbeddedKeyEvidence` runs `--check-embedded-key` (drill mode only), which writes status, model and fingerprint, never the key.
   - ⚠ **RISK: Windows Defender scans the first open of a freshly written file, and our drill cannot see it (measured 2026-10-31).**
     - A fresh copy of the 91 MB installer took 3.88 s on first open, then 0.16 s. Every later fresh copy of the same bytes (and one with a byte flipped) took 0.24 s, so the build machine's drill meets the warm number.
