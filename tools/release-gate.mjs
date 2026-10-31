@@ -190,9 +190,11 @@ function keysInBytes(buf) {
   const found = new Set(); const CH = 8 << 20; const OV = 512
   for (let o = 0; o < buf.length; o += CH) {
     const part = buf.subarray(Math.max(0, o - OV), Math.min(buf.length, o + CH))
-    for (const s of [part.toString('latin1'), part.toString('utf16le')]) for (const re of KEY_SHAPES) for (const m of s.matchAll(re)) found.add(m[0])
+    const views = [part.toString('latin1'), part.toString('utf16le')]
+    if (buf[0] === 0xfe && buf[1] === 0xff) { const sw = Buffer.from(part); sw.swap16(); views.push(sw.toString('utf16le')) }   // UTF-16 BE (JS found it unread, 2026-11-01)
+    for (const s of views) for (const re of KEY_SHAPES) for (const m of s.matchAll(re)) found.add(m[0])
   }
-  for (const k of known().texts) if (buf.indexOf(k, 0, 'latin1') >= 0 || buf.indexOf(Buffer.from(k, 'utf16le')) >= 0) found.add(k)
+  for (const k of known().texts) { const be = Buffer.from(k, 'utf16le'); be.swap16(); if (buf.indexOf(k, 0, 'latin1') >= 0 || buf.indexOf(Buffer.from(k, 'utf16le')) >= 0 || buf.indexOf(be) >= 0) found.add(k) }
   return found
 }
 /** The members of a zip (APK, AAB, MSIX, .zip): stored or deflated, under 64 MB, not zip64/encrypted. [] when not a zip. */
@@ -276,6 +278,7 @@ function hitsIn(buf, where, out) {
   }
 }
 const u16 = (s) => [...s].map((c) => c.replace(/[.*+?^${}()|[\]\\\/-]/g, '\\$&') + '\\x00').join('')
+const u16be = (s) => [...s].map((c) => '\\x00' + c.replace(/[.*+?^${}()|[\]\\\/-]/g, '\\$&')).join('')
 /** Keys and secret-named files in what git is about to publish. Sentences; empty = clean.
  *  staged: the index (+ the worktree with `all`, + untracked files with `untracked` = true or a path list), scoped to
  *  `paths` as git resolves them from `cwd`. Otherwise: the trees of `refs` (a push, a release), default HEAD. */
@@ -311,7 +314,7 @@ export function secretProblems(root, { staged = false, all = false, untracked = 
   try {
     const texts = known().texts
     if (texts.length) fs.writeFileSync(f1, texts.join('\n') + '\n', { mode: 0o600 })   // registered keys by text: a private file, never argv
-    fs.writeFileSync(f2, [...texts.map(u16), 'A\\x00I\\x00z\\x00a\\x00(?:[0-9A-Za-z_-]\\x00){35}', 'A\\x00Q\\x00\\.\\x00(?:[0-9A-Za-z_-]\\x00){30,}'].join('\n') + '\n', { mode: 0o600 })
+    fs.writeFileSync(f2, [...texts.map(u16), ...texts.map(u16be), 'A\\x00I\\x00z\\x00a\\x00(?:[0-9A-Za-z_-]\\x00){35}', 'A\\x00Q\\x00\\.\\x00(?:[0-9A-Za-z_-]\\x00){30,}', '\\x00A\\x00I\\x00z\\x00a(?:\\x00[0-9A-Za-z_-]){35}', '\\x00A\\x00Q\\x00\\.(?:\\x00[0-9A-Za-z_-]){30,}'].join('\n') + '\n', { mode: 0o600 })
     const E = [...KEY_SHAPES.map((r) => r.source.replace(/^\(\?<!\[[^\]]*\]\)/, '')), PRIVATE_BLOCK.source].join('|')
     for (const ref of [...new Set(refs)]) {
       const tree = gitAt(top, ['ls-tree', '-r', '--name-only', '-z', ref])
@@ -336,6 +339,34 @@ export function secretProblems(root, { staged = false, all = false, untracked = 
       }
     }
   } finally { try { fs.rmSync(d, { recursive: true, force: true }) } catch {} }
+  return [...new Set(out)]
+}
+/** The commits a push would carry (upstream..ref, or everything not on any remote), read by patch and message —
+ *  a key committed and deleted in a later commit still rides to GitHub in history (JS found the tree-only scan, 2026-11-01). */
+export function outgoingProblems(root, ref = 'HEAD') {
+  const out = []; const top = String(gitAt(root, ['rev-parse', '--show-toplevel']).stdout || '').trim() || root
+  const up = gitAt(top, ['rev-parse', '--abbrev-ref', '--symbolic-full-name', `${ref}@{upstream}`])
+  const range = up.status === 0 && String(up.stdout).trim() ? [`${String(up.stdout).trim()}..${ref}`] : [ref, '--not', '--remotes']
+  const list = gitAt(top, ['rev-list', '--max-count=501', ...range])
+  if (list.status !== 0) return out
+  const shas = String(list.stdout || '').split('\n').filter(Boolean)
+  if (!shas.length) return out
+  if (shas.length > 500) out.push(`${ref}: more than 500 commits are not on the remote; the gate read the newest 500 — push in smaller steps or ask the Director`)
+  const hit = (where, line) => { if (!NOT_A_KEY.test(line) || isRegistered) for (const k of keysInText(line.replace(/\0/g, ''))) { if (NOT_A_KEY.test(line) && !isRegistered(k)) continue; out.push(`${where} holds ${describeKey(k)}: it is in a commit this push carries — rewrite that history before pushing (git rebase -i / filter-repo), on Nick's word`) } }
+  const log = gitAt(top, ['log', '--format=%x01%h%x01%B%x02', '-p', '--text', '-U0', '--no-color', '--max-count=500', ...range])
+  let sha = ''; let file = ''; let inMsg = false
+  for (const raw of String(log.stdout || '').split('\n')) {
+    if (raw.startsWith('\x01')) { const m = /^\x01([0-9a-f]+)\x01([\s\S]*)$/.exec(raw); sha = m ? m[1] : sha; inMsg = true; if (m && m[2]) hit(`commit ${sha} message`, m[2]); continue }
+    if (inMsg) { if (raw.includes('\x02')) { inMsg = false; hit(`commit ${sha} message`, raw.replace('\x02', '')); } else hit(`commit ${sha} message`, raw); continue }
+    if (raw.startsWith('+++ ')) { file = raw.replace(/^\+\+\+ (b\/)?/, ''); continue }
+    if (raw.startsWith('Binary files') || raw.startsWith('GIT binary patch')) {        // a binary change: read that blob at that commit
+      const m = /^diff --git a\/(.+?) b\/(.+)$/.exec('') ; void m
+      if (file) { const b = gitBuf(top, ['show', `${sha}:${file}`]); if (b.status === 0 && b.stdout && b.stdout.length <= BIG) for (const k of keysInBuffer(b.stdout, file)) out.push(`commit ${sha} ${file} (binary) holds ${describeKey(k)}: it is in a commit this push carries — rewrite that history before pushing, on Nick's word`) }
+      continue
+    }
+    if (raw.startsWith('diff --git ')) { const m = /^diff --git a\/(.+?) b\/(.+)$/.exec(raw); file = m ? m[2] : file; continue }
+    if (raw.startsWith('+') && !raw.startsWith('+++')) hit(`commit ${sha} ${file}`, raw.slice(1))
+  }
   return [...new Set(out)]
 }
 function drillManifest(root) { return readJson(path.join(root, 'drills', 'drill.json')) }
@@ -432,6 +463,7 @@ export function gitWriteIntents(cmd, cwd = '.') {
       }
       if (/^(popd|pop-location)$/i.test(exe)) { cur = null; unknown = false; continue }
       const body = bodyOf(w); if (body) { walk(body); continue }
+      if (exe === 'gh' && w[1] === 'repo' && w[2] === 'create' && w.includes('--push')) { found.push({ kind: 'push', seg, gitExe: null, dir: cur, unknownDir: unknown, all: false, refs: ['HEAD'] }); continue }   // the house's own first-push road
       if (exe !== 'git') continue
       const gitExe = /[\\/]/.test(w[0]) ? w[0] : null
       let i = 1; let dir = null; let dirVar = false
@@ -755,6 +787,7 @@ export function judge(cmd, cwd) {
       // a commit earlier on the line replaces files in HEAD: those are judged as they will land, not as HEAD has them now
       const changed = it.worktree ? [...zlist(gitAt(r, ['diff', '--cached', '--name-only', '-z'])), ...zlist(gitAt(r, ['diff', '--name-only', '-z']))] : []
       hard.push(...secretProblems(r, { refs: it.all ? allHeads(r) : it.refs, cwd: r, exclude: changed }).map((p) => `push: ${p}`))
+      for (const ref of (it.all ? allHeads(r) : it.refs)) hard.push(...outgoingProblems(r, ref).map((p) => `push: ${p}`))
       if (it.worktree) hard.push(...secretProblems(r, { staged: true, all: true, untracked: it.untracked || false, cwd: r }).map((p) => `push (what the commit before it lands): ${p}`))
     }
   }

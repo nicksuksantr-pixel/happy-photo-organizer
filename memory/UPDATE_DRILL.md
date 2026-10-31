@@ -410,7 +410,9 @@ install the record (`log/` for the version, not the receipt, which is already co
 with its SHA-256 = the receipt's asset; `firstInstallTime` unchanged; the `STARTED <version>` line; the user's record count
 before and after — from the app's own `STARTED` line (`records=<n>`) where the app writes it, else a slow read of the list
 that stops after two dry pages (JS's first fast read missed 6 of 28 jobs, 10-31); the phone found by `ro.serialno`, never
-a remembered ip:port.
+a remembered ip:port. **A Play-delivered app cannot match bytes:** Play App Signing re-signs and serves split APKs, so
+the evidence there is Play's bundle sha256 for the new versionCode (`edits.bundles.list`) = the drilled AAB's sha, the phone's
+versionCode = TO's with Play's app-signing certificate, `firstInstallTime` unchanged, and the record count (NotiWallet, 11-01).
 Never `flutter install`, `flutter run --release` or `gradlew install…Release` to the phone: they rebuild, so the bytes
 on the phone are not the drilled ones, and the lock refuses them. For Play, the FROM is the APK from the previous uploaded bundle (`bundletool build-apks --mode=universal`). The lock allows emulator installs, so the drill itself is never blocked.
 
