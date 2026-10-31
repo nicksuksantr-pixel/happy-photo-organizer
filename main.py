@@ -676,8 +676,18 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         self._log(msg, level)
 
     def on_before_install(self) -> None:
-        """Host contract for UpdateWorker — flag teardown before installer runs."""
+        """Host contract for UpdateWorker — runs on the Tk thread right before
+        the handover's sys.exit. Stops what could keep the process alive or
+        take a phone job it will not finish: the tray and the receiver. Up to
+        v1.066 only the flag was set, the tray thread outlived sys.exit, and
+        the app never ended (bug D1)."""
         self._real_quit_requested = True
+        try:
+            if getattr(self, "_tray", None):
+                self._tray.stop()
+        except Exception:
+            pass
+        self._stop_receiver()
 
     def busy_reason(self) -> str:
         """Host contract for UpdateWorker (v1.066) — why an install must wait.

@@ -86,6 +86,45 @@ task and the test repo later."* (Nick, 2026-10-30.)
 - **If the candidate is rebuilt:** its sha256 changes, so replace the asset on the test repo and re-stage.
   Otherwise v1.065 downloads the old bytes, and the receipt cannot match the file being released.
 
+## Drill run 1 (10:05–10:35): FAIL, and the bug it caught (D1)
+
+**What ran and what failed:**
+- **The route worked, all while the drill session was disconnected.** v1.065's own updater asked the test repo,
+  downloaded v1.066 (91,686,951 bytes) and launched the installer.
+- **v1.065 then never exited.** pystray's thread is not a daemon, so the handover's `sys.exit(0)` waits for ever in
+  `threading._shutdown`.
+- The v1.066 installer no longer force-kills (U4). It waited 60 s and logged `FAILED … still open`. Evidence:
+  `drills/logs/1.066-run1.*`.
+- **Every installer up to v1.065 hid this with `taskkill /F`.** Shipped as it was, v1.066 would freeze every v1.065
+  install about a minute after each start.
+
+**reviver round 1 on the same diff:** score 1, and all three firms found D1 independently. R2–R7 are in
+`bug/bug_v1.066.md`; their fixes wait for Nick.
+
+**D1 fixed (Nick agreed):**
+- The silent upgrade ends exactly the process that started it, after a 20 s grace. It is matched by PID, exe path and
+  creation time, and walks up through the one-file bootloader to find it.
+- v1.066 runs the tray on a daemon thread of its own, and stops the tray and the receiver before handing over.
+- **Five tests.** Two use real processes. The tray test fails in 20 s when `run_detached()` is put back (mutation check).
+
+**Also, the coverage guard caught a gap.** `test_the_invisible_byte_guards_still_cover_every_kind_of_file_here` had
+been red since `drills/` was committed: the earlier 220/220 run came before those files were tracked.
+- `.ps1`/`.psm1` are now scanned by `test_the_drill_scripts_are_plain_ascii` (the kit's ASCII rule, measured: 6 files,
+  0 non-ASCII bytes).
+- `.log`/`.jsonl` (drill evidence) are exempt, with the measured reason.
+
+**The rebuilt candidate, re-uploaded and re-staged (11:17):**
+- 91,698,416 bytes, sha256 `ba55637f4fc58869e90f5c69ce489cf27e239ee8a2124bd5484e54c4fe355ed1`.
+- Checked that the fix is inside the built archives (PyInstaller CArchive/PYZ read back):
+  - the app's `core.tray` starts a `daemon` thread named `tray`, and `run_detached` is gone;
+  - the setup carries `handover_parent`, `end_handover_parent` and `HANDOVER_GRACE_S`.
+- `--fresh-into` a scratch folder: exit 0, 1,899 files, VERSION 1.066. Nick's registry entry stayed 1.065, and no
+  `logs` folder appeared in his profile.
+- Test repo asset replaced: `releases/latest` = v1.066, digest `sha256:ba55637f…`, and a re-download hashes the same.
+- Staged into `C:\Users\Public\HPO-drill` + `Public\Drills\HPO.cmd`. The 09:57 runner pass is still open in `drill`, so
+  it picks the launcher up after ShipMonitor and EMR.
+- Suite: **226/226** under the process watcher: no HPO process started, and no `logs` folder in Nick's profile.
+
 ## Found by smoke-testing the built installer (before any release)
 
 - **A failed install looped** (S1 in `bug/bug_v1.066.md`). Nothing recorded the failure, so the relaunched old

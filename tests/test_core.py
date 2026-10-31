@@ -5753,6 +5753,8 @@ def test_the_invisible_byte_guards_still_cover_every_kind_of_file_here():
         ".mjs": "BOM - workflow-agent-cap.mjs IS the cap's script",
         ".js": "BOM - the trigger scripts",
         ".md": "control characters, test_no_record_carries_an_invisible_control_character",
+        ".ps1": "ASCII only, test_the_drill_scripts_are_plain_ascii",
+        ".psm1": "ASCII only, same test",
     }
     scanned_names = {
         "VERSION": "test_version_file_has_no_bom_and_parses_to_the_right_tuple",
@@ -5763,6 +5765,15 @@ def test_the_invisible_byte_guards_still_cover_every_kind_of_file_here():
         ".ico": "binary, same",
         ".txt": "requirements.txt only; a BOM makes pip fail on the first "
                 "requirement, at install time, visibly",
+        ".log": "drills/logs only: drill evidence, written by the harness as "
+                "the drill account and copied verbatim. MEASURED 2026-10-31: "
+                "1.066-run1.log starts with EF BB BF (PS 5.1 Add-Content "
+                "-Encoding UTF8) and carries v1.065's own em dash. Editing it "
+                "would alter evidence, and nothing decides on it: "
+                "release-gate.mjs only checks that drill_log exists",
+        ".jsonl": "drills/logs only: the fake feed's access log, evidence the "
+                  "same way; the harness reads it live in the drill account, "
+                  "never the copy here",
     }
     exempt_names = {
         "pre-commit": "MEASURED 2026-10-14 in a scratch repo: a BOM makes git "
@@ -6530,6 +6541,202 @@ def test_a_failed_silent_upgrade_says_why_and_never_hands_straight_back():
             assert "repo_at_launch" not in seen, seen
     finally:
         restore()
+        _attempt_clean()
+
+
+def test_the_drill_scripts_are_plain_ascii():
+    """The drill kit runs on Windows PowerShell 5.1 as a separate account, and
+    5.1 reads a script without a BOM in the ANSI code page: a non-ASCII
+    character in a string or a path silently becomes other characters (the kit
+    README's "ASCII only"). Every tracked .ps1/.psm1, byte by byte."""
+    import subprocess
+    out = subprocess.run(["git", "ls-files", "*.ps1", "*.psm1"], capture_output=True,
+                         text=True, cwd=str(ROOT))
+    if out.returncode != 0:
+        return
+    files = [ROOT / f for f in out.stdout.split()]
+    assert files, "no drill scripts tracked - wrong cwd?"
+    bad = []
+    for f in files:
+        b = f.read_bytes()
+        hi = [i for i, x in enumerate(b) if x > 127]
+        if hi:
+            line = b[:hi[0]].count(b"\n") + 1
+            bad.append(f"{f.relative_to(ROOT)}:{line} ({len(hi)} non-ASCII byte(s))")
+    assert not bad, bad
+
+
+def test_the_tray_never_keeps_the_app_alive_after_sys_exit():
+    """Bug D1 (first drill run, 2026-10-31): pystray's own thread is not a
+    daemon, so the handover's sys.exit(0) waited for it for ever and the app
+    never ended. Run the real HappyTray in a real process: sys.exit from a Tk
+    callback must end it, without anyone calling stop()."""
+    import subprocess
+    import sys
+    from core import tray
+    if tray.pystray is None:
+        print("     (skipped - pystray not installed)")
+        return
+    script = (
+        "import sys, tkinter as tk\n"
+        f"sys.path.insert(0, {str(ROOT)!r})\n"
+        "from core.tray import HappyTray\n"
+        "root = tk.Tk(); root.withdraw()\n"
+        "assert HappyTray(root).start()\n"
+        "root.after(1500, lambda: sys.exit(0))\n"
+        "root.mainloop()\n")
+    p = subprocess.Popen([sys.executable, "-I", "-c", script])
+    try:
+        rc = p.wait(timeout=20)
+    except subprocess.TimeoutExpired:
+        p.kill()
+        raise AssertionError("sys.exit with the tray running did not end the process in 20 s")
+    assert rc == 0, rc
+
+
+def test_the_handover_stops_the_tray_and_the_receiver():
+    """Bug D1, belt and braces: on_before_install runs on the Tk thread right
+    before the handover's sys.exit; it must stop what can keep the process
+    alive or take a phone job it will not finish."""
+    import types
+    import main as _app
+    calls = []
+
+    class Fake:
+        def __init__(self, name):
+            self.name = name
+
+        def stop(self):
+            calls.append(self.name)
+
+    host = types.SimpleNamespace(_real_quit_requested=False, _tray=Fake("tray"),
+                                 receiver=Fake("receiver"))
+    host._stop_receiver = lambda: _app.MainWindow._stop_receiver(host)
+    _app.MainWindow.on_before_install(host)
+    assert host._real_quit_requested
+    assert calls == ["tray", "receiver"], calls
+
+
+def test_the_installer_ends_only_the_process_that_handed_over():
+    """Bug D1: the silent upgrade ends the app that started it once it has had
+    its grace, but only while its pid still names the same exe started at the
+    same moment. Driven on a real child process."""
+    import subprocess
+    import sys
+    from core import install_swap as sw
+    if sys.platform != "win32":
+        return
+    child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+    try:
+        info = sw.process_info(child.pid)
+        assert info is not None and info[1] > 0, info
+        parent = {"pid": child.pid, "exe": info[0], "created": info[1]}
+        # the same pid, but not the moment it was started: a pid used again
+        assert not sw.end_handover_parent(dict(parent, created=info[1] + 1))
+        assert child.poll() is None, "a process that was not the one recorded was ended"
+        assert not sw.end_handover_parent(dict(parent, exe=info[0] + ".other"))
+        assert child.poll() is None
+        assert sw.end_handover_parent(parent, timeout=10)
+        assert child.wait(timeout=5) is not None
+        assert sw.process_info(child.pid) is None
+        assert sw.end_handover_parent(parent)          # already gone: nothing to do
+    finally:
+        if child.poll() is None:
+            child.kill()
+
+
+def test_the_installer_finds_the_app_that_started_it_up_the_chain():
+    """Bug D1: a one-file installer runs as a bootloader plus a child, so the
+    app that handed over is the parent's parent. handover_parent walks up and
+    names it only when its exe is the app's; a real child process asks."""
+    import json
+    import os
+    import subprocess
+    import sys
+    from core import install_swap as sw
+    if sys.platform != "win32":
+        return
+    me = sw.process_info(os.getpid())
+    assert me is not None
+    ask = ("import json, sys; from pathlib import Path\n"
+           f"sys.path.insert(0, {str(ROOT)!r})\n"
+           "from core import install_swap as sw\n"
+           "print(json.dumps(sw.handover_parent(Path(sys.argv[1]))))\n")
+    with tempfile.TemporaryDirectory() as td:
+        other = Path(td) / "not-the-app.exe"
+        other.write_bytes(b"x")
+        for exe, want in ((me[0], os.getpid()), (str(other), None)):
+            out = subprocess.run([me[0], "-I", "-c", ask, exe], capture_output=True,
+                                 text=True, timeout=30)
+            got = json.loads(out.stdout.strip() or "null")
+            if want is None:
+                assert got is None, got
+            else:
+                assert got and got["pid"] == want and got["created"] == me[1], (got, out.stderr)
+
+
+def test_the_silent_upgrade_ends_a_stuck_handover_and_nothing_else():
+    """Bug D1, through the real `_run_silent_upgrade`: the app that started the
+    upgrade gets HANDOVER_GRACE_S, is ended, and the install goes on, with a
+    HANDOVER line saying so. With no such parent (or a pid used again), an app
+    still open is left alone exactly as before."""
+    mod = _installer_module()
+    sw = mod.install_swap
+    saved = {n: getattr(sw, n) for n in ("wait_for_app_exit", "app_window_open",
+                                        "handover_parent", "end_handover_parent")}
+    seen = {}
+    _attempt_clean()
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            td = Path(td)
+            exe = td / "inst" / "HappyPhotoOrganizer" / "HappyPhotoOrganizer.exe"
+            exe.parent.mkdir(parents=True)
+            exe.write_bytes(b"exe")
+            mod._detect_existing_install_dir = lambda: td / "inst"
+            mod.desktop_shortcut_path = lambda: td / "Desktop" / "x.lnk"
+            mod.start_menu_shortcut_path = lambda: td / "Start" / "x.lnk"
+            mod.Installer.install = lambda self, progress_cb=None, require_app_closed=True: (
+                seen.__setitem__("installed", True) or (True, "ok"))
+            mod.Installer.launch_app = lambda self: seen.__setitem__("launched", True)
+            parent = {"pid": 4242, "exe": str(exe), "created": 1}
+            waits = []
+
+            def wait(timeout=60.0):
+                waits.append(timeout)
+                return len(waits) > 1 and seen.get("ended", False)
+
+            def end(p):
+                seen["ended"] = p is parent
+                return seen["ended"]
+
+            sw.wait_for_app_exit = wait
+            sw.app_window_open = lambda: True
+            sw.handover_parent = lambda app_exe: parent if Path(app_exe) == exe else None
+            sw.end_handover_parent = end
+            assert mod._run_silent_upgrade() == 0
+            assert seen.get("ended") and seen.get("installed") and seen.get("launched"), seen
+            assert waits[0] == mod.HANDOVER_GRACE_S, waits
+            assert any("UPDATE HANDOVER" in ln and "pid 4242" in ln and "ended it" in ln
+                       for ln in _log_lines()), _log_lines()
+
+            # the pid names something else now: nothing ended, nothing changed
+            seen.clear()
+            waits.clear()
+            sw.end_handover_parent = lambda p: False
+            assert mod._run_silent_upgrade() == 1
+            assert "installed" not in seen and "launched" not in seen, seen
+            assert "still open" in _update_log.read_attempt()["reason"]
+
+            # not started by the app (by hand, say): the old 60 s wait, no ending
+            seen.clear()
+            waits.clear()
+            sw.handover_parent = lambda app_exe: None
+            sw.end_handover_parent = lambda p: seen.__setitem__("ended", True) or True
+            assert mod._run_silent_upgrade() == 1
+            assert waits == [60.0] and "ended" not in seen, (waits, seen)
+    finally:
+        for n, f in saved.items():
+            setattr(sw, n, f)
         _attempt_clean()
 
 

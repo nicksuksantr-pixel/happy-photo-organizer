@@ -15,7 +15,9 @@ Before v1.066 an update was `taskkill /F` the app, sleep half a second, then
 
 Now, under `<install dir>\\.update\\`, out of the user's sight (UPDATE_DRILL §2):
 
-  1. wait for the app to exit by itself (it hands over, then exits);
+  1. wait for the app to exit by itself (it hands over, then exits). An app
+     up to v1.066 never does (bug D1), so after a grace the installer ends
+     exactly the process that started it, and nothing else;
   2. check the disk, then STAGE: extract the whole payload to `new\\`. A
      damaged payload fails here — zipfile checks every CRC — before a single
      installed file has been touched;
@@ -131,6 +133,159 @@ def wait_for_app_exit(timeout: float = 60.0, poll: float = 0.25) -> bool:
             return False
         time.sleep(poll)
     return True
+
+
+# ─── the app that handed over (bug D1, first drill run 2026-10-31) ───
+#
+# Every HPO up to v1.066 hands over and calls sys.exit(0) with its tray icon
+# still running, and pystray's thread is not a daemon thread, so the process
+# never ends (it waits in threading._shutdown for ever). The installers up to
+# v1.065 hid that with `taskkill /F` on every HPO. These end exactly the one
+# process that started the upgrade, once it has had time to exit by itself,
+# and only while it is provably still that process.
+
+_TH32CS_SNAPPROCESS = 0x00000002
+_PROCESS_TERMINATE = 0x0001
+_PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+_SYNCHRONIZE = 0x00100000
+_STILL_ACTIVE = 259
+
+
+def _kernel32():
+    import ctypes
+    from ctypes import wintypes
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    k32.OpenProcess.restype = wintypes.HANDLE
+    k32.CloseHandle.argtypes = [wintypes.HANDLE]
+    k32.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+    k32.QueryFullProcessImageNameW.argtypes = [wintypes.HANDLE, wintypes.DWORD,
+                                               wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD)]
+    k32.GetProcessTimes.argtypes = [wintypes.HANDLE] + [ctypes.POINTER(wintypes.FILETIME)] * 4
+    k32.TerminateProcess.argtypes = [wintypes.HANDLE, wintypes.UINT]
+    k32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    k32.WaitForSingleObject.restype = wintypes.DWORD
+    k32.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+    k32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    return k32
+
+
+def process_info(pid: int) -> tuple[str, int] | None:
+    """(full exe path, creation time as a FILETIME number) of a live process,
+    or None when it is gone or cannot be asked."""
+    if sys.platform != "win32" or not pid:
+        return None
+    try:
+        import ctypes
+        from ctypes import wintypes
+        k32 = _kernel32()
+        h = k32.OpenProcess(_PROCESS_QUERY_LIMITED_INFORMATION, False, int(pid))
+        if not h:
+            return None
+        try:
+            code = wintypes.DWORD()
+            if not k32.GetExitCodeProcess(h, ctypes.byref(code)) or code.value != _STILL_ACTIVE:
+                return None
+            buf = ctypes.create_unicode_buffer(32768)
+            n = wintypes.DWORD(len(buf))
+            if not k32.QueryFullProcessImageNameW(h, 0, buf, ctypes.byref(n)):
+                return None
+            t = [wintypes.FILETIME() for _ in range(4)]
+            if not k32.GetProcessTimes(h, *[ctypes.byref(x) for x in t]):
+                return None
+            return buf.value, (t[0].dwHighDateTime << 32) | t[0].dwLowDateTime
+        finally:
+            k32.CloseHandle(h)
+    except Exception:
+        return None
+
+
+def parent_pid(pid: int) -> int | None:
+    """The pid that started `pid`, from a process snapshot."""
+    if sys.platform != "win32":
+        return None
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class PROCESSENTRY32W(ctypes.Structure):
+            _fields_ = [("dwSize", wintypes.DWORD), ("cntUsage", wintypes.DWORD),
+                        ("th32ProcessID", wintypes.DWORD), ("th32DefaultHeapID", ctypes.c_size_t),
+                        ("th32ModuleID", wintypes.DWORD), ("cntThreads", wintypes.DWORD),
+                        ("th32ParentProcessID", wintypes.DWORD), ("pcPriClassBase", ctypes.c_long),
+                        ("dwFlags", wintypes.DWORD), ("szExeFile", ctypes.c_wchar * 260)]
+
+        k32 = _kernel32()
+        k32.Process32FirstW.argtypes = [wintypes.HANDLE, ctypes.POINTER(PROCESSENTRY32W)]
+        k32.Process32NextW.argtypes = [wintypes.HANDLE, ctypes.POINTER(PROCESSENTRY32W)]
+        snap = k32.CreateToolhelp32Snapshot(_TH32CS_SNAPPROCESS, 0)
+        if not snap or snap == wintypes.HANDLE(-1).value:
+            return None
+        try:
+            e = PROCESSENTRY32W()
+            e.dwSize = ctypes.sizeof(PROCESSENTRY32W)
+            ok = k32.Process32FirstW(snap, ctypes.byref(e))
+            while ok:
+                if e.th32ProcessID == pid:
+                    return int(e.th32ParentProcessID) or None
+                ok = k32.Process32NextW(snap, ctypes.byref(e))
+            return None
+        finally:
+            k32.CloseHandle(snap)
+    except Exception:
+        return None
+
+
+def _same_file(a: str | Path, b: str | Path) -> bool:
+    try:
+        return os.path.samefile(a, b)
+    except OSError:
+        return False
+
+
+def handover_parent(app_exe: Path, max_hops: int = 3) -> dict | None:
+    """The process that started this upgrade, if it is the app being replaced:
+    {"pid", "exe", "created"}. Read at the start of a silent upgrade, while it
+    is certainly still that process. Walks up a few hops because a one-file
+    installer runs as a bootloader plus a child of it."""
+    me = process_info(os.getpid())
+    if me is None:
+        return None
+    pid = os.getpid()
+    for _ in range(max_hops):
+        pid = parent_pid(pid)
+        info = process_info(pid) if pid else None
+        if info is None:
+            return None
+        exe, created = info
+        if created >= me[1]:
+            return None             # younger than this installer: a pid used again, not its ancestor
+        if _same_file(exe, app_exe):
+            return {"pid": pid, "exe": exe, "created": created}
+    return None
+
+
+def end_handover_parent(parent: dict, timeout: float = 10.0) -> bool:
+    """End `parent` (from `handover_parent`) and wait for it. Only while the
+    pid still names the same exe started at the same moment: a pid used again
+    is never touched. True once that process is gone."""
+    info = process_info(parent["pid"])
+    if info is None:
+        return True
+    if info != (parent["exe"], parent["created"]):
+        return False
+    try:
+        k32 = _kernel32()
+        h = k32.OpenProcess(_PROCESS_TERMINATE | _SYNCHRONIZE, False, int(parent["pid"]))
+        if not h:
+            return False
+        try:
+            k32.TerminateProcess(h, 1)
+            return k32.WaitForSingleObject(h, int(timeout * 1000)) == 0
+        finally:
+            k32.CloseHandle(h)
+    except Exception:
+        return False
 
 
 # ─── the swap ───

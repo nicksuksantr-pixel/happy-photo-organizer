@@ -148,6 +148,9 @@ def _read_version() -> str:
 
 APP_VERSION = _read_version()
 DEFAULT_INSTALL_DIR = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "HappyPhotoOrganizer"
+# how long the app that handed over gets to exit by itself before the silent
+# upgrade ends it (bug D1); a build that exits cleanly takes 1-3 s
+HANDOVER_GRACE_S = 20.0
 
 LICENSE_TEXT = f"""Happy Photo Organizer
 Personal Use License Agreement
@@ -1035,7 +1038,9 @@ def _run_silent_upgrade() -> int:
     v1.066 (bugs U4, U6, U7):
     - waits for the app to exit by itself — it hands over and exits — instead
       of `taskkill /F` after half a second; an app whose window is still open
-      after the wait is left alone and nothing changes;
+      after the wait is left alone and nothing changes. The one exception is
+      the app that started this upgrade: up to v1.066 it never finishes
+      exiting (bug D1), so after HANDOVER_GRACE_S exactly that process is ended;
     - every outcome goes to update.log (it used to be `print()` from a
       windowed exe: written nowhere);
     - re-creates only the shortcuts the user still has. It used to put the
@@ -1054,7 +1059,25 @@ def _run_silent_upgrade() -> int:
         installer.create_desktop_shortcut = _shortcut_exists(desk)
         installer.create_start_menu = _shortcut_exists(start)
     installer.launch_after = True
-    if not install_swap.wait_for_app_exit(timeout=60.0):
+    # The app that started this upgrade, read before anything waits (bug D1):
+    # up to v1.066 it calls sys.exit with its tray thread still running and
+    # never ends. Once it has had HANDOVER_GRACE_S to exit by itself, exactly
+    # that process is ended; any other HPO is left alone, as before.
+    parent = None
+    if existing is not None:
+        app_exe = installer._find_exe()
+        if app_exe is not None:
+            parent = install_swap.handover_parent(app_exe)
+    t0 = time.monotonic()
+    exited = install_swap.wait_for_app_exit(timeout=HANDOVER_GRACE_S if parent else 60.0)
+    if not exited and parent is not None:
+        if install_swap.end_handover_parent(parent):
+            update_log.log("HANDOVER", APP_VERSION,
+                           f"the app that handed over (pid {parent['pid']}) had not exited after "
+                           f"{HANDOVER_GRACE_S:.0f} s; ended it (bug D1: up to v1.066 its tray "
+                           f"thread outlives sys.exit)")
+        exited = install_swap.wait_for_app_exit(timeout=max(1.0, 60.0 - (time.monotonic() - t0)))
+    if not exited:
         if install_swap.app_window_open():
             why = "the app was still open after 60 s - nothing was changed"
             update_log.log("FAILED", APP_VERSION, why)

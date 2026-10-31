@@ -1,7 +1,10 @@
 """
 tray.py — System-tray wrapper around pystray.Icon.
 
-Runs detached on a daemon thread so the Tk mainloop stays in the main thread.
+Runs on a daemon thread of its own so the Tk mainloop stays in the main thread.
+Not `run_detached()`: pystray's thread is not a daemon (pystray/_win32.py), so
+any exit that skipped `stop()` waited for it for ever in threading._shutdown —
+the update handover's sys.exit did, and the app never ended (bug D1).
 The `app` argument must expose three methods that get scheduled back onto the
 Tk loop via `app.after(0, ...)`:
   - app._show_window_from_tray()
@@ -10,6 +13,7 @@ Tk loop via `app.after(0, ...)`:
 """
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 
 from PIL import Image
@@ -58,7 +62,7 @@ class HappyTray:
                 _TrayItem("Quit", self._on_quit),
             ),
         )
-        self.icon.run_detached()
+        threading.Thread(target=self.icon.run, name="tray", daemon=True).start()
         return True
 
     def stop(self) -> None:

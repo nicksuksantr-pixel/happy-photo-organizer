@@ -39,7 +39,28 @@ Not covered by the drill (stated in `drills/drill.json` `not_covered`): S1's pat
 
 | # | Bug | Evidence | Fix |
 |---|---|---|---|
-| D1 | **An app that hands over never exits, so no update can happen.** `launch_installer_and_exit` starts the installer, then `sys.exit(0)` from a Tk callback, with the tray icon still running. pystray's `run_detached()` starts a **non-daemon** thread (`pystray/_win32.py:131`: `threading.Thread(target=lambda: self._run()).start()`). `core/tray.py`'s docstring says "a daemon thread"; it is not. Interpreter shutdown waits for it in `threading._shutdown` forever. The process keeps a frozen window, the tray icon, the phone receiver and the single-instance mutex. **Every installer up to v1.065 hid this with `taskkill /F`.** v1.066's waits for the app to let go (U4), then gives up after 60 s: "the app was still open after 60 s - nothing was changed". Both v1.065 (the bridge) and v1.066 (its own next update) have it. **In the field:** every v1.065 start would download v1.066, freeze about a minute later, and block the next start too (the frozen window holds the mutex), until Task Manager or a reboot. | The drill: the check reached the test repo at 10:05:50, the download succeeded at 10:07:03 (91,686,951 bytes), and the installer logged FAILED at 10:08:06. The process was still alive at 10:30: 5 threads, 0 ms CPU over 20 s. The main thread was waiting, and a GetMessage thread was running (the tray). Reproduced on Nick's PC with a 15-line script (Tk + pystray `run_detached` + `sys.exit(0)` in `after`): `faulthandler` shows the main thread in `threading._shutdown` and the pystray `_mainloop` thread alive. Exit 1 at the 8 s watchdog. With `icon.stop()` first: exit 0 in 3 s. | Waits for Nick's choice (see `chat_log/chat_2026-10-31.md` Entry 3). |
+| D1 | **An app that hands over never exits, so no update can happen.** `launch_installer_and_exit` starts the installer, then `sys.exit(0)` from a Tk callback, with the tray icon still running. pystray's `run_detached()` starts a **non-daemon** thread (`pystray/_win32.py:131`: `threading.Thread(target=lambda: self._run()).start()`). `core/tray.py`'s docstring says "a daemon thread"; it is not. Interpreter shutdown waits for it in `threading._shutdown` forever. The process keeps a frozen window, the tray icon, the phone receiver and the single-instance mutex. **Every installer up to v1.065 hid this with `taskkill /F`.** v1.066's waits for the app to let go (U4), then gives up after 60 s: "the app was still open after 60 s - nothing was changed". Both v1.065 (the bridge) and v1.066 (its own next update) have it. **In the field:** every v1.065 start would download v1.066, freeze about a minute later, and block the next start too (the frozen window holds the mutex), until Task Manager or a reboot. | The drill: the check reached the test repo at 10:05:50, the download succeeded at 10:07:03 (91,686,951 bytes), and the installer logged FAILED at 10:08:06. The process was still alive at 10:30: 5 threads, 0 ms CPU over 20 s. The main thread was waiting, and a GetMessage thread was running (the tray). Reproduced on Nick's PC with a 15-line script (Tk + pystray `run_detached` + `sys.exit(0)` in `after`): `faulthandler` shows the main thread in `threading._shutdown` and the pystray `_mainloop` thread alive. Exit 1 at the 8 s watchdog. With `icon.stop()` first: exit 0 in 3 s. | **Fixed (Nick agreed, 2026-10-31 ~10:56):** |
+
+**D1 fixes:**
+- **The bridge (`installer/installer.py`, `core/install_swap.py`).**
+  - At the start of `--upgrade` the installer reads the process that started it: `handover_parent`, which walks up to
+    3 hops because the one-file setup is a bootloader plus a child.
+  - It counts only if its exe is the app being replaced (`os.path.samefile`) and it is older than the installer.
+  - That process gets `HANDOVER_GRACE_S` (20 s) to exit. Then `end_handover_parent` ends exactly it, with
+    `TerminateProcess` on that PID, and only while the PID still names the same exe started at the same moment.
+  - It logs a `HANDOVER` line saying so. Any other HPO is still left alone ("still open", nothing changed).
+- **v1.066 itself.**
+  - `core/tray.py` runs pystray's `icon.run` on a daemon thread of its own.
+  - `on_before_install` stops the tray and the phone receiver before the handover's `sys.exit`.
+
+**Tests:**
+- `test_the_tray_never_keeps_the_app_alive_after_sys_exit`: a real process.
+  - It fails in 20 s with `run_detached()` put back (mutation check).
+- `test_the_handover_stops_the_tray_and_the_receiver`
+- `test_the_installer_ends_only_the_process_that_handed_over`: a real child process; a different creation time or exe is
+  never ended.
+- `test_the_installer_finds_the_app_that_started_it_up_the_chain`: a real child process.
+- `test_the_silent_upgrade_ends_a_stuck_handover_and_nothing_else` |
 
 **Ruled out on the way, by measurement:**
 - *The disconnected session:* v1.065 checked, downloaded and launched the installer while the drill session was disconnected (10:06:30–10:08:03). The installer ran and logged there too.
