@@ -119,6 +119,11 @@ self-updater that keeps the table is fine. What is required is the table.
    hung for hours on `consent.exe` in a switched-away session (2026-10-31), and only a drill run that way can
    show it: a person who is present answers the prompt without noticing. The runner records such a run as
    `FAIL UAC prompt`.
+6. **One repo, several programs: never `/releases/latest`.** GitHub's latest release can be a sibling
+   program's (or another artifact family's), so an updater lists releases and keeps only its own
+   `<name>-v` prefix; tags, `to_version` and asset names carry that prefix (NP rule, 2026-10-31). Its
+   comparator is tested on two real tags of its own plus one foreign tag. `drills/drill.json` stays one per
+   repo. A repo with one program keeps plain `vX.NNN` tags.
 
 ## 4 · The checks — the receipt must carry every one for its profile
 
