@@ -282,16 +282,20 @@ and for checks before a real release, at the session's judgment. ScanDocs still 
   drill. Never use or wipe an AVD that is not your own `drill_<app>`. (Nick's old `Pixel6_API35` was deleted on his
   order on 2026-10-31, freeing 11 GB. An app that planned to use it creates its own `drill_<app>`.)
 - **Disk:** about 3.5 GB per AVD, plus 3.5 GB for the image and 1.1 GB for the emulator, shared.
-- **One emulator at a time on this PC, and it takes the busy lock, drill or test** (NTWL, measured 2026-10-31:
-  its emulator vanished mid-onboarding with nothing in its log when a 3 GB Gradle daemon took free RAM down to
-  1.8 GB; two minutes later a second AVD booted with no lock held and free RAM was 0.8 GB of 15.4). The PC runs
-  several Claude sessions, a desktop drill in `drill`, builds and an emulator at once, so RAM is the shared
-  resource, not the device. Before booting, wait for at least **5 GB of free RAM**
-  (`Win32_OperatingSystem.FreePhysicalMemory`), and only THEN take `C:\Users\Public\drill-busy.txt` (waiting
-  with a limit) and boot; never boot into less. **Every wait comes before the claim.** The lock is for a drill
-  that is running, never for a wait: on 2026-10-31 JobShot claimed first and then waited for RAM for a quarter
-  of an hour with no emulator up, while EMR's time-boxed bridge drill, which needed neither, sat behind it. Log
-  "emulator gone" when the device disappears, instead of timing out on a blank screen.
+- **One emulator at a time on this PC, and it takes the busy lock, drill or test** (2026-10-31: a second AVD
+  booted with no lock held while another app's drill was mid-onboarding). The PC runs several Claude sessions,
+  a desktop drill in `drill`, builds and an emulator at once, so RAM is the shared resource, not the device.
+  **RAM floor: the project's setting, with its reason in the log** (NTWL's `--min-free-gb` / `--min-free-why`).
+  The measured facts, kept apart on purpose: with the Claude app open (about 4.7 GB) this PC rarely has 5 GB
+  free, so a 5 GB gate waits for ever (NTWL run 7: 120 min, never booted); the emulator vanishes of 2026-10-31
+  were the GPU mode (runs 3-4 vanished with 5 GB free, `-gpu host` cured them), NOT RAM, although the first
+  one coincided with 1.8 GB free. A first version of this bullet wrote both causes as "measured"; when two
+  causes overlap in one failure, write neither as measured until one is isolated. Start from a 2 GB floor on
+  Nick's word ("run now, close nothing", 2026-10-31) and raise it only on a failure measured as RAM. Wait for
+  the floor FIRST, and only THEN take `C:\Users\Public\drill-busy.txt` (waiting with a limit) and boot.
+  **Every wait comes before the claim.** The lock is for a drill that is running, never for a wait: JobShot
+  claimed first and then waited for RAM with no emulator up, while EMR's time-boxed bridge drill sat behind it.
+  Log "emulator gone" when the device disappears, instead of timing out on a blank screen.
 - **Give the drill AVD 4 GB of RAM.** With 2 GB, JobShot's runs 1 and 2 failed on the two flakes below, inside the
   fixture and before the update; with 4 GB, runs 3 and 4 passed with no retry (JS, 2026-10-31).
 - **"System UI isn't responding" can swallow a tap.** Wait for each tap's effect and re-tap only while that
