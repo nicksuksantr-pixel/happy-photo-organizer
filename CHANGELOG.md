@@ -9,7 +9,7 @@ Cosmetic / design / V2-scope items that survived round 6 + 7 + 8. All
 catalogued in detail at the bottom of this file under "Round 6
 deferred".
 
-## [1.067] — not released yet (needs its update drill, #28) — No key to set up
+## [1.067] — 2026-11-01 — No key to set up (released after its drill passed, #28)
 
 ### Changed
 - **The app comes with a free Gemini key built in.** Nobody has to make a key
