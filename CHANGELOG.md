@@ -9,7 +9,7 @@ Cosmetic / design / V2-scope items that survived round 6 + 7 + 8. All
 catalogued in detail at the bottom of this file under "Round 6
 deferred".
 
-## [1.066] — 2026-10-31 — The bridge: an update you can prove (built; ships only after its drill, #28)
+## [1.066] — 2026-10-31 — The bridge: an update you can prove (released after its drill passed, #28)
 
 ### Fixed
 - **An installer whose bytes are not the published ones is never run.** The app

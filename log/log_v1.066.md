@@ -1,8 +1,9 @@
 # Log — v1.066 (2026-10-31) — the bridge release: an update you can prove
 
-**Built, not released.** Rule #28: it ships only after a drill has updated the released v1.065 to these exact
-bytes and `drills/1.066.json` passes. The test repo exists and the drill is staged (see "The drill, staged"); the
-receipt waits on the run as `drill`.
+**RELEASED 2026-10-31** (tag `v1.066` at `d31b5c7`), after drill run 3 passed every check (`drills/1.066.json`).
+The drill updated the released v1.065 to these exact bytes, `93c4d69c9c2346882d8c38eb27051a269be23e1b4f2d387a68a5636328b0579b`.
+Published through `tools/publish_release.py`: the lock passed, then the release was read back from outside. The
+digest is the drilled file, a re-download hashes the same, and the app offers it to a v1.065 user.
 
 **Asked:** *"Go. Start building v1.066 and the drill harness now. I'll set up the drill account, the scheduled
 task and the test repo later."* (Nick, 2026-10-30.)
