@@ -79,13 +79,13 @@ What it does **not** change — say it, do not hide it:
 ## 4 · In the app
 
 - **No key screen at first run.** The app starts working with the built-in key.
-- **The user's own saved key wins; the built-in key is the fallback.** A user who pastes their own key gets their own
-  quota and, on a billed project, the paid-tier privacy promise. An empty, blank or removed saved key falls back.
-  (JS first built it the other way round; the house order is this one.)
-- **Whether any own-key field exists is Nick's call per app.** EMR (Nick, 2026-10-31, in EMR's chat): *"no place for others
-  to enter a key at all — we built it in and hid it; remove that field and everything about entering a key"* → EMR has no
-  user key. Where a field is kept (HPO: Ctrl+Shift+K reveals it), it stays out of sight and is the escape hatch when the
-  shared key is withdrawn or out of quota. Nick is being asked whether EMR's answer is the house answer.
+- **No own-key field, in any app — the built-in key is the only key** (Nick, 2026-10-31, first to EMR: *"no place for
+  others to enter a key at all — we built it in and hid it; remove that field and everything about entering a key"*,
+  then to the Director: *"ข้อหนึ่งถูกต้อง"* = that is the house answer). Every path that reads a pasted or stored key goes
+  — the field, Paste/Show/Test, the per-user key file, every message that points to Settings, hidden shortcuts included.
+  The escape when the shared key is withdrawn or out of quota is the next release (§7), which is why the next bullet is
+  not optional. An app shipped before this answer (HPO v1.067 with a hidden Ctrl+Shift+K path) removes it in its next
+  version; a candidate not yet staged removes it before the drill.
 - **A dead key never breaks the app.** On 400/401/403/429 or no network the AI step reports one readable line
   ("AI unavailable: key withdrawn / today's shared quota used up / offline — the app works without it; update when a
   new version is out") and everything else keeps working. Never a crash, never a silent "done" with every row failed
@@ -156,7 +156,7 @@ A key that leaks, is abused, or is found in the wrong place:
       another app's
 - [ ] `drills/drill.json` has `"embeds_key": true`
 - [ ] the receipt has `embedded_key.fp` = the registry entry, and `embedded_key_works` passed from the updated build
-- [ ] no key screen at first run; the own-key path reachable only from Advanced; the About/Settings line present
+- [ ] no key screen, no own-key field or path anywhere (hidden shortcuts included); the About/Settings line present
 - [ ] a dead key: the app says one line and goes on (tested with a well-formed fake key, not by reading the code)
 - [ ] `git log --all -G'AIza[0-9A-Za-z_-]{35}|AQ\.[0-9A-Za-z_-]{30,}'` finds nothing in history (a public repo: this is the one that matters)
 
@@ -166,8 +166,10 @@ A key that leaks, is abused, or is found in the wrong place:
   ("ไม่ผูกบัตร และคนละตัวกันเลย 3 อันนั้น"); JobShot registered first (project "JobShot", fp cfbcb564…).
 - 2026-10-31 Nick, told first that EMR-releases and HPO's repo are public and anyone can take the key out: build it in anyway —
   the key is free, restricted, disposable (§7). A public artifact with a free key inside is therefore allowed.
-- Open, asked of Nick: whether the `embed-free-*` projects should live in a **separate Google account** from the paid one
-  (an abuse report lands on the project or the account; a separate account keeps the paid project out of it).
+- 2026-10-31 Nick, asked whether the `embed-free-*` projects should live in a separate Google account from the paid one:
+  the account they are in **has no billing and no card at all** (checked) — so an abuse report cannot reach a paid
+  project through it. Closed.
+- 2026-10-31 Nick: **no own-key field in any app** (§4) — the house answer, not an EMR exception.
 - Staging the drilled installer in `C:\Users\Public` carries the built-in key by design: that is the product, the same
   bytes the release carries, not a key file — no clash with "never stage a key or token in Public" (HPO asked, 2026-10-31).
 
