@@ -1,36 +1,28 @@
 # TO_PROMOTE.md
 
-**Three items are waiting (2026-10-31, from HPO's v1.066 drills).** When the next cross-project lesson turns
-up here: write it in this file, say so, and stop (#10.1).
+**Nothing is waiting.** When the next cross-project lesson turns up here: write it in this file, say so, and stop
+(#10.1). Write each one as **one line in the registry form** (`- **slug** (source, date) — fact… **Rule:** …`), so
+the Director can take it verbatim (Director, 2026-10-31).
 
-## ⏳ WAITING — 2026-10-31
+---
 
-1. **make-it-busy-before-you-feed-it** (HPO drill run 2, H8).
-   - With a loopback feed, a download takes about a second. An app that checks at start found N+1 and handed over
-     2 s after starting, before its busy window (Settings) was even open, so `waits_while_busy` failed although
-     the app was right.
-   - **Rule:** in a busy test, start the app with nothing newer on the feed, wait until the busy window is really
-     open, then feed N+1 and wait for the app's next periodic check.
-   - This holds for any app whose updater checks at start. The shared kit's fix is in `Invoke-Drill.ps1`.
-2. **read-a-stuck-process-from-outside-without-admin** (HPO drill run 1, D1).
-   - The drill profile could not be read, and the harness only said "waiting". Three things answered it from Nick's
-     account, with no admin and no agent:
-     - WMI `Win32_Process` I/O counters: `WriteTransferCount` = 87.49 MB, so the 87.44 MB download had finished;
-     - `Win32_Thread` wait reasons and CPU: the main thread was waiting at 0 ms CPU, and the GetMessage thread was
-       alive;
-     - the `TerminalServices-LocalSessionManager/Operational` log: the session connect and disconnect times, which
-       ruled out "disconnected session" as the cause.
-   - A 15-line repro then confirmed it.
-   - **Rule:** when a run is a black box, measure the process from outside before theorising, and before waiting out
-     a timeout.
-3. **a-suite-pass-before-the-commit-is-not-a-pass-on-the-commit** (HPO v1.066).
-   - `test_the_invisible_byte_guards_still_cover_every_kind_of_file_here` reads `git ls-files`.
-   - 220/220 ran while `drills/` (`.ps1`, `.psm1`, `.log`, `.jsonl`) was still untracked. The guard went red only
-     after the commit, and was found two runs later.
-   - **Rule:** a test that reads the tracked tree must be run after the commit that adds new kinds of files, not
-     before it.
+## ✅ CONSUMED — 2026-10-31
 
-Already in SHARED_LESSONS, not repeated: `a-non-daemon-thread-hangs-sys-exit-and-a-force-kill-hid-it` (D1).
+The three items from HPO's v1.066 drills were promoted by the Director, condensed to one line each. They came back
+in the mirror at `2ad0818` and were read there, row by row:
+
+| Item | Where it is now |
+|---|---|
+| `make-it-busy-before-you-feed-it` (H8) | `memory/SHARED_LESSONS.md:52`, plus UPDATE_DRILL §5 step 3 |
+| `a-suite-pass-before-the-commit-is-not-a-pass-on-the-commit` | `memory/SHARED_LESSONS.md:98` |
+| `read-a-stuck-process-from-outside-without-admin` (D1) | `memory/SHARED_LESSONS.md:202` |
+
+**One word was wrong, and it was mine:** the third row says the red guard "was found two runs later". The record
+says otherwise:
+- no full suite ran between `ad00773` (06:57) and 11:04;
+- the 11:04 run (224/225) was the first after the commit, and it found it.
+
+So it was found on the **next** full run, about four hours later. Sent to the Director to correct the master row.
 
 ---
 
