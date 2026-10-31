@@ -5812,8 +5812,11 @@ def test_the_invisible_byte_guards_still_cover_every_kind_of_file_here():
     exempt_suffixes = {
         ".png": "binary; a leading EF BB BF is not a PNG and Pillow refuses it loudly",
         ".ico": "binary, same",
-        ".txt": "requirements.txt only; a BOM makes pip fail on the first "
-                "requirement, at install time, visibly",
+        ".txt": "requirements.txt: a BOM makes pip fail on the first "
+                "requirement, at install time, visibly. And drills/logs/"
+                "<ver>.transcript.txt: PS 5.1's transcript of the drill, "
+                "evidence copied verbatim - MEASURED 2026-10-31, 1.066's "
+                "starts with EF BB BF; nothing parses it",
         ".log": "drills/logs only: drill evidence, written by the harness as "
                 "the drill account and copied verbatim. MEASURED 2026-10-31: "
                 "1.066-run1.log starts with EF BB BF (PS 5.1 Add-Content "
