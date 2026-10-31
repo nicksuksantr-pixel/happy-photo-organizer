@@ -74,6 +74,7 @@ export function receiptProblems(r) {
   const out = []
   if (!r || typeof r !== 'object') return ['not a JSON object']
   if (r.schema !== 'update-drill/1') out.push('schema is not "update-drill/1"')
+  if (r.rehearsal) out.push('rehearsal receipt: a test build never ships; drill the release bytes and write a receipt without the marker')
   const prof = PROFILES[r.profile]
   if (!prof) out.push(`profile must be one of: ${Object.keys(PROFILES).join(', ')}`)
   if (!r.from_version) out.push('from_version missing: which released build did the drill start from?')

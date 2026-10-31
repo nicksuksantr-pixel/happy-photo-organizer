@@ -312,7 +312,12 @@ and for checks before a real release, at the session's judgment. ScanDocs still 
 - **Give the drill AVD 4 GB of RAM.** With 2 GB, JobShot's runs 1 and 2 failed on the two flakes below, inside the
   fixture and before the update; with 4 GB, runs 3 and 4 passed with no retry (JS, 2026-10-31).
 - **"System UI isn't responding" can swallow a tap.** Wait for each tap's effect and re-tap only while that
-  effect is missing. Never tap a fixed number of times.
+  effect is missing. Never tap a fixed number of times. The "isn't responding" dialog of ANY app on the image
+  (NTWL run 9: the image's own Messages app, mid-typing) can cover the app under test, and the uiautomator dump
+  then holds only the dialog: answer it with Wait on EVERY screen read, not only inside the tap-wait loop.
+- **A rehearsal is not a drill.** A receipt written for a test build carries `"rehearsal": true` and stays under
+  `build/`; the lock refuses any receipt with that marker, so copying one into `drills/` cannot ship anything
+  (NTWL, 2026-10-31).
 - **`takePicture()` on the emulated camera can hang,** and the app then ignores the shutter for good. Leave the
   camera screen and reopen it. (JobShot's script does this; the reopen path has not been exercised yet.)
 - **Shut it down when the drill ends,** pass or fail (`adb -s emulator-NNNN emu kill`), and check that no
