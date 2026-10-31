@@ -714,6 +714,12 @@ def phase2_ai_analyze(
 
     completed = {"n": 0}
     completed_lock = threading.Lock()
+    # A dead key or a used-up quota fails every folder the same way, and each
+    # row only says so in its own reasoning, so the run still looked "done".
+    # Since v1.067 the key field is hidden, so nobody would find out why: a
+    # run where nothing got through is flagged like a missing key.
+    ran = failed = 0
+    first_failure = ""
 
     def _worker(item: tuple[int, JobAssignment, list[Path]]) -> tuple[int, dict]:
         idx, _a, pool = item
@@ -756,6 +762,11 @@ def phase2_ai_analyze(
 
             if result:
                 _apply_result_to_assignment(plan.assignments[idx], catalog=catalog, result=result)
+                ran += 1
+                reason = str(result.get("reasoning") or "")
+                if reason.startswith(_AI_FAILURE_PREFIXES):
+                    failed += 1
+                    first_failure = first_failure or reason
 
             with completed_lock:
                 completed["n"] += 1
@@ -765,7 +776,24 @@ def phase2_ai_analyze(
                 photos_n = len(src_item[2])
                 progress_cb(done, len(work_items), f"Analyzed folder {done}/{len(work_items)} ({photos_n} photos)")
 
+    if ran and failed == ran and not (cancel_event and cancel_event.is_set()):
+        plan.ai_error = _summarize_ai_failure(first_failure)
     return plan
+
+
+# What analyze_group / the worker put in "reasoning" when the AI never
+# answered. "parse error" is not here: the AI ran and replied badly.
+_AI_FAILURE_PREFIXES = ("error:", "quota exceeded:", "worker error:")
+
+
+def _summarize_ai_failure(reason: str) -> str:
+    """One line a person can act on, instead of a 200-character API dump."""
+    low = reason.lower()
+    if "api key not valid" in low or "api_key_invalid" in low:
+        return "the API key was refused (not valid or revoked)"
+    if reason.startswith("quota exceeded:") or "resource_exhausted" in low or " 429" in low:
+        return "the Gemini quota is used up for now"
+    return reason[:200]
 
 
 # ─── PHASE 4: Rename temp folders → final folder names ───

@@ -337,12 +337,141 @@ def test_version_file_matches_running():
 def test_get_api_key_handles_null_value():
     """C12: a JSON `"api_key": null` must not crash with None.strip()."""
     orig = auth.load_config
+    orig_files = auth.BUNDLED_KEY_FILES
     try:
         auth.load_config = lambda: {"api_key": None, "model": None}
+        auth.BUNDLED_KEY_FILES = []         # no built-in key in this test
         assert auth.get_api_key() is None  # no AttributeError
         assert auth.get_model() == auth.DEFAULT_MODEL  # null model â†’ default
     finally:
         auth.load_config = orig
+        auth.BUNDLED_KEY_FILES = orig_files
+
+
+# --- built-in key (v1.067, Nick 2026-10-31) ---------------------------
+# Built at runtime so this file never holds anything shaped like a real key -
+# the guard below would (rightly) refuse it.
+_FAKE_KEY = "AIza" + "Q" * 35
+
+
+def test_keymask_round_trips_and_hides_the_plain_key():
+    from core import keymask
+    blob = keymask.mask(_FAKE_KEY)
+    assert b"AIza" not in blob, "the mask left the key greppable"
+    assert keymask.unmask(blob) == _FAKE_KEY
+    assert keymask.unmask(blob + b"\r\n") == _FAKE_KEY   # a CRLF'd file still reads
+    for damaged in (b"", b"not base64 !!", blob[:8], b"AAAA"):
+        assert keymask.unmask(damaged) is None, f"unmask accepted {damaged!r}"
+
+
+def test_api_key_is_the_saved_one_then_the_built_in_one():
+    """The user's own key wins (it carries its own quota); without one the
+    app uses the key built into the bundle; a damaged or missing bundle file
+    falls through instead of crashing or returning junk."""
+    from core import keymask
+    orig_load, orig_files = auth.load_config, auth.BUNDLED_KEY_FILES
+    with tempfile.TemporaryDirectory() as td:
+        masked = Path(td) / keymask.BUNDLED_KEY_NAME
+        masked.write_bytes(keymask.mask(_FAKE_KEY))
+        damaged = Path(td) / "damaged.key"
+        damaged.write_bytes(b"#### not a key ####")
+        plain = Path(td) / "gemini_key.txt"
+        plain.write_text(_FAKE_KEY + "\n", encoding="ascii")
+        try:
+            auth.BUNDLED_KEY_FILES = [(masked, True)]
+            auth.load_config = lambda: {"api_key": "my-own-key"}
+            assert auth.get_api_key() == "my-own-key"
+            for empty in ({}, {"api_key": ""}, {"api_key": "   "}, {"api_key": None}):
+                auth.load_config = lambda e=empty: e
+                assert auth.get_api_key() == _FAKE_KEY, f"no built-in key for {empty}"
+
+            auth.load_config = lambda: {}
+            auth.BUNDLED_KEY_FILES = [(Path(td) / "missing.key", True),
+                                      (damaged, True), (plain, False)]
+            assert auth.get_bundled_key() == _FAKE_KEY
+            auth.BUNDLED_KEY_FILES = [(damaged, True)]
+            assert auth.get_api_key() is None
+            auth.BUNDLED_KEY_FILES = []
+            assert auth.get_api_key() is None
+        finally:
+            auth.load_config, auth.BUNDLED_KEY_FILES = orig_load, orig_files
+
+
+def test_phase2_flags_a_run_where_no_folder_got_through():
+    """A dead key or a used-up quota fails every folder, each in its own row,
+    and the run used to report "done". With the key field hidden (v1.067) that
+    would leave nobody knowing why, so it must become plan.ai_error - but only
+    when NOTHING got through: one transient failure stays a row's business."""
+    import threading
+
+    class _Cat:
+        def names(self):
+            return ["Job A"]
+
+        def find_fuzzy(self, _name):
+            return None, 0.0
+
+    def row(reasoning, matched=None, confidence=0.0):
+        return {"matched_name": matched, "suggested_name": None,
+                "confidence": confidence, "reasoning": reasoning}
+
+    bad_key = row("error: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': "
+                  "'API key not valid. Please pass a valid API key.'}}")
+    quota = row("quota exceeded: daily limit reached")
+    offline = row("error: [Errno 11001] getaddrinfo failed")
+    good = row("a pump", matched="Job A", confidence=0.9)
+
+    orig_client, orig_group = processor.create_client, processor.analyze_group
+
+    def run(results):
+        it, lock = iter(results), threading.Lock()
+
+        def fake_group(*_a, **_k):
+            with lock:
+                return dict(next(it))
+        processor.create_client = lambda: (object(), None)
+        processor.analyze_group = fake_group
+        plan = processor.Plan(assignments=[
+            processor.JobAssignment(folder_date=datetime(2026, 10, 31, 10),
+                                    images=[Path(f"{i}.jpg")])
+            for i in range(len(results))])
+        return processor.phase2_ai_analyze(plan, _Cat(), max_workers=1).ai_error
+
+    try:
+        assert "refused" in run([bad_key, bad_key]), "a dead key passed as done"
+        assert "quota" in run([quota, quota]), "a used-up quota passed as done"
+        assert "getaddrinfo" in run([offline]), "no network passed as done"
+        assert run([bad_key, good]) == "", "one failure flagged the whole run"
+        assert run([good, good]) == ""
+    finally:
+        processor.create_client, processor.analyze_group = orig_client, orig_group
+
+
+def test_no_tracked_file_carries_a_google_api_key():
+    """The repo is PUBLIC. The built-in key lives only in the gitignored
+    secrets/ folder and is bundled at build time (core/keymask.py). This is
+    the executable half of that rule: a key pasted into any tracked file -
+    code, a record, a log - turns this red before it can be pushed."""
+    import re
+    import subprocess
+    try:
+        listed = subprocess.run(["git", "ls-files", "-z"], cwd=ROOT,
+                                capture_output=True, check=True).stdout
+    except (OSError, subprocess.CalledProcessError):
+        return                                  # not a checkout: nothing to guard
+    pattern = re.compile(rb"AIza[0-9A-Za-z_\-]{35}")
+    offenders = []
+    for name in filter(None, listed.decode("utf-8").split("\0")):
+        try:
+            raw = (ROOT / name).read_bytes()
+        except OSError:
+            continue
+        if pattern.search(raw):
+            offenders.append(name)
+    assert not offenders, "a Google API key in tracked files:\n  " + "\n  ".join(offenders)
+    ignored = subprocess.run(["git", "check-ignore", "-q", "secrets/gemini_key.txt"],
+                             cwd=ROOT).returncode
+    assert ignored == 0, "secrets/ is not gitignored - the built-in key could be committed"
 
 
 def test_get_model_default_when_missing():

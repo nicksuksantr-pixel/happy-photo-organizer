@@ -1856,7 +1856,9 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
                 self.after(0, lambda e=err: messagebox.showerror(
                     "AI tagging failed",
                     f"The AI could not analyze your photos:\n\n{e}\n\n"
-                    "Check your API key in Settings and your internet connection, then try again.",
+                    "Check your internet connection, then try again.\n\n"
+                    "If the key is the problem (refused, or out of quota), "
+                    "open Settings and press Ctrl+Shift+K to enter your own key.",
                 ))
             else:
                 self.after(0, lambda: self._log("Phase 2 done — awaiting review", "ok"))

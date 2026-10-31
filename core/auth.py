@@ -8,12 +8,17 @@ import json
 import os
 import shutil
 import stat
+import sys
 import tempfile
 import threading
 import time
 from pathlib import Path
 
 from google import genai
+
+from . import keymask
+
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 CONFIG_DIR = Path.home() / ".happy-photo-organizer"
 CONFIG_FILE = CONFIG_DIR / "auth.json"
@@ -197,10 +202,49 @@ def update_config(updates: dict) -> bool:
             return False
 
 
-def get_api_key() -> str | None:
+def _bundled_key_files() -> list[tuple[Path, bool]]:
+    """(path, masked) places the built-in key can come from, first wins.
+    Frozen: the masked copy the build put in the bundle. From source: the
+    plain gitignored file the build reads."""
+    files: list[tuple[Path, bool]] = []
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        files.append((Path(meipass) / "data" / keymask.BUNDLED_KEY_NAME, True))
+    files.append((_PROJECT_ROOT.joinpath(*keymask.SECRET_KEY_PATH), False))
+    return files
+
+
+# Tests point this at a temp dir (or []) so the real key never leaks into them.
+BUNDLED_KEY_FILES = _bundled_key_files()
+
+
+def get_bundled_key() -> str | None:
+    """The free key built into the app (Nick, 2026-10-31), or None."""
+    for path, masked in BUNDLED_KEY_FILES:
+        try:
+            raw = path.read_bytes()
+        except OSError:
+            continue
+        if masked:
+            key = keymask.unmask(raw)
+        else:
+            key = raw.decode("ascii", errors="ignore").strip() or None
+        if key:
+            return key
+    return None
+
+
+def get_saved_api_key() -> str | None:
+    """The user's own key from auth.json, or None."""
     # `(... or "")` guards a JSON `"api_key": null` (key present, value None):
     # dict.get returns None there, and None.strip() would crash.
     return (load_config().get("api_key") or "").strip() or None
+
+
+def get_api_key() -> str | None:
+    """The key to use: the user's own if they saved one (it carries their own
+    quota), else the built-in one, so nobody has to make a key."""
+    return get_saved_api_key() or get_bundled_key()
 
 
 def get_model() -> str:

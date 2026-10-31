@@ -38,6 +38,9 @@ release-notes-*.md
 # Sensitive
 auth.json
 *.env
+# The built-in Gemini key: the build reads it from here. Never in git — the
+# repo is public (core/keymask.py).
+secrets/
 
 # Claude Code session state
 .claude/scheduled_tasks.lock

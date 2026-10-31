@@ -17,7 +17,6 @@ import shutil
 import sys
 import threading
 import time
-import webbrowser
 import zipfile
 from pathlib import Path
 from tkinter import filedialog, messagebox
@@ -165,8 +164,10 @@ Thank you for choosing Happy Photo Organizer.
      permission from the author (Nick Suksantr).
 
 2. User Responsibilities
-   • You must provide your own Gemini API key (free or paid).
-   • All AI API costs are your responsibility.
+   • A free Gemini API key is built in. Its daily quota is shared
+     by everyone using the app.
+   • If you use your own Gemini API key, its costs are your
+     responsibility.
    • This app does not collect or transmit your data,
      except as required to function (requests to Gemini API).
 
@@ -186,7 +187,7 @@ Thank you for choosing Happy Photo Organizer.
 5. Termination
    • Uninstall any time from Settings > Apps & features
      (or run uninstall.bat in install folder).
-   • Your API key stays in ~/.happy-photo-organizer/auth.json —
+   • Your settings stay in ~/.happy-photo-organizer/auth.json —
      delete it manually if desired.
 
 ================================================================
@@ -341,7 +342,7 @@ class GradientBackground(ctk.CTkCanvas):
 
 
 class Installer:
-    """Handles actual install steps — copy payload, create shortcuts, save key"""
+    """Handles actual install steps — copy payload, create shortcuts, save settings"""
 
     def __init__(self):
         self.install_dir: Path | None = None
@@ -405,9 +406,11 @@ class Installer:
             if progress_cb and kept:
                 progress_cb(86, f"Kept {kept} job name(s) you had added")
 
-            if progress_cb:
-                progress_cb(86, "Saving API key...")
+            # Since v1.067 nothing sets api_key (the app has a built-in key),
+            # so this runs only for a caller that passes one explicitly.
             if self.api_key:
+                if progress_cb:
+                    progress_cb(86, "Saving API key...")
                 cfg_dir = Path.home() / ".happy-photo-organizer"
                 cfg_dir.mkdir(parents=True, exist_ok=True)
                 cfg_file = cfg_dir / "auth.json"
@@ -495,7 +498,7 @@ del /Q "%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\{APP_NAME}.lnk" >nu
 echo  Removing registry entry...
 reg delete "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\HappyPhotoOrganizer" /f >nul 2>&1
 echo.
-choice /C YN /N /M "  Also remove your config (API key)? [Y/N] "
+choice /C YN /N /M "  Also remove your settings? [Y/N] "
 if errorlevel 2 goto skipcfg
 rmdir /S /Q "%USERPROFILE%\\.happy-photo-organizer" >nul 2>&1
 echo  Config removed.
@@ -784,23 +787,8 @@ class SetupWindow(ctk.CTk):
             command=self._pick_dir,
         ).pack(side="left", padx=(6, 0))
 
-        # API key
-        ctk.CTkLabel(form, text="Gemini API key  (optional, you can set later)",
-                     font=("Segoe UI", 11, "bold"), text_color=COLOR_TEXT,
-                     anchor="w").pack(fill="x", pady=(0, 2))
-        key_row = ctk.CTkFrame(form, fg_color="transparent")
-        key_row.pack(fill="x", pady=(0, 10))
-        self.key_var = ctk.StringVar()
-        self.key_entry = ctk.CTkEntry(key_row, textvariable=self.key_var, height=32,
-                                       show="•", placeholder_text="AIzaSy...")
-        self.key_entry.pack(side="left", fill="x", expand=True)
-        enable_paste(self.key_entry)
-        ctk.CTkButton(
-            key_row, text="Get free key", width=110, height=32,
-            fg_color="transparent", border_color=COLOR_PRIMARY, border_width=1,
-            text_color=COLOR_PRIMARY, hover_color=COLOR_CARD_LIGHT,
-            command=lambda: webbrowser.open("https://aistudio.google.com/apikey"),
-        ).pack(side="left", padx=(6, 0))
+        # No API key field since v1.067: the app carries a built-in free key
+        # (Nick 2026-10-31). A key saved by an older install is kept.
 
         # checkboxes
         opts = ctk.CTkFrame(form, fg_color="transparent")
@@ -847,7 +835,6 @@ class SetupWindow(ctk.CTk):
             messagebox.showwarning("Path required", "Please choose an install location.")
             return
         self.installer.install_dir = Path(target)
-        self.installer.api_key = self.key_var.get().strip()
         self.installer.create_desktop_shortcut = bool(self.cb_desktop.get())
         self.installer.create_start_menu = bool(self.cb_startmenu.get())
         self.installer.launch_after = bool(self.cb_launch.get())

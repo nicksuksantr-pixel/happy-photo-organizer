@@ -1,5 +1,6 @@
 """
-settings.py — Settings dialog (API key, model, UI scale, auto-update toggle).
+settings.py — Settings dialog (model, UI scale, auto-update toggle; the API
+key field is hidden behind Ctrl+Shift+K since v1.067).
 """
 from __future__ import annotations
 
@@ -100,9 +101,15 @@ class SettingsDialog(ctk.CTkToplevel):
         body = ctk.CTkScrollableFrame(self, fg_color="transparent")
         body.pack(fill="both", expand=True, padx=0, pady=(8, 0))
 
-        ctk.CTkLabel(body, text="Gemini API Key", anchor="w",
+        # v1.067 (Nick 2026-10-31): the app carries a built-in free key, so
+        # the key field is hidden. It shows only when this build has no
+        # built-in key (nothing would work without one), or on Ctrl+Shift+K —
+        # the way back if the built-in key is ever revoked or out of quota.
+        self._key_shown = auth.get_bundled_key() is None
+        self._key_box = ctk.CTkFrame(body, fg_color="transparent")
+        ctk.CTkLabel(self._key_box, text="Gemini API Key", anchor="w",
                      font=("Segoe UI", 13, "bold")).pack(fill="x", padx=20, pady=(12, 4))
-        link_row = ctk.CTkFrame(body, fg_color="transparent")
+        link_row = ctk.CTkFrame(self._key_box, fg_color="transparent")
         link_row.pack(fill="x", padx=20)
         ctk.CTkLabel(
             link_row, text="Get one at  ", anchor="w",
@@ -119,9 +126,9 @@ class SettingsDialog(ctk.CTkToplevel):
             "<Button-1>",
             lambda _e: webbrowser.open("https://aistudio.google.com/apikey"),
         )
-        self.key_entry = ctk.CTkEntry(body, show="*", placeholder_text="AIzaSy...")
+        self.key_entry = ctk.CTkEntry(self._key_box, show="*", placeholder_text="AIzaSy...")
         self.key_entry.pack(fill="x", padx=20, pady=8)
-        self.key_entry.insert(0, cfg.get("api_key", ""))
+        self.key_entry.insert(0, cfg.get("api_key") or "")
         enable_paste(self.key_entry)
         # Round-8 NEW-3 (Cos v1.038 retest 2026-05-25): pressing Enter
         # in the key entry triggers Save — standard modal behaviour.
@@ -129,11 +136,17 @@ class SettingsDialog(ctk.CTkToplevel):
         # (model dropdown filter, etc.) doesn't hijack.
         self.key_entry.bind("<Return>", lambda _e: self._save())
 
-        self.show_key = ctk.CTkCheckBox(body, text="Show key", command=self._toggle_show)
+        self.show_key = ctk.CTkCheckBox(self._key_box, text="Show key", command=self._toggle_show)
         self.show_key.pack(anchor="w", padx=20)
+        if self._key_shown:
+            self._key_box.pack(fill="x")
+        # Matched on the K key's code, not its keysym: with Caps Lock on the
+        # keysym is "k", and a bound "<Control-Shift-K>" alone misses it.
+        self.bind("<Control-Shift-KeyPress>", self._on_ctrl_shift_key)
 
-        ctk.CTkLabel(body, text="Model", anchor="w",
-                     font=("Segoe UI", 13, "bold")).pack(fill="x", padx=20, pady=(20, 4))
+        self._model_label = ctk.CTkLabel(body, text="Model", anchor="w",
+                                         font=("Segoe UI", 13, "bold"))
+        self._model_label.pack(fill="x", padx=20, pady=(20, 4))
 
         default_values = [
             "gemini-3.5-flash-lite",
@@ -178,7 +191,7 @@ class SettingsDialog(ctk.CTkToplevel):
         self.scale_slider.pack(fill="x", padx=20, pady=(0, 8))
         self.scale_value_label.configure(text=f"{self.scale_var.get():.2f}x")
 
-        if cfg.get("api_key"):
+        if self._effective_key():
             # Round-8 Risk-B: track the after-id so destroy() can cancel
             # before the +200 ms fires against a dead widget.
             self._refresh_models_after_id = self.after(
@@ -205,10 +218,11 @@ class SettingsDialog(ctk.CTkToplevel):
         #     → Save (NEW-4 implicit fix)
         # Deferred one tick so CTkEntry's inner Tk widget is fully
         # realised first.
-        try:
-            self.after(0, lambda: self.key_entry.focus_set())
-        except Exception:
-            pass
+        if self._key_shown:
+            try:
+                self.after(0, lambda: self.key_entry.focus_set())
+            except Exception:
+                pass
 
     def destroy(self):
         """Round-7 BUG-N6/N11 (Cos retest 2026-05-24): cancel the
@@ -246,8 +260,27 @@ class SettingsDialog(ctk.CTkToplevel):
     def _toggle_show(self):
         self.key_entry.configure(show="" if self.show_key.get() else "*")
 
+    def _on_ctrl_shift_key(self, event):
+        if event.keysym in ("K", "k") or event.keycode == 0x4B:     # VK_K
+            self._reveal_key()
+
+    def _reveal_key(self):
+        if self._key_shown:
+            return
+        self._key_shown = True
+        self._key_box.pack(fill="x", before=self._model_label)
+        self.key_entry.focus_set()
+
+    def _effective_key(self) -> str:
+        """The key Test / Refresh should use — the one Save would leave the
+        app with: the field when it is shown and filled; the built-in key when
+        it is shown and cleared; otherwise whatever the app uses now."""
+        if self._key_shown:
+            return self.key_entry.get().strip() or (auth.get_bundled_key() or "")
+        return auth.get_api_key() or ""
+
     def _test(self):
-        key = self.key_entry.get().strip()
+        key = self._effective_key()
         if not key:
             self.status.configure(text="Enter a key first", text_color=COLOR_WARN)
             return
@@ -269,7 +302,7 @@ class SettingsDialog(ctk.CTkToplevel):
             self.after(0, lambda: self.status.configure(text=msg, text_color=COLOR_DANGER))
 
     def _refresh_models(self):
-        key = self.key_entry.get().strip()
+        key = self._effective_key()
         if not key:
             self.status.configure(text="Enter a key first", text_color=COLOR_WARN)
             return
@@ -281,7 +314,7 @@ class SettingsDialog(ctk.CTkToplevel):
         ).start()
 
     def _refresh_models_silent(self):
-        key = self.key_entry.get().strip()
+        key = self._effective_key()
         if not key:
             return
         threading.Thread(
@@ -332,9 +365,6 @@ class SettingsDialog(ctk.CTkToplevel):
 
     def _save(self):
         key = self.key_entry.get().strip()
-        if not key:
-            self.status.configure(text="Enter a key first", text_color=COLOR_WARN)
-            return
         # Round-7 BUG-N8 (Cos retest 2026-05-24): atomic_write_json can
         # block up to 0.45 s under AV lock (3× retry with 0.15s/0.30s
         # backoff per R6-BUG-L2). Running it on the UI thread froze the
@@ -343,11 +373,19 @@ class SettingsDialog(ctk.CTkToplevel):
         # after(0,...). The dialog stays interactive; user sees a
         # "Saving..." status until the write completes.
         updates = {
-            "api_key": key,
             "model": (self.model_var.get() or auth.DEFAULT_MODEL).strip(),
             "ui_scale": float(self.scale_var.get()),
             "auto_check_updates": bool(self.auto_update_var.get()),
         }
+        # A hidden key field is never written: the saved key (or none) stays.
+        if self._key_shown:
+            if key:
+                updates["api_key"] = key
+            elif auth.get_bundled_key():
+                updates["api_key"] = ""     # cleared on purpose: back to the built-in key
+            else:
+                self.status.configure(text="Enter a key first", text_color=COLOR_WARN)
+                return
         self.status.configure(text="Saving...", text_color=COLOR_MUTED)
         threading.Thread(
             target=self._save_worker, args=(updates,), daemon=True,

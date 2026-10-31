@@ -9,6 +9,28 @@ Cosmetic / design / V2-scope items that survived round 6 + 7 + 8. All
 catalogued in detail at the bottom of this file under "Round 6
 deferred".
 
+## [1.067] — not released yet (needs its update drill, #28) — No key to set up
+
+### Changed
+- **The app comes with a free Gemini key built in.** Nobody has to make a key
+  before the first scan. A key you saved yourself still wins (it has its own
+  quota). The built-in key is never in git: the build bundles it from a local,
+  gitignored file and refuses to build without one.
+- **The key field is hidden.** The installer no longer asks for a key, and
+  Settings no longer shows the field. Ctrl+Shift+K in Settings brings it back,
+  for when the built-in key is out of quota. A build with no built-in key shows
+  the field as before.
+- **Test** and **Refresh models** in Settings use the key the app actually uses.
+
+### Fixed
+- **A run where the AI answered for no folder now says so.** A refused key, a
+  used-up quota or no network used to fail every folder quietly, row by row,
+  and the run still said "done". Now it is reported as a failure with one line
+  saying why, and the alert points to Ctrl+Shift+K. One failed folder among
+  good ones is still left to its row.
+- The installer no longer shows "Saving API key..." on every install, and the
+  uninstaller asks "Also remove your settings?" instead of mentioning a key.
+
 ## [1.066] — 2026-10-31 — The bridge: an update you can prove (released after its drill passed, #28)
 
 ### Fixed

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Git pre-commit hook — the invisible-byte guards, and nothing else.
+# Git pre-commit hook — the invisible-byte guards, and the key guard.
 #
 # NOT INSTALLED BY DEFAULT. To turn it on for this clone:
 #
@@ -11,6 +11,12 @@
 # seconds on every commit is a hook that gets --no-verify'd within a week, and a
 # guard people bypass is worse than no guard: it retires the worry without doing
 # the work. These three take 0.3 seconds.
+#
+# The fourth (v1.067, Nick 2026-10-31: "never let the key reach git") is the
+# Google API key guard. The app carries a built-in key and the repo is PUBLIC;
+# a key pasted into any tracked file is refused here, at the last moment before
+# it would be in history. It reads the index, so it sees what is being
+# committed, and it costs a fraction of a second.
 #
 # They also happen to be the right ones for a hook. The failures they catch are
 # INVISIBLE — a BOM, a CR, a control character an octal escape wrote into a
@@ -42,7 +48,8 @@ except Exception as e:                      # a broken suite must not block work
 failed = []
 for name in ("test_no_source_file_carries_a_bom_or_cr",
              "test_no_record_carries_an_invisible_control_character",
-             "test_version_file_has_no_bom_and_parses_to_the_right_tuple"):
+             "test_version_file_has_no_bom_and_parses_to_the_right_tuple",
+             "test_no_tracked_file_carries_a_google_api_key"):
     check = getattr(test_core, name, None)
     if check is None:
         continue
@@ -52,9 +59,9 @@ for name in ("test_no_source_file_carries_a_bom_or_cr",
         failed.append(f"{name}:\n{e}")
 
 if failed:
-    print("pre-commit REFUSED - invisible bytes in the tree:\n")
+    print("pre-commit REFUSED - invisible bytes or an API key in the tree:\n")
     for f in failed:
         print(f"  {f}\n")
-    print("These do not show in a diff. Fix them rather than --no-verify.")
+    print("Fix them rather than --no-verify. A key goes in secrets/ (gitignored).")
     sys.exit(1)
 PY
