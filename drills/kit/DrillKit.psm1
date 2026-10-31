@@ -9,7 +9,7 @@ Set-StrictMode -Version 2.0
 $script:DrillLogPath = $null
 
 # A run-level stop: Invoke-Drill names a STOP file under its stage (world-writable C:\Users\Public), every polling wait
-# checks it, and a hung run ends at its next poll with a FAIL receipt — from ANY account, no admin. HPO's run 3
+# checks it, and a hung run ends at its next poll with a FAIL receipt - from ANY account, no admin. HPO's run 3
 # (2026-10-31) sat in a 1800-s wait for a feed that had died, owned by the drill account, and nobody could stop it.
 $script:DrillStopFile = ''
 function Set-DrillStopFile([string]$Path) { $script:DrillStopFile = $Path; if ($Path -and (Test-Path -LiteralPath $Path)) { Remove-Item -LiteralPath $Path -Force } }
