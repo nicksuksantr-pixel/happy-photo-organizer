@@ -285,7 +285,8 @@ try {
       $ekEvidence = [string]$ek.evidence
       # a network error is still not a pass (unknown is not yes), but the receipt must not read as "the key is broken"
       # only when Google never answered (no HTTP status from the adapter): a 403/429/504 carries a status and stays a key/quota verdict
-      $ekStatus = $(if ($ek.PSObject.Properties.Name -contains 'status') { [string]$ek.status } else { '' })
+      # the adapter may return an [ordered] dictionary (HPO) or a PSCustomObject: PSObject.Properties lists .NET members on a dictionary, not its keys
+      $ekStatus = $(if ($ek -is [System.Collections.IDictionary]) { [string]$ek['status'] } elseif ($ek.PSObject.Properties.Name -contains 'status') { [string]$ek.status } else { '' })
       if (([string]$ek.result -ne 'pass') -and (-not $ekStatus) -and ($ekEvidence -match 'getaddrinfo|11001|ENOTFOUND|Name or service not known|timed out|ConnectionError|Max retries|No route|network is unreachable|WinError 100(5[01]|6[015])|actively refused|connection attempt failed')) {
         $ekEvidence = "could not check (no network): $ekEvidence"
       }
