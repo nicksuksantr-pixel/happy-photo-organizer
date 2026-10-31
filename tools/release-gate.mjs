@@ -36,6 +36,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { fileURLToPath } from 'node:url'
+import { spawnSync } from 'node:child_process'
 
 const HOME = process.env.USERPROFILE || process.env.HOME || ''
 const APPROVAL = path.join(HOME, '.claude', 'release-approval.json')
@@ -133,6 +134,15 @@ function passingReceiptFor(root, { sha, tag }) {
     // the receipt is a summary; the drill's own log is the evidence, and it has to exist beside it
     if (!r.drill_log) p.push('drill_log missing: commit the drill\'s own log and name it here')
     else if (!fs.existsSync(path.resolve(root, r.drill_log))) p.push(`drill_log ${r.drill_log} not found in the repo`)
+    else {
+      // 2026-10-31: six of fourteen repos hid drills/logs/*.log behind a template `*.log` ignore, so a receipt reached
+      // GitHub without its evidence while this file check passed on the one PC that had the log. The evidence has to
+      // travel with the tag: tracked in git (index or HEAD). Only this release-command path asks git; a shell that
+      // cannot run git here cannot publish anyway, so that answer is a problem, not a pass.
+      const ls = spawnSync('git', ['-C', root, 'ls-files', '--error-unmatch', '--', r.drill_log], { encoding: 'utf8' })
+      if (ls.error) p.push(`could not ask git whether ${r.drill_log} is tracked (${ls.error.message}); commit the log and run this where git works`)
+      else if (ls.status !== 0) p.push(`drill_log ${r.drill_log} is not tracked in git: \`git add\` it (check .gitignore for *.log; add !drills/logs/*.log) and commit it with the receipt`)
+    }
     return { file, problems: p }
   }
   return null
