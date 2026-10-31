@@ -345,6 +345,14 @@ on the phone are not the drilled ones, and the lock refuses them. For Play, the 
 
 ## 5a · The shared harness — one drill kit, not four
 
+**The kit exists (2026-10-31, on Nick's word after the first drill day): `drill-kit/` in the rules master**
+(`C:\Users\NickSuksanTr\Documents\Claude\Projects\Nick\drill-kit\`, repo `claude-house-rules`). `lock/` is the one
+shared drill lock, in PowerShell and in Node, with tests; `windows/` is HPO's kit verbatim plus EMR's unattended
+Tk driver (`drill-ui.ps1`); `android/` is the plan for the core still to be lifted from JobShot and NotiWallet.
+An app adopts it by COPYING the folder it needs into its own `drills/kit/` and writing an adapter, on a scratch
+copy first; nothing in production is touched. Its README says what is proven where. A fix to the kit goes to the
+master first (`memory/TO_PROMOTE.md` names the file and the change), never only to a copy.
+
 Four hand-written updaters are why every lesson had to be learned four times, so the drill must not be four
 hand-written scripts too.
 - The house kit is: a loopback fake-releases server with Range support, fault switches (truncate, flip a byte,
