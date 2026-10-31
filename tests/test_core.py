@@ -630,6 +630,42 @@ def test_phase2_says_when_ai_is_unavailable_and_stops_calling_a_dead_key():
         processor.create_client, processor.analyze_group = orig_client, orig_group
 
 
+def test_the_quota_line_names_when_ai_is_back_in_local_time():
+    """v1.068: "try again tomorrow" was wrong for a Thai user. The free tier's
+    daily quota resets at midnight US Pacific, which is 14:00 in Thailand while
+    the US is on daylight time and 15:00 when it is not, so a quota that ran
+    out in the morning is back the same afternoon. The line names that time on
+    the PC's own clock, worked out without a tz database."""
+    from datetime import datetime, timedelta, timezone
+    bkk = timezone(timedelta(hours=7))
+
+    def at(y, mo, d, h, mi=0):                 # a Thai wall-clock time
+        return datetime(y, mo, d, h, mi, tzinfo=bkk)
+
+    f = processor.quota_back_at
+    assert f(at(2026, 7, 10, 10), bkk) == at(2026, 7, 10, 14)      # summer, morning: same day
+    assert f(at(2026, 7, 10, 14), bkk) == at(2026, 7, 11, 14)      # at the reset: the next one
+    assert f(at(2027, 1, 10, 16), bkk) == at(2027, 1, 11, 15)      # winter, afternoon: next day
+    # the night daylight time ends (Sun 2026-11-01): Nov 1's midnight is still
+    # daylight time (14:00), Nov 2's is not (15:00)
+    assert f(at(2026, 11, 1, 1), bkk) == at(2026, 11, 1, 14)
+    assert f(at(2026, 11, 1, 14, 30), bkk) == at(2026, 11, 2, 15)
+    # the day it starts (Sun 2027-03-14): that midnight is standard time
+    assert f(at(2027, 3, 14, 10), bkk) == at(2027, 3, 14, 15)
+    assert f(at(2027, 3, 14, 16), bkk) == at(2027, 3, 15, 14)
+
+    line = processor.ai_down_line
+    assert line("day", now=at(2026, 7, 10, 10), local_tz=bkk) == (
+        "today's shared free quota is used up. The app works without it; "
+        "AI is back after 14:00 today."), line("day", now=at(2026, 7, 10, 10), local_tz=bkk)
+    assert line("day", now=at(2027, 1, 10, 16), local_tz=bkk).endswith(
+        "AI is back after 15:00 tomorrow.")
+    now_here = line("day")                                     # this PC's clock and zone
+    assert now_here.startswith("today's shared free quota is used up") and (
+        now_here.endswith(" today.") or now_here.endswith(" tomorrow.")), now_here
+    assert line("busy") == "the shared free key is busy right now. Try again in a minute."
+
+
 def test_drill_busy_marker_opens_settings_once_and_only_in_a_drill():
     """From v1.067 the app carries a built-in key, so blanking the saved key no
     longer leaves it keyless and Settings never opens by itself: the drill can

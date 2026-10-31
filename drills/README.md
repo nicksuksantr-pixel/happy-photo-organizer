@@ -50,14 +50,14 @@ the keyboard. Every run is **Switch user**, done by Nick, never `runas` and neve
 
 ```powershell
 # 1. the candidate, built; the FROM, downloaded from the real release
-gh release download v1.066 --repo nicksuksantr-pixel/happy-photo-organizer -p HappyPhotoOrganizerSetup.exe -D "$env:TEMP\hpo-from"
+gh release download v1.067 --repo nicksuksantr-pixel/happy-photo-organizer -p HappyPhotoOrganizerSetup.exe -D "$env:TEMP\hpo-from"
 # 2. (the v1.066 bridge only: the candidate on the public test repo, because v1.065 had no
 #    drill feed. From FROM v1.066 on the kit's loopback feed serves it; nothing is published.)
 # 3. stage where the drill account can read it (no secrets are ever staged); also writes C:\Users\Public\Drills\HPO.cmd
-.\drills\kit\Stage-Drill.ps1 -Manifest .\drills\drill.json -FromSetup "$env:TEMP\hpo-from\HappyPhotoOrganizerSetup.exe" -ToSetup .\dist\HappyPhotoOrganizerSetup.exe -ToVersion 1.067
+.\drills\kit\Stage-Drill.ps1 -Manifest .\drills\drill.json -FromSetup "$env:TEMP\hpo-from\HappyPhotoOrganizerSetup.exe" -ToSetup .\dist\HappyPhotoOrganizerSetup.exe -ToVersion 1.068
 # 4. the WATCH-mode runner starts it by itself; watch results.txt (nothing within 2 min = tell the Director)
 # 5. when results.txt has the HPO line: receipt + logs into drills\, validated, stage removed
-.\drills\kit\Collect-Drill.ps1 -Manifest .\drills\drill.json -ToVersion 1.067
+.\drills\kit\Collect-Drill.ps1 -Manifest .\drills\drill.json -ToVersion 1.068
 ```
 
 - **One drill at a time on this PC** (UPDATE_DRILL 5.2): the runner takes `C:\Users\Public\drill-busy.txt` before

@@ -61,8 +61,8 @@
   },
   "_from_route_note": "From v1.066 on, kind 'feed': in drill mode the FROM's own updater reads HAPPY_UPDATE_FEED (the kit's loopback feed) for every check, and hpo.ps1 Get-FromRouteEvidence reads its 127.0.0.1 breadcrumbs. The v1.065 bridge used kind 'repo-env' (HAPPY_UPDATE_REPO -> the public test repo drill_repo), because v1.065 had no drill feed.",
   "from": {
-    "version": "1.066",
-    "sha256": "93c4d69c9c2346882d8c38eb27051a269be23e1b4f2d387a68a5636328b0579b"
+    "version": "1.067",
+    "sha256": "bf807b97243c71b3e3b72239e6275afdd1aab9b63b07eb7c32b87f545d429364"
   },
   "timeouts": {
     "update_s": 1800,

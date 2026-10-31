@@ -9,6 +9,16 @@ Cosmetic / design / V2-scope items that survived round 6 + 7 + 8. All
 catalogued in detail at the bottom of this file under "Round 6
 deferred".
 
+## [1.068] — not released yet (needs its update drill, #28) — When the free AI is back
+
+### Fixed
+- **"Today's shared free quota is used up" now says when AI is back, on
+  your own clock** - for example "AI is back after 15:00 today" - instead
+  of "try again tomorrow". The free quota resets at midnight US Pacific
+  time, which is 14:00 or 15:00 in Thailand, so a quota that runs out in
+  the morning comes back the same afternoon. Worked out without a time-zone
+  database, and checked against one for every hour of 2025-2030.
+
 ## [1.067] — 2026-11-01 — No key to set up (released after its drill passed, #28)
 
 ### Changed

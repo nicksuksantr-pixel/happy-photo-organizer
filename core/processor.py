@@ -21,7 +21,7 @@ import uuid as _uuid
 from calendar import monthrange
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime, time as dtime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
 
@@ -819,15 +819,50 @@ _OFFLINE = ("getaddrinfo", "name resolution", "failed to establish a new connect
 _AI_DOWN_LINES = {
     "withdrawn": "the built-in key was withdrawn. The app works without it; "
                  "update when a new version is out.",
-    "day": "today's shared free quota is used up. The app works without it; "
-           "try again tomorrow.",
     "busy": "the shared free key is busy right now. Try again in a minute.",
     "model": "the chosen model has no free quota. Choose another model in Settings.",
 }
 
 
-def ai_down_line(cause: str) -> str:
+def ai_down_line(cause: str, *, now: datetime | None = None, local_tz=None) -> str:
+    if cause == "day":
+        back = quota_back_at(now, local_tz)
+        today = (now or datetime.now(timezone.utc)).astimezone(back.tzinfo).date()
+        return ("today's shared free quota is used up. The app works without it; "
+                f"AI is back after {back:%H:%M} {'today' if back.date() == today else 'tomorrow'}.")
     return _AI_DOWN_LINES.get(cause, "the AI key cannot be used right now.")
+
+
+# ─── When the free quota is back ───
+# The free tier's daily quota resets at midnight US Pacific: 14:00 in Thailand
+# while the US is on daylight time, 15:00 when it is not. "Try again tomorrow"
+# (v1.067) was wrong for a quota that ran out in a Thai morning. Worked out by
+# hand: on Windows zoneinfo has no tz database without the tzdata package.
+
+def _us_daylight_time(year: int) -> tuple[datetime, datetime]:
+    """US daylight time as UTC instants: the second Sunday of March at 02:00
+    PST (10:00 UTC) to the first Sunday of November at 02:00 PDT (09:00 UTC)."""
+    def sunday(month: int, nth: int) -> date:
+        first = date(year, month, 1)
+        return first + timedelta(days=(6 - first.weekday()) % 7 + 7 * (nth - 1))
+    return (datetime.combine(sunday(3, 2), dtime(10), tzinfo=timezone.utc),
+            datetime.combine(sunday(11, 1), dtime(9), tzinfo=timezone.utc))
+
+
+def _pacific_offset(at_utc: datetime) -> timedelta:
+    start, end = _us_daylight_time(at_utc.year)
+    return timedelta(hours=-7) if start <= at_utc < end else timedelta(hours=-8)
+
+
+def quota_back_at(now: datetime | None = None, local_tz=None) -> datetime:
+    """The next midnight US Pacific after `now`, on `local_tz`'s clock (this
+    PC's own zone by default)."""
+    now_utc = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    next_day = (now_utc + _pacific_offset(now_utc)).date() + timedelta(days=1)
+    midnight = datetime.combine(next_day, dtime(0), tzinfo=timezone.utc) + timedelta(hours=8)
+    if _pacific_offset(midnight) == timedelta(hours=-7):  # that midnight is daylight time
+        midnight -= timedelta(hours=1)
+    return midnight.astimezone(local_tz) if local_tz else midnight.astimezone()
 
 
 # ─── PHASE 4: Rename temp folders → final folder names ───
