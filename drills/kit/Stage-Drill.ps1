@@ -42,6 +42,24 @@ foreach ($t in $texts) {
   if (Select-String -LiteralPath $t -Pattern $secret -Quiet) { throw "refusing to stage: $t contains something that looks like a key or token" }
 }
 
+# Never pull the stage out from under a LIVE run of this app: the house lock (C:\Users\Public\drill-busy.txt, the
+# one the runner and every drill claim) names the app and its pid. HPO re-staged during its own run 3 on 2026-10-31
+# (its guard read a lock path that does not exist) and deleted from/, kit/, logs and the feed state of the run in
+# progress; the run went on writing into nothing. A sentence in a session's memory did not stop it, so this does.
+$houseLock = 'C:\Users\Public\drill-busy.txt'
+if (Test-Path -LiteralPath $houseLock) {
+  $lockText = (Get-Content -LiteralPath $houseLock -Raw -ErrorAction SilentlyContinue)
+  # two line shapes are in use: "<App> pid N started T" (the runner, the Node lock) and "Name | pid N | user | started T" (this kit)
+  if ($lockText -and ($lockText -match 'pid\s+(\d+)')) {
+    $lockPid = [int]$Matches[1]
+    $lockApp = $(if ($lockText -match '\|') { ($lockText -split '\|')[0].Trim() } else { ($lockText -split '\s+pid\s+')[0].Trim() })
+    $mine = ($lockApp -ieq [string]$M.app) -or ($lockApp -ieq [string]$M.launcher) -or ($lockApp -ieq $name)
+    $alive = $false; try { $alive = [bool](Get-Process -Id $lockPid -ErrorAction Stop) } catch { $alive = $false }
+    if ($mine -and $alive) {
+      throw "refusing to stage: a drill of $lockApp is RUNNING (pid $lockPid, $($lockText.Trim())); clearing $stage would delete its files mid-run. Wait for the lock to clear, then stage."
+    }
+  }
+}
 if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
 foreach ($d in @('kit', 'from', 'to', 'out')) { New-Item -ItemType Directory -Path (Join-Path $stage $d) -Force | Out-Null }
 Copy-Item -Path (Join-Path $PSScriptRoot '*') -Destination (Join-Path $stage 'kit') -Recurse

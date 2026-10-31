@@ -60,6 +60,22 @@ $extra = [ordered]@{}
 # key's fingerprint and the proof that the UPDATED build can use it (HPO's adapter: Get-EmbeddedKeyEvidence)
 $embedsKey = (($M.PSObject.Properties.Name -contains 'embeds_key') -and [bool]$M.embeds_key)
 $embeddedKey = $null
+# A dead network cannot prove the built-in key (HPO run 2, 2026-10-31: Wi-Fi joined a printer's SSID at 23:12 and the
+# check failed nine minutes into the run with "getaddrinfo failed"). Probe first, fail in seconds, name the cause.
+function Test-ApiReachable([string]$HostName = 'generativelanguage.googleapis.com', [int]$TimeoutMs = 5000) {
+  try { $null = [System.Net.Dns]::GetHostAddresses($HostName) } catch { return "DNS cannot resolve $HostName ($($_.Exception.Message))" }
+  $c = New-Object System.Net.Sockets.TcpClient
+  try {
+    $ar = $c.BeginConnect($HostName, 443, $null, $null)
+    if (-not $ar.AsyncWaitHandle.WaitOne($TimeoutMs, $false)) { return "no TCP connection to ${HostName}:443 within $TimeoutMs ms" }
+    $c.EndConnect($ar); return $null
+  } catch { return "no TCP connection to ${HostName}:443 ($($_.Exception.Message))" } finally { $c.Close() }
+}
+if ($embedsKey) {
+  $net = Test-ApiReachable
+  if ($net) { throw "no network for embedded_key_works ($net): connect this PC to the internet and run again - nothing was installed" }
+  Write-DrillLog 'network: the Gemini API host resolves and accepts a connection (probed before the run)'
+}
 $ulog = Expand-DrillPath $M.update_log
 $exeName = [string]$M.exe_name
 $appDir = Expand-DrillPath $M.app_dir
@@ -266,7 +282,12 @@ try {
     if (Get-Command Get-EmbeddedKeyEvidence -ErrorAction SilentlyContinue) {
       $ek = Get-EmbeddedKeyEvidence -M $M
       if ([string]$ek.fp) { $embeddedKey = [ordered]@{ fp = [string]$ek.fp; repo = [string]$ek.repo } }
-      Check 'embedded_key_works' ([string]$ek.result -eq 'pass') ([string]$ek.evidence)
+      $ekEvidence = [string]$ek.evidence
+      # a network error is still not a pass (unknown is not yes), but the receipt must not read as "the key is broken"
+      if (([string]$ek.result -ne 'pass') -and ($ekEvidence -match 'getaddrinfo|11001|ENOTFOUND|Name or service not known|timed out|ConnectionError|Max retries|No route|network is unreachable')) {
+        $ekEvidence = "could not check (no network): $ekEvidence"
+      }
+      Check 'embedded_key_works' ([string]$ek.result -eq 'pass') $ekEvidence
     } else {
       Check 'embedded_key_works' $false 'drill.json says embeds_key, but the adapter defines no Get-EmbeddedKeyEvidence'
     }

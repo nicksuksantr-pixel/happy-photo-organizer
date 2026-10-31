@@ -181,11 +181,12 @@ session รีสตาร์ท และชื่อ "Coddy" ไม่โผ�
       - Patch escapes with the Edit tool. The BOM/CR source guard now also refuses control bytes.
     - **Drill from v1.067 on:**
       - `Set-AppBusy` drops a `drill-open-settings` marker. Blanking the saved key no longer opens Settings, because the built-in key backs it up.
-      - The kit calls `Get-EmbeddedKeyEvidence` (master 5374e69, adopted). A network error reads `could not reach Google (DNS|connection)` and still FAILs (K13).
-      - 🚨 **RISK (K14, 2026-10-31): re-staging deletes a RUNNING drill's folder.**
-        - Stage-Drill's `Remove-Item -Recurse` does not check the lock. It broke run 3 mid-run, because my guard looked for the lock at `Public\Drills\drill-busy.txt`.
-        - The house lock is **`C:\Users\Public\drill-busy.txt`**.
-        - Re-stage ONLY when that file is absent AND the last `HPO.cmd` is accounted for: either still waiting, or its run's result line is in `results.txt`. A missing `HPO.cmd` with no new result line means a run is going.
+      - The kit calls `Get-EmbeddedKeyEvidence` (master 5374e69, adopted).
+        - With `embeds_key` the kit first probes the API host (DNS + TCP 443, 5 s), so a dead network fails before anything is installed.
+        - A network error reads `could not check (no network)` and still FAILs. The kit owns that wording (a458b00), so the adapter adds none (K13).
+      - 🚨 **RISK (K14, 2026-10-31): re-staging deleted a RUNNING drill's folder.** My guard looked for the lock at `Public\Drills\drill-busy.txt`; the house lock is **`C:\Users\Public\drill-busy.txt`**.
+        - Since master d12865e (adopted), Stage-Drill refuses while that lock names this app with a live pid. It was tested on the live run-3 lock.
+        - Still check it yourself before a re-stage: the lock absent, and the last `HPO.cmd` accounted for. That means either it is still waiting, or its result line is in `results.txt`.
       - `Get-EmbeddedKeyEvidence` runs `--check-embedded-key` (drill mode only), which writes status, model and fingerprint, never the key.
   - ⚠ **RISK: Windows Defender scans the first open of a freshly written file, and our drill cannot see it (measured 2026-10-31).**
     - A fresh copy of the 91 MB installer took 3.88 s on first open, then 0.16 s. Every later fresh copy of the same bytes (and one with a byte flipped) took 0.24 s, so the build machine's drill meets the warm number.
