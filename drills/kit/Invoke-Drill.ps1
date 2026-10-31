@@ -88,7 +88,7 @@ $exe = Join-Path $appDir $exeName
 $installDir = Expand-DrillPath $M.install_dir
 $port = [int]$M.feed.port
 $feedState = Join-Path $OutDir 'feed-state.json'
-$feedAccess = Join-Path $OutDir "logs\$ToVersion.feed.jsonl"
+$feedAccess = Join-Path $OutDir "logs\$receiptName.feed.jsonl"
 $feedProc = $null
 $lock = $null
 $diagFiles = @()     # the adapter's optional Get-FromDiagnostics: files only the drill account can read
@@ -370,13 +370,13 @@ try {
   try { Stop-AppProcesses $exeName } catch {}
   if ($feedProc) { Stop-FakeFeed $feedProc $feedState }
   Exit-DrillLock $lock
-  try { Copy-Item -LiteralPath $ulog -Destination (Join-Path $OutDir "logs\$ToVersion.update.log") -Force } catch {}
+  try { Copy-Item -LiteralPath $ulog -Destination (Join-Path $OutDir "logs\$receiptName.update.log") -Force } catch {}
   # the FROM's own diagnostics, before -Reset deletes them: the developer's account cannot read
   # the drill profile, so this copy is the only way to see why a FROM step failed (R7)
   foreach ($f in $diagFiles) {
     try {
       if (Test-Path -LiteralPath $f) {
-        Copy-Item -LiteralPath $f -Destination (Join-Path $OutDir ("logs\{0}.from-{1}" -f $ToVersion, (Split-Path -Leaf $f))) -Force
+        Copy-Item -LiteralPath $f -Destination (Join-Path $OutDir ("logs\{0}.from-{1}" -f $receiptName, (Split-Path -Leaf $f))) -Force
       }
     } catch {}
   }
