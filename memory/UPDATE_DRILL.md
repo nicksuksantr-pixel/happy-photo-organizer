@@ -113,6 +113,12 @@ self-updater that keeps the table is fine. What is required is the table.
 
    The drill reads the version and every outcome from here, and so does Nick's next bug report.
 4. **Version readable without the UI**: the `STARTED` line, or the exe's file-version resource.
+5. **The update never asks for elevation or a click.** Whatever the updater runs after the download (an installer,
+   a swap script, a post-install step) must finish with nobody at the PC: no UAC prompt, no dialog, no `[Run]`
+   entry that can raise one (`skipifsilent`; admin-only setup stays in the first install). SM's v1.570 drill
+   hung for hours on `consent.exe` in a switched-away session (2026-10-31), and only a drill run that way can
+   show it: a person who is present answers the prompt without noticing. The runner records such a run as
+   `FAIL UAC prompt`.
 
 ## 4 · The checks — the receipt must carry every one for its profile
 
