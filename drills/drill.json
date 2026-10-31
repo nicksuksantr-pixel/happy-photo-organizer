@@ -3,6 +3,8 @@
   "app": "Happy Photo Organizer",
   "profile": "desktop-self-update",
   "adapter": "hpo.ps1",
+  "launcher": "HPO",
+  "_launcher_note": "Stage-Drill writes C:\\Users\\Public\\Drills\\HPO.cmd for the house runner (RUN-ALL.cmd). No DRILL-NEEDS-NICK: nothing in v1.065 -> v1.066 waits for a press (the fixtures write the API key, so Settings does not open; the busy step closes it with WM_CLOSE). No DRILL-TIMEOUT-MIN: the runner's 120 min is above the harness's own limits for a normal run.",
   "release_repo": "nicksuksantr-pixel/happy-photo-organizer",
   "drill_repo": "nicksuksantr-pixel/hpo-update-drill",
   "stage_dir": "C:\\Users\\Public\\HPO-drill",

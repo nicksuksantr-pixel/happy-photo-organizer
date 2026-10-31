@@ -6,7 +6,9 @@
   The drill account cannot read the developer's profile, so everything the run
   needs is copied into the manifest's stage_dir (e.g. C:\Users\Public\<App>-drill):
   the kit, the manifest and its adapter, the FROM and TO release files. It
-  writes run.ps1 (what the drill account runs, after Switch user) and reset.ps1.
+  writes run.ps1 and reset.ps1 there, and the manifest's launcher
+  (C:\Users\Public\Drills\<launcher>.cmd: reset, then run), which the house
+  runner RUN-ALL.cmd runs when Nick double-clicks it inside the drill account.
 
   Every user on the PC can read stage_dir, so it refuses to stage anything that
   looks like a key or a token. Generic: no app name lives here.
@@ -19,13 +21,18 @@ param(
   [Parameter(Mandatory = $true)][string]$FromSetup,
   [Parameter(Mandatory = $true)][string]$ToSetup,
   [Parameter(Mandatory = $true)][string]$ToVersion,
-  [string]$NextVersion = ''
+  [string]$NextVersion = '',
+  # where the house runner (RUN-ALL.cmd) picks up <launcher>.cmd
+  [string]$DrillsDir = 'C:\Users\Public\Drills'
 )
 $ErrorActionPreference = 'Stop'
 $ManifestPath = (Resolve-Path -LiteralPath $Manifest).ProviderPath
 $M = Get-Content -LiteralPath $ManifestPath -Raw | ConvertFrom-Json
 $stage = [string]$M.stage_dir
 if (-not $stage -or $stage -notlike 'C:\Users\Public\*') { throw "stage_dir must be under C:\Users\Public: '$stage'" }
+if (-not $DrillsDir -or $DrillsDir -notlike 'C:\Users\Public\*') { throw "DrillsDir must be under C:\Users\Public: '$DrillsDir'" }
+$name = [string]$M.launcher
+if ($name -notmatch '^[A-Za-z0-9_-]+$') { throw "drill.json needs 'launcher': the <name>.cmd the house runner runs (letters, digits, - or _): '$name'" }
 foreach ($f in @($FromSetup, $ToSetup)) { if (-not (Test-Path -LiteralPath $f -PathType Leaf)) { throw "not a file: $f" } }
 
 $src = Split-Path -Parent $ManifestPath
@@ -60,13 +67,33 @@ exit `$code
 $reset = @"
 # written by Stage-Drill.ps1 - removes what a drill installed, from the DRILL account only
 & (Join-Path `$PSScriptRoot 'kit\Invoke-Drill.ps1') -Manifest (Join-Path `$PSScriptRoot 'drill.json') -FromSetup x -ToSetup x -ToVersion x -OutDir (Join-Path `$PSScriptRoot 'out') -Reset
+exit `$LASTEXITCODE
 "@
 Set-Content -LiteralPath (Join-Path $stage 'run.ps1') -Value $run -Encoding ASCII
 Set-Content -LiteralPath (Join-Path $stage 'reset.ps1') -Value $reset -Encoding ASCII
+
+# Nick's whole part is one double-click (UPDATE_DRILL 5.2): RUN-ALL.cmd runs
+# every <name>.cmd waiting in DrillsDir inside the drill account, from done\,
+# with no keyboard and a deadline. Its contract: absolute paths, the harness's
+# exit code passed on, no pause under the runner. Written fresh rather than
+# moved in: a moved file keeps a DACL the drill account cannot read.
+$ps = 'powershell -NoProfile -ExecutionPolicy Bypass -File'
+$cmd = @('@echo off',
+  "rem $($M.app) update drill: v$($M.from.version) to v$ToVersion, staged $(Get-Date -Format s) by Stage-Drill.ps1 (rule #28)")
+if ($M.launcher_needs_nick) { $cmd += "rem DRILL-NEEDS-NICK: $($M.launcher_needs_nick)" }
+if ($M.launcher_timeout_min) { $cmd += "rem DRILL-TIMEOUT-MIN: $($M.launcher_timeout_min)" }
+$cmd += @("$ps `"$stage\reset.ps1`" && $ps `"$stage\run.ps1`"",
+  'set rc=%errorlevel%',
+  'if not "%DRILL_RUNNER%"=="1" pause',
+  'exit /b %rc%')
+New-Item -ItemType Directory -Path $DrillsDir -Force | Out-Null
+$launcher = Join-Path $DrillsDir "$name.cmd"
+[IO.File]::WriteAllText($launcher, ($cmd -join "`r`n") + "`r`n", [Text.Encoding]::ASCII)
 
 $fromSha = (Get-FileHash -LiteralPath $FromSetup -Algorithm SHA256).Hash.ToLower()
 $toSha = (Get-FileHash -LiteralPath $ToSetup -Algorithm SHA256).Hash.ToLower()
 Write-Host "staged in $stage"
 Write-Host "  FROM v$($M.from.version) sha256 $fromSha $(if ($fromSha -eq ([string]$M.from.sha256).ToLower()) { '(the released file)' } else { '(NOT the released file - the drill will refuse it)' })"
 Write-Host "  TO   v$ToVersion sha256 $toSha"
-Write-Host "next: as the drill account, run $stage\reset.ps1 then $stage\run.ps1 (Switch user to it; never runas)"
+Write-Host "  launcher $launcher"
+Write-Host "next: Nick switches user to the drill account, double-clicks 'Run update drills' ($DrillsDir\RUN-ALL.cmd), switches back"

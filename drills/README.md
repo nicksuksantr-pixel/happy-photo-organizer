@@ -22,9 +22,18 @@ the keyboard. Every run is **Switch user**, done by Nick, never `runas` and neve
    OneDrive, and the HPO version it runs. If the ship PC runs an older version than v1.065, the drill must also
    start from that version. If its username has a space or Thai characters, a second drill account with that kind
    of name is needed (UPDATE_DRILL 5.2): an ASCII `drill` cannot catch a quoting bug.
-2. **How the run starts, as `drill`:** Switch user to `drill`, open Windows PowerShell (not as administrator), run
-   `powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\Public\HPO-drill\run.ps1`, wait for it to end,
-   switch back. HPO has a window and the busy check needs a desktop, so the run needs a signed-in session anyway.
+2. **How the run starts: one double-click** (Nick, via the Director, 2026-10-31; UPDATE_DRILL 5.2). Switch user to
+   `drill`, double-click **Run update drills** (`C:\Users\Public\Drills\RUN-ALL.cmd`), switch back. The very first
+   time the button is not there yet: Win+R, that path, Enter, and that run creates it.
+   - The house runner runs every launcher waiting there with no keyboard and a deadline, and writes PASS or FAIL to
+     `C:\Users\Public\Drills\results.txt`.
+   - HPO's launcher is `HPO.cmd`, written by `Stage-Drill`. It runs `reset.ps1`, then `run.ps1`, by absolute path,
+     and passes the harness's exit code on (0 only on a pass).
+   - It asks nothing of Nick (no `DRILL-NEEDS-NICK`): the fixtures write the API key, so Settings never waits for
+     him, and the busy step closes Settings itself.
+   - Nick switches back while it runs, so the drill runs in a disconnected session. The harness uses no input and
+     no screen capture, only `EnumWindows` and `PostMessage`, which work there. That is read from the code; the
+     first run's result is the proof.
 3. **For the v1.066 bridge only, a public test repo** `nicksuksantr-pixel/hpo-update-drill` (the name is in
    `drill.json` as `drill_repo`; the lock lets a release go there and nowhere else without a receipt).
    v1.065 cannot read a drill feed, so its own updater must fetch the candidate from a real GitHub repo.
@@ -38,17 +47,18 @@ gh release download v1.065 --repo nicksuksantr-pixel/happy-photo-organizer -p Ha
 # 2. bridge only, and only on Nick's go-ahead (it publishes the candidate publicly):
 #    the candidate on the test repo, so v1.065's own updater can fetch it
 gh release create v1.066 --repo nicksuksantr-pixel/hpo-update-drill --title "drill v1.066" --notes "update drill candidate" dist\HappyPhotoOrganizerSetup.exe
-# 3. stage where the drill account can read it (no secrets are ever staged)
+# 3. stage where the drill account can read it (no secrets are ever staged); also writes C:\Users\Public\Drills\HPO.cmd
 .\drills\kit\Stage-Drill.ps1 -Manifest .\drills\drill.json -FromSetup "$env:TEMP\hpo-from\HappyPhotoOrganizerSetup.exe" -ToSetup .\dist\HappyPhotoOrganizerSetup.exe -ToVersion 1.066
-# 4. Nick starts the run as drill (2A or 2B above)
-# 5. when C:\Users\Public\HPO-drill\out\exit-code.txt appears: receipt + logs into drills\, validated, stage removed
+# 4. tell Nick one line: "a drill is waiting in drill" (his part: step 2 above)
+# 5. when results.txt has the HPO line: receipt + logs into drills\, validated, stage removed
 .\drills\kit\Collect-Drill.ps1 -Manifest .\drills\drill.json -ToVersion 1.066
 ```
 
 - **One drill at a time on this PC** (UPDATE_DRILL 5.2): the runner takes `C:\Users\Public\drill-busy.txt` before
   it installs anything, waits (up to `timeouts.lock_wait_s`) while another app's drill holds it, and removes it at
   the end, pass or fail. It never removes a lock it did not take.
-- Before the next drill, run `C:\Users\Public\HPO-drill\reset.ps1` **as `drill`** (it refuses in any other account).
+- The launcher resets the `drill` account before every run (`reset.ps1` refuses in any other account), so a
+  failed run never blocks the next one.
 - Windows may ask `drill` to allow network access for `HappyPhotoOrganizer.exe` (the phone receiver, because the
   fixture is paired). Cancel is fine: the drill never uses the LAN.
 
