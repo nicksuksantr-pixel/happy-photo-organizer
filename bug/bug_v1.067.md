@@ -21,3 +21,23 @@
 | K10 | **A transient reason hid the permanent one.** Results arrive in completion order: a "busy right now" seen first was what the one-line message said, while "used up for today" was what stopped the run. | The permanent reason wins. | The phase-2 test's `[minute, day]` case. |
 | K11 | VERSION was still 1.066, so the candidate would have called itself 1.066, and the kit would wait for 1.067 while the feed offered it again (a loop). | VERSION 1.067, and the bundle was rebuilt (its VERSION was checked). | — |
 | K12 | The kept own-key path could not work: a key saved from the field would never be used, because the built-in key wins. | A key saved from the field sets `use_own_key`, which lets it win. An old key merely sitting in auth.json does not. | Cases in `test_api_key_is_the_built_in_one_then_the_saved_one`. |
+
+## Realigned to the written house standard (memory/KEY_EMBED.md, synced d790295)
+
+The Director's first note said "the built-in key wins" and asked for no visible own-key path. The written
+standard says the opposite on both counts, and it also asks for the key in plain text. v1.067 now follows the
+written standard:
+
+- **The user's own saved key wins; the built-in key is the fallback (§4).** The `use_own_key` flag from K12 is
+  gone: with saved-first it has no job.
+- **Ctrl+Shift+K is back (§4 names it).** It uses the binding proven with a real key press under K2.
+- **The key ships in PLAIN text (§1).** A masked key hides from the gate's byte scan, so a paid key masked in by
+  mistake would pass. The mask and the guard's masked-key needle were removed.
+- **The `AQ.` shape is matched from 30 characters, with the gate's lookbehind**, as `tools/release-gate.mjs`
+  matches it.
+- **The AI-down line says whose key failed** (`processor.ai_down_line`):
+  - the built-in key: "update when a new version is out";
+  - your own key: "press Ctrl+Shift+K in Settings";
+  - no internet: said as such.
+- **`drills/drill.json` sets `"embeds_key": true`**, so the gate refuses a receipt that does not prove the key.
+- **The key is registered** (`tools/register-key.mjs free`, project `Happy-Photo-Organizer`, `--no-billing`).

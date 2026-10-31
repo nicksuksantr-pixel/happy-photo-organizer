@@ -170,8 +170,8 @@ function Get-FromRouteEvidence($M) {
 function Set-AppBusy($M) {
   # busy the way a user makes it busy: a dialog open. The kit calls this on the
   # candidate (TO). Up to v1.066 the step held the API key back so the app
-  # opened Settings by itself; from v1.067 a built-in key wins and it never
-  # does. So the step drops the drill marker instead: the next start in drill
+  # opened Settings by itself; from v1.067 a built-in key backs up a blank one
+  # and it never does. So the step drops the drill marker instead: the next start in drill
   # mode opens Settings once and deletes it (core/updater.take_drill_busy_marker).
   Stop-AppProcesses $M.exe_name
   $marker = Join-Path (Get-HpoDataDir $M) $script:HpoBusyMarker
@@ -196,24 +196,26 @@ function Get-EmbeddedKeyEvidence($M) {
   # build with its built-in key. The app makes the call itself and writes the
   # result - status, model, the key's sha256 fingerprint, never the key - then
   # exits (--check-embedded-key, drill mode only, no window, beside the app).
-  # Returns: result ('pass'/'fail'), evidence (one line), fp, app, status, model.
+  # Returns: result ('pass'/'fail'), evidence (one line), fp, repo, app, status, model.
+  # The receipt wants embedded_key = {fp, repo} and checks.embedded_key_works =
+  # {result, evidence} (KEY_EMBED 6); repo is the repo folder's name.
   $out = Join-Path (Get-HpoDataDir $M) 'logs\embedded-key-check.json'
   if (Test-Path -LiteralPath $out) { Remove-Item -LiteralPath $out -Force }
   $p = Start-Process -FilePath (Get-HpoExe $M) -ArgumentList '--check-embedded-key' -PassThru
   if (-not $p.WaitForExit(120000)) {
     try { $p.Kill() } catch {}
-    return [ordered]@{ result = 'fail'; evidence = 'no result within 120 s'; fp = ''; app = ''; status = ''; model = '' }
+    return [ordered]@{ result = 'fail'; evidence = 'no result within 120 s'; fp = ''; repo = ''; app = ''; status = ''; model = '' }
   }
   $r = $null
   try { $r = (Read-Utf8 $out) | ConvertFrom-Json } catch {}
   if (-not $r) {
-    return [ordered]@{ result = 'fail'; evidence = "exit $($p.ExitCode), no $out"; fp = ''; app = ''; status = ''; model = '' }
+    return [ordered]@{ result = 'fail'; evidence = "exit $($p.ExitCode), no $out"; fp = ''; repo = ''; app = ''; status = ''; model = '' }
   }
   $ok = ($p.ExitCode -eq 0 -and [string]$r.status -eq '200' -and [string]$r.model -and [string]$r.fp)
   $ev = "exit $($p.ExitCode); status $($r.status); model $($r.model); key fp sha256:$(([string]$r.fp).Substring(0, [Math]::Min(12, ([string]$r.fp).Length)))" +
         $(if ($r.error) { "; error: $($r.error)" } else { '' })
   return [ordered]@{ result = $(if ($ok) { 'pass' } else { 'fail' }); evidence = $ev; fp = [string]$r.fp
-                     app = [string]$r.app; status = [string]$r.status; model = [string]$r.model }
+                     repo = [string]$r.repo; app = [string]$r.app; status = [string]$r.status; model = [string]$r.model }
 }
 
 function Reset-DrillAccount($M) {

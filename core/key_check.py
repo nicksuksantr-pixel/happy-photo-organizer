@@ -30,6 +30,7 @@ def run(out_path: Path | None = None, client_factory=None) -> dict:
     """Make the call, write the result, return it. Never raises, never
     returns or writes the key. `client_factory(key)` is for tests."""
     result: dict = {
+        "repo": keymask.EMBED_APP,          # the receipt's embedded_key.repo (KEY_EMBED §6)
         "app": keymask.EMBED_APP,
         "fp": None,
         "status": None,

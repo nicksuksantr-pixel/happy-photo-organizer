@@ -355,15 +355,19 @@ _FAKE_KEY = "AIza" + "Q" * 35
 _FAKE_AQ_KEY = "AQ." + "Ab3_-" * 9 + "xy"            # the newer AI Studio shape
 
 
-def test_keymask_round_trips_and_hides_the_plain_key():
+def test_the_bundled_key_file_reads_plain_and_refuses_junk():
+    """KEY_EMBED §1: the key ships in PLAIN text - a masked key is invisible
+    to the house gate's byte scan, so a paid key masked in by mistake would
+    pass. data/gemini.key holds the key alone; anything else is no key."""
     from core import keymask
-    blob = keymask.mask(_FAKE_KEY)
-    assert b"AIza" not in blob, "the mask left the key greppable"
-    assert keymask.unmask(blob) == _FAKE_KEY
-    assert keymask.unmask(blob + b"\r\n") == _FAKE_KEY   # a CRLF'd file still reads
-    assert keymask.unmask(keymask.mask(_FAKE_AQ_KEY)) == _FAKE_AQ_KEY
-    for damaged in (b"", b"not base64 !!", blob[:8], b"AAAA"):
-        assert keymask.unmask(damaged) is None, f"unmask accepted {damaged!r}"
+    with tempfile.TemporaryDirectory() as td:
+        f = Path(td) / keymask.BUNDLED_KEY_NAME
+        for raw, want in ((_FAKE_KEY.encode(), _FAKE_KEY), ((_FAKE_AQ_KEY + "\r\n").encode(), _FAKE_AQ_KEY),
+                          (b"", None), (b"two words", None), ("été".encode("utf-8"), None),
+                          (b"short", None)):
+            f.write_bytes(raw)
+            assert keymask.read_bundled_key(f) == want, raw[:20]
+        assert keymask.read_bundled_key(Path(td) / "missing.key") is None
 
 
 def test_both_key_shapes_are_recognised_and_redacted():
@@ -375,8 +379,11 @@ def test_both_key_shapes_are_recognised_and_redacted():
         assert keymask.KEY_SHAPE_BYTES_RE.search(f"x {key} y".encode())
         out = keymask.redact(f"error for {key}: denied")
         assert key not in out and "<key>" in out, out
-    for not_a_key in ("AIza" + "Q" * 20, "AQ." + "b" * 10, "not-a-key", "API key not valid"):
+    for not_a_key in ("AIza" + "Q" * 20, "AQ." + "b" * 10, "not-a-key", "API key not valid",
+                      "xAQ." + "b" * 40):        # glued to a word: the gate's lookbehind skips it too
         assert not keymask.KEY_SHAPE_RE.search(not_a_key), not_a_key
+    # the shortest AQ. key the house gate refuses (tools/release-gate.mjs: AQ. + 30)
+    assert keymask.KEY_SHAPE_RE.search("k=AQ." + "b" * 30)
     fp = keymask.fingerprint(_FAKE_KEY)
     assert len(fp) == 64 and _FAKE_KEY not in fp
     assert fp == keymask.fingerprint("  " + _FAKE_KEY + "\n")      # whitespace is not the key
@@ -402,50 +409,39 @@ def test_embed_key_file_is_read_as_the_house_format():
         assert keymask.read_embed_key(Path(td) / "missing.json") is None
 
 
-def test_api_key_is_the_built_in_one_then_the_saved_one():
-    """KEY_EMBED: the built-in free key WINS - a saved key may be an old paid
-    one, and a paid key must never be what the app spends. A saved key is used
-    only by a build with no built-in key. A damaged or missing bundle file
-    falls through instead of crashing or returning junk."""
+def test_api_key_is_the_saved_one_then_the_built_in_one():
+    """KEY_EMBED §4 (the house order): the user's own saved key wins - their
+    own quota and, on a billed project, the paid-tier privacy promise - and the
+    built-in free key is the fallback. An empty, blank or removed saved key
+    falls back. A damaged or missing bundle file falls through instead of
+    crashing or returning junk."""
     from core import keymask
     orig_load, orig_files = auth.load_config, auth.BUNDLED_KEY_FILES
     with tempfile.TemporaryDirectory() as td:
-        masked = Path(td) / keymask.BUNDLED_KEY_NAME
-        masked.write_bytes(keymask.mask(_FAKE_KEY))
+        bundled = Path(td) / keymask.BUNDLED_KEY_NAME
+        bundled.write_bytes(_FAKE_KEY.encode())
         damaged = Path(td) / "damaged.key"
         damaged.write_bytes(b"#### not a key ####")
         embed = Path(td) / "Happy-Photo-Organizer.json"
         embed.write_text(json.dumps({"GEMINI_KEY": _FAKE_AQ_KEY}), encoding="utf-8")
         try:
-            auth.BUNDLED_KEY_FILES = [(masked, "masked")]
-            auth.load_config = lambda: {"api_key": "my-old-paid-key"}
-            assert auth.get_api_key() == _FAKE_KEY, "a saved key outranked the built-in one"
+            auth.BUNDLED_KEY_FILES = [(bundled, "bundled")]
+            auth.load_config = lambda: {"api_key": "my-own-key"}
+            assert auth.get_api_key() == "my-own-key", "the built-in key outranked the user's own"
+            assert not auth.using_bundled_key()
             for empty in ({}, {"api_key": ""}, {"api_key": "   "}, {"api_key": None}):
                 auth.load_config = lambda e=empty: e
-                assert auth.get_api_key() == _FAKE_KEY, f"no built-in key for {empty}"
+                assert auth.get_api_key() == _FAKE_KEY, f"no fallback to the built-in key for {empty}"
+                assert auth.using_bundled_key()
 
-            auth.BUNDLED_KEY_FILES = [(Path(td) / "missing.key", "masked"),
-                                      (damaged, "masked"), (embed, "embed")]
-            assert auth.get_bundled_key() == _FAKE_AQ_KEY
-            auth.BUNDLED_KEY_FILES = [(damaged, "masked")]
-            auth.load_config = lambda: {"api_key": "my-own-key"}
-            assert auth.get_api_key() == "my-own-key", "no built-in key: the saved one is the fallback"
             auth.load_config = lambda: {}
-            assert auth.get_api_key() is None
+            auth.BUNDLED_KEY_FILES = [(Path(td) / "missing.key", "bundled"),
+                                      (damaged, "bundled"), (embed, "embed")]
+            assert auth.get_bundled_key() == _FAKE_AQ_KEY
+            auth.BUNDLED_KEY_FILES = [(damaged, "bundled")]
+            assert auth.get_api_key() is None and not auth.using_bundled_key()
             auth.BUNDLED_KEY_FILES = []
             assert auth.get_api_key() is None
-
-            # a key the user CHOSE in the (hidden) "use my own key" field wins;
-            # the same key merely sitting in auth.json does not
-            auth.BUNDLED_KEY_FILES = [(masked, "masked")]
-            auth.load_config = lambda: {"api_key": "chosen", "use_own_key": True}
-            assert auth.get_api_key() == "chosen" and not auth.using_bundled_key()
-            for flag in (False, None, "yes", 1):
-                auth.load_config = lambda f=flag: {"api_key": "chosen", "use_own_key": f}
-                assert auth.get_api_key() == _FAKE_KEY, f"use_own_key={flag!r} outranked the built-in key"
-                assert auth.using_bundled_key()
-            auth.load_config = lambda: {"api_key": "", "use_own_key": True}
-            assert auth.get_api_key() == _FAKE_KEY, "an empty chosen key hid the built-in one"
         finally:
             auth.load_config, auth.BUNDLED_KEY_FILES = orig_load, orig_files
 
@@ -460,11 +456,11 @@ def test_the_built_in_key_is_throttled_as_free_whatever_tier_was_saved():
     limiter = rate_limiter.get_rate_limiter()
     orig_tier, orig_load, orig_files = limiter.tier, auth.load_config, auth.BUNDLED_KEY_FILES
     with tempfile.TemporaryDirectory() as td:
-        masked = Path(td) / keymask.BUNDLED_KEY_NAME
-        masked.write_bytes(keymask.mask(_FAKE_KEY))
+        bundled = Path(td) / keymask.BUNDLED_KEY_NAME
+        bundled.write_bytes(_FAKE_KEY.encode())
         try:
             auth.load_config = lambda: {}
-            auth.BUNDLED_KEY_FILES = [(masked, "masked")]
+            auth.BUNDLED_KEY_FILES = [(bundled, "bundled")]
             for cfg in ({"tier": "paid"}, {"tier": "custom", "custom_rpm": 60, "custom_rpd": 5000},
                         {"tier": "custom", "custom_rpm": 0, "custom_rpd": 0}, {"tier": "no-such-tier"}):
                 t = rate_limiter.update_tier_from_config(cfg).tier
@@ -475,7 +471,7 @@ def test_the_built_in_key_is_throttled_as_free_whatever_tier_was_saved():
                 {"tier": "custom", "custom_rpm": 5, "custom_rpd": 100}).tier
             assert (t.rpm, t.rpd) == (5, 100), "a slower custom tier was replaced"
 
-            auth.load_config = lambda: {"api_key": "mine", "use_own_key": True}
+            auth.load_config = lambda: {"api_key": "mine"}
             assert rate_limiter.update_tier_from_config({"tier": "paid"}).tier.throttle is False, \
                 "the user's own key lost its paid tier"
             auth.BUNDLED_KEY_FILES = []
@@ -492,24 +488,23 @@ def test_ai_down_is_read_from_the_full_error():
     the quota id that tells a day's quota from a minute's."""
     from core.analyzer import ai_down_fields as f
     pad = "x" * 300                                  # past the row's 200-character cut
-    assert f("400 INVALID_ARGUMENT. API key not valid. Please pass a valid API key.") == \
-        {"ai_down": "the key was withdrawn", "ai_down_permanent": True}
-    assert f("403 PERMISSION_DENIED. Your API key was reported as leaked.")["ai_down_permanent"]
-    assert f("401 UNAUTHENTICATED")["ai_down"] == "the key was withdrawn"
+    withdrawn = {"ai_down": "withdrawn", "ai_down_permanent": True}
+    assert f("400 INVALID_ARGUMENT. API key not valid. Please pass a valid API key.") == withdrawn
+    assert f("403 PERMISSION_DENIED. Your API key was reported as leaked.") == withdrawn
+    assert f("401 UNAUTHENTICATED") == withdrawn
     day = f("429 RESOURCE_EXHAUSTED. " + pad + " quotaId: GenerateRequestsPerDayPerProjectPerModel-FreeTier")
-    assert day == {"ai_down": "the free quota is used up for today", "ai_down_permanent": True}, day
+    assert day == {"ai_down": "day", "ai_down_permanent": True}, day
     minute = f("429 RESOURCE_EXHAUSTED. " + pad + " quotaId: GenerateRequestsPerMinutePerProjectPerModel-FreeTier")
-    assert minute["ai_down_permanent"] is False and "busy" in minute["ai_down"], minute
-    assert f("quota exceeded: Daily quota exceeded: 500/500")["ai_down_permanent"]
+    assert minute == {"ai_down": "busy", "ai_down_permanent": False}, minute
+    assert f("quota exceeded: Daily quota exceeded: 500/500") == {"ai_down": "day", "ai_down_permanent": True}
     # The code alone, where google-genai puts it (no keyword to lean on: the
     # first version's regex held two BACKSPACE bytes and never matched a code,
     # and these lines are what would have shown it).
-    assert f("403 Forbidden")["ai_down"] == "the key was withdrawn"
-    assert f("401 Unauthorized")["ai_down"] == "the key was withdrawn"
-    assert f("429 Too Many Requests") == \
-        {"ai_down": "the free quota is busy right now (too many requests)", "ai_down_permanent": False}
+    assert f("403 Forbidden") == withdrawn
+    assert f("401 Unauthorized") == withdrawn
+    assert f("429 Too Many Requests") == {"ai_down": "busy", "ai_down_permanent": False}
     no_free = f("429 RESOURCE_EXHAUSTED. Quota exceeded for metric ... limit: 0, model: gemini-3.1-pro-preview")
-    assert no_free["ai_down_permanent"] and "choose another model" in no_free["ai_down"], no_free
+    assert no_free == {"ai_down": "model", "ai_down_permanent": True}, no_free
     for not_key in ("503 UNAVAILABLE. The model is overloaded.", "400 INVALID_ARGUMENT. Unsupported image",
                     "[Errno 11001] getaddrinfo failed", "",
                     # a 401/403/429 that is part of a name, not an HTTP status (review 2026-10-31)
@@ -551,9 +546,10 @@ def test_phase2_says_when_ai_is_unavailable_and_stops_calling_a_dead_key():
     good = row("a pump", matched="Job A", confidence=0.9)
 
     orig_client, orig_group = processor.create_client, processor.analyze_group
+    orig_builtin = processor.using_bundled_key
     calls = {"n": 0}
 
-    def run(results, folders=None):
+    def run(results, folders=None, builtin=True):
         it, lock = iter(results), threading.Lock()
         calls["n"] = 0
 
@@ -563,6 +559,7 @@ def test_phase2_says_when_ai_is_unavailable_and_stops_calling_a_dead_key():
                 return dict(next(it))
         processor.create_client = lambda: (object(), None)
         processor.analyze_group = fake_group
+        processor.using_bundled_key = lambda: builtin
         plan = processor.Plan(assignments=[
             processor.JobAssignment(folder_date=datetime(2026, 10, 31, 10),
                                     images=[Path(f"{i}.jpg")])
@@ -572,13 +569,17 @@ def test_phase2_says_when_ai_is_unavailable_and_stops_calling_a_dead_key():
 
     try:
         err, plan = run([bad_key], folders=4)
-        assert err.startswith("AI is unavailable: the key was withdrawn"), err
-        assert "4 of 4 folders" in err, err
+        assert err.startswith("AI is unavailable: the built-in key was withdrawn"), err
+        assert "update when a new version is out" in err and "4 of 4 folders" in err, err
         assert calls["n"] == 1, f"a withdrawn key was called {calls['n']} times"
         assert all(a.reasoning for a in plan.assignments), "a skipped folder has no reason"
 
+        # the user's own key: theirs to change, not an update's
+        err, _ = run([bad_key], folders=2, builtin=False)
+        assert "your own key was refused" in err and "Ctrl+Shift+K" in err, err
+
         err, _ = run([good, day], folders=4)
-        assert "used up for today" in err and "3 of 4" in err, err
+        assert "shared free quota is used up" in err and "3 of 4" in err, err
         assert calls["n"] == 2, "the day's quota was gone and the run kept calling"
 
         err, _ = run([minute, good, good])
@@ -587,23 +588,29 @@ def test_phase2_says_when_ai_is_unavailable_and_stops_calling_a_dead_key():
 
         # the permanent reason wins over a transient one seen first
         err, _ = run([minute, day], folders=4)
-        assert "used up for today" in err and "busy" not in err, err
+        assert "used up" in err and "busy" not in err, err
         assert calls["n"] == 2
 
         err, _ = run([offline])
-        assert err.startswith("AI is unavailable: error:") and "getaddrinfo" in err, err
+        assert err == ("AI is unavailable: no internet connection. The app works without it: "
+                       "name the folders yourself, or try again when online."), err
         assert _FAKE_KEY not in err, "a key-shaped string reached the message"
         assert run([offline, good])[0] == "", "one network failure flagged the whole run"
         assert run([good, good])[0] == ""
+
+        other = row("error: 500 INTERNAL for " + _FAKE_KEY)
+        err, _ = run([other])
+        assert err.startswith("AI is unavailable: error: 500") and _FAKE_KEY not in err, err
     finally:
         processor.create_client, processor.analyze_group = orig_client, orig_group
+        processor.using_bundled_key = orig_builtin
 
 
 def test_drill_busy_marker_opens_settings_once_and_only_in_a_drill():
-    """From v1.067 a built-in key wins, so the drill can no longer make the
-    app busy by holding the key back (Settings never opens by itself). The
-    marker does it instead: once, in drill mode only - the relaunch after the
-    update must not come up busy."""
+    """From v1.067 the app carries a built-in key, so blanking the saved key no
+    longer leaves it keyless and Settings never opens by itself: the drill can
+    no longer make the app busy that way. The marker does it instead: once, in
+    drill mode only - the relaunch after the update must not come up busy."""
     import os
     from core import updater
     env = updater.DRILL_ENV
@@ -649,14 +656,19 @@ def test_embedded_key_check_writes_status_model_and_fingerprint_never_the_key():
         return SimpleNamespace(models=SimpleNamespace(generate_content=boom))
 
     with tempfile.TemporaryDirectory() as td:
-        masked = Path(td) / keymask.BUNDLED_KEY_NAME
-        masked.write_bytes(keymask.mask(_FAKE_KEY))
+        bundled = Path(td) / keymask.BUNDLED_KEY_NAME
+        bundled.write_bytes(_FAKE_KEY.encode())
         out = Path(td) / "logs" / key_check.RESULT_NAME
         try:
-            auth.BUNDLED_KEY_FILES = [(masked, "masked")]
-            r = key_check.run(out, client_factory=ok_client)
-            assert r["status"] == 200 and r["model"] == auth.DEFAULT_MODEL, r
-            assert r["fp"] == keymask.fingerprint(_FAKE_KEY) and r["app"] == "Happy-Photo-Organizer"
+            auth.BUNDLED_KEY_FILES = [(bundled, "bundled")]
+            orig_load = auth.load_config
+            auth.load_config = lambda: {"api_key": "a-saved-key-that-must-not-be-used"}
+            try:
+                r = key_check.run(out, client_factory=ok_client)   # ok_client asserts the BUILT-IN key
+            finally:
+                auth.load_config = orig_load
+            assert r["status"] == 200 and r["model"] == auth.DEFAULT_MODEL and r["model_from_reply"], r
+            assert r["fp"] == keymask.fingerprint(_FAKE_KEY) and r["repo"] == "Happy-Photo-Organizer"
             assert json.loads(out.read_text(encoding="utf-8")) == r
             assert _FAKE_KEY not in out.read_text(encoding="utf-8")
 
@@ -694,8 +706,8 @@ def test_no_tracked_file_carries_a_google_api_key():
     %USERPROFILE%\.embed-keys\Happy-Photo-Organizer.json, and is bundled at
     build time (core/keymask.py). tools/key_guard.py - run first and fail-
     closed by tools/pre-commit - is the executable half of that rule; this runs
-    the same scan over the STAGED blobs: either key shape (AIza / AQ.), the
-    registered key itself, or that key masked the way the build bundles it."""
+    the same scan over the STAGED blobs: either key shape (AIza / AQ.) or the
+    registered key itself."""
     import subprocess
     if subprocess.run(["git", "rev-parse", "--git-dir"], cwd=ROOT,
                       capture_output=True).returncode != 0:
@@ -708,10 +720,9 @@ def test_key_guard_reads_what_is_staged_and_fails_closed():
     """A review (2026-10-31) found the first guard read the WORKING TREE and
     skipped a staged file gone from disk: stage a key, delete the file, commit,
     and the key went out. The guard reads the staged blobs; it knows the
-    registered key plain and masked; it reads commit messages; and an error of
-    its own refuses the commit instead of waving it through."""
+    registered key whatever its shape; it reads commit messages; and an error
+    of its own refuses the commit instead of waving it through."""
     import subprocess
-    from core import keymask
     kg = _key_guard()
     registered = "registered" + "-not-a-key-0123456789"     # stands in for the real key
     orig_needles = kg.needles
@@ -722,7 +733,7 @@ def test_key_guard_reads_what_is_staged_and_fails_closed():
             subprocess.run(["git", *a], cwd=tmp, check=True, capture_output=True)
         git("init", "-q")
         try:
-            kg.needles = lambda: [registered.encode(), keymask.mask(registered)]
+            kg.needles = lambda: [registered.encode()]
             (tmp / "ok.md").write_text("nothing here\n")
             git("add", "ok.md")
             assert kg.scan_index(tmp) == []
@@ -740,10 +751,10 @@ def test_key_guard_reads_what_is_staged_and_fails_closed():
             git("rm", "-q", "-f", "--cached", "edited.md")   # staged differs from disk: -f
 
             (tmp / "plain.md").write_text("pasted " + registered + "\n")
-            (tmp / "data.key").write_bytes(keymask.mask(registered))
+            (tmp / "data.key").write_bytes(registered.encode())       # a bundled copy, forced in
             git("add", "-f", "plain.md", "data.key")
             assert sorted(kg.scan_index(tmp)) == ["data.key", "plain.md"], \
-                "the registered key, plain or masked, slipped past"
+                "the registered key (not key-shaped) slipped past"
         finally:
             kg.needles = orig_needles
 
@@ -6259,6 +6270,9 @@ def test_the_invisible_byte_guards_still_cover_every_kind_of_file_here():
                       "the commit (exit 1, zero commits). It fails CLOSED, so "
                       "an invisible byte here cannot silently disarm the guard - "
                       "which is what I had assumed before measuring it.",
+        "commit-msg": "MEASURED 2026-10-31 in a scratch repo, the same way: a BOM "
+                      "makes git answer `cannot spawn .git/hooks/commit-msg` and "
+                      "refuse the commit (exit 1, zero commits). Fails CLOSED.",
         ".gitattributes": "git's own config; it pins LF, and git parses it itself",
         ".gitignore": "same",
     }

@@ -13,25 +13,27 @@ deferred".
 
 ### Changed
 - **The app comes with a free Gemini key built in.** Nobody has to make a key
-  before the first scan. The built-in key is used even when an older key is
-  saved (house rule: a free key may be built in, a paid key never). The key is
-  never in the repo: the build reads it from a file outside it and refuses to
-  build without one.
+  before the first scan. A key you saved yourself still wins (your own quota);
+  the built-in key is the fallback (house rule: a free key may be built in, a
+  paid key never). The key is never in the repo: the build reads it from a
+  file outside it and refuses to build without one.
 - **The key field is hidden.** The installer no longer asks for a key, and
-  Settings no longer shows the field. A build with no built-in key shows it as
-  before.
-- **Settings says plainly what the free key means:** Google may use the
-  photos you send to improve its services, and people at Google may look at
-  them. The installer's licence text says the same.
+  Settings no longer shows the field. Ctrl+Shift+K in Settings brings it back,
+  to use your own key. A build with no built-in key shows it as before.
+- **Settings says plainly what the free key means:** it is shared by all
+  installs, Google may use the photos you send to improve its products, and
+  people at Google may look at them. The installer's licence text says the same.
 - **Test** and **Refresh models** in Settings use the key the app actually uses.
 
 ### Fixed
 - **When AI is unavailable, the app says so in one line and goes on without
   it.** A withdrawn key, a used-up quota or no network used to fail every
   folder quietly, row by row, and the run still said "done". Now:
-  - A key-level failure is named ("the key was withdrawn", "the free quota is
-    used up for today", "the free quota is busy right now"), even when other
-    folders got through.
+  - A key-level failure is named, and the line says whose key it is: the
+    built-in key withdrawn ("update when a new version is out"), your own key
+    refused ("press Ctrl+Shift+K in Settings"), today's quota used up, busy
+    right now, or a model with no free quota. It is named even when other
+    folders got through. No internet is said as such.
   - A permanent one stops the rest of the run from calling.
   - The folders can still be named by hand.
   - Key-shaped text is removed from every error message.

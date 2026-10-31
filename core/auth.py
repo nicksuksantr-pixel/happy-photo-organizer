@@ -202,12 +202,12 @@ def update_config(updates: dict) -> bool:
 
 def _bundled_key_files() -> list[tuple[Path, str]]:
     """(path, kind) places the built-in key can come from, first wins.
-    Frozen ("masked"): the copy the build put in the bundle. From source
+    Frozen ("bundled"): the copy the build put in the bundle. From source
     ("embed"): the embed-key file outside the repo, which the build reads."""
     files: list[tuple[Path, str]] = []
     meipass = getattr(sys, "_MEIPASS", None)
     if meipass:
-        files.append((Path(meipass) / "data" / keymask.BUNDLED_KEY_NAME, "masked"))
+        files.append((Path(meipass) / "data" / keymask.BUNDLED_KEY_NAME, "bundled"))
     else:
         files.append((keymask.embed_key_file(), "embed"))
     return files
@@ -223,10 +223,7 @@ def get_bundled_key() -> str | None:
         if kind == "embed":
             key = keymask.read_embed_key(path)
         else:
-            try:
-                key = keymask.unmask(path.read_bytes())
-            except OSError:
-                key = None
+            key = keymask.read_bundled_key(path)
         if key:
             return key
     return None
@@ -240,24 +237,17 @@ def get_saved_api_key() -> str | None:
 
 
 def get_api_key() -> str | None:
-    """The key to use: the built-in free one wins (house rule KEY_EMBED — a
-    saved key may be an old paid one, and a paid key must never be what the
-    app spends behind the user's back). A saved key is used when the build has
-    no built-in key, or when the user CHOSE it in the "use my own key" field,
-    which is what sets `use_own_key` — an old key that merely sits in
-    auth.json never does."""
-    cfg = load_config()
-    saved = (cfg.get("api_key") or "").strip() or None
-    if saved and cfg.get("use_own_key") is True:
-        return saved
-    return get_bundled_key() or saved
+    """The key to use (house standard KEY_EMBED §4): the user's own saved key
+    wins — their own quota and, on a billed project, the paid-tier privacy
+    promise — and the built-in free key is the fallback. An empty, blank or
+    removed saved key falls back."""
+    return get_saved_api_key() or get_bundled_key()
 
 
 def using_bundled_key() -> bool:
     """True when the key in use is the built-in free one (shared by every
     install, so it must be throttled as free whatever tier was saved)."""
-    bundled = get_bundled_key()
-    return bundled is not None and get_api_key() == bundled
+    return get_saved_api_key() is None and get_bundled_key() is not None
 
 
 def get_model() -> str:

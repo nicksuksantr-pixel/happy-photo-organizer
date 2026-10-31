@@ -15,7 +15,7 @@ tkdnd_path = Path(tkinterdnd2.__file__).parent
 
 # The built-in Gemini key (Nick 2026-10-31, house rule KEY_EMBED): read from
 # %USERPROFILE%\.embed-keys\Happy-Photo-Organizer.json - OUTSIDE the repo, which
-# is public - and bundled masked as data/gemini.key (core/keymask.py).
+# is public - and bundled as data/gemini.key, in plain text (KEY_EMBED §1).
 # A build without it would ship an app whose key screen is hidden and that has
 # no key, so it stops here instead. HPO_ALLOW_NO_KEY=1 builds one anyway (the
 # Settings key field then shows, as before v1.067).
@@ -27,13 +27,13 @@ _key_src = keymask.embed_key_file()
 _key = keymask.read_embed_key() or ''
 _key_datas = []
 if _key:
-    # The masked copy is staged in a temp folder OUTSIDE the repo and removed
-    # when the build ends: masked is still the key (the pad is public), and a
-    # file left under build/ is one `git add -f` from public (review 2026-10-31).
+    # Plain text, by the house standard (KEY_EMBED §1, core/keymask.py). The
+    # copy is staged in a temp folder OUTSIDE the repo and removed when the
+    # build ends: a file left under build/ is one `git add -f` from public.
     import atexit, shutil, tempfile
     _key_dir = Path(tempfile.mkdtemp(prefix='hpo-key-'))
     atexit.register(shutil.rmtree, str(_key_dir), True)
-    (_key_dir / keymask.BUNDLED_KEY_NAME).write_bytes(keymask.mask(_key))
+    (_key_dir / keymask.BUNDLED_KEY_NAME).write_bytes(_key.encode('ascii'))
     _key_datas = [(str(_key_dir / keymask.BUNDLED_KEY_NAME), 'data')]
 elif os.environ.get('HPO_ALLOW_NO_KEY') != '1':
     raise SystemExit(f'No built-in Gemini key: {_key_src} is missing, empty or not '

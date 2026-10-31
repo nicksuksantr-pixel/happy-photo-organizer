@@ -3,11 +3,11 @@ key_guard.py — never let a Gemini key reach git (Nick, 2026-10-31; house rule
 KEY_EMBED). The repo is PUBLIC.
 
 What it looks for, in bytes:
-  - either key shape Google issues (`AIza`+35, `AQ.`+40 or more);
+  - either key shape Google issues (`AIza`+35, `AQ.`+30 or more), as the
+    house gate (tools/release-gate.mjs) matches them;
   - the registered key itself, from %USERPROFILE%\\.embed-keys\\<repo>.json, in
-    case a future key has a shape nobody has seen yet;
-  - that key MASKED the way the build bundles it (core/keymask.mask): the pad
-    is in this public repo, so a masked key is a key.
+    case a future key has a shape nobody has seen yet.
+A second net under the house gate (KEY_EMBED §2), never the only one.
 
 Where:
   --index          the STAGED blobs (`git ls-files -s` + `git cat-file
@@ -36,12 +36,10 @@ from core import keymask  # noqa: E402  (stdlib-only module)
 
 
 def needles() -> list[bytes]:
-    """The registered key, plain and masked, as bytes ([] where there is no
-    embed-key file, e.g. a cloud checkout)."""
+    """The registered key as bytes ([] where there is no embed-key file, e.g.
+    a cloud checkout)."""
     real = keymask.read_embed_key()
-    if not real:
-        return []
-    return [real.encode("ascii"), keymask.mask(real)]
+    return [real.encode("ascii")] if real else []
 
 
 def holds_key(raw: bytes, extra: list[bytes] | None = None) -> bool:

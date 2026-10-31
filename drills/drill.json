@@ -2,6 +2,8 @@
   "_about": "Happy Photo Organizer's drill manifest (UPDATE_DRILL 5a). Read by drills/kit/Invoke-Drill.ps1; the HPO-specific steps are in drills/hpo.ps1. No secrets here, ever.",
   "app": "Happy Photo Organizer",
   "profile": "desktop-self-update",
+  "embeds_key": true,
+  "_embeds_key_note": "KEY_EMBED: v1.067+ builds a free Gemini key in. The installer compresses its payload, so the gate cannot see the key in the bytes; the receipt must declare embedded_key {fp, repo} and pass embedded_key_works (hpo.ps1 Get-EmbeddedKeyEvidence: one real call from the UPDATED build with its built-in key).",
   "adapter": "hpo.ps1",
   "launcher": "HPO",
   "_launcher_note": "Stage-Drill writes C:\\Users\\Public\\Drills\\HPO.cmd for the house runner (RUN-ALL.cmd). No DRILL-NEEDS-NICK: nothing in v1.065 -> v1.066 waits for a press (the fixtures write the API key, so Settings does not open; the busy step closes it with WM_CLOSE). No DRILL-TIMEOUT-MIN: the runner's 120 min is above the harness's own limits for a normal run.",
@@ -40,7 +42,7 @@
   ],
   "_tree_allowlist_note": "uninstall.bat names its own folder; the catalog carries the job the user taught the app (until a later release moves it out of the install tree - bug U8).",
   "relaunch": "the installer's launch_app() after the swap",
-  "busy_description": "Settings dialog open - the drill marker drill-open-settings in the user data dir makes the app open Settings once at its next start (v1.067+, drill mode only; up to v1.066 the step held the API key back, which a built-in key now outranks)",
+  "busy_description": "Settings dialog open - the drill marker drill-open-settings in the user data dir makes the app open Settings once at its next start (v1.067+, drill mode only; up to v1.066 the step held the API key back; from v1.067 a built-in key backs up a blank one, so Settings never opens by itself)",
   "busy_window_prefix": "Settings",
   "drill_user_like": "drill*",
   "not_covered": [

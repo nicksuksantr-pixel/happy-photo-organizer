@@ -28,7 +28,7 @@ from typing import Callable
 from . import grouper as _grouper
 from . import keymask
 from .analyzer import analyze_group
-from .auth import create_client
+from .auth import create_client, using_bundled_key
 from .catalog import JobCatalog
 from .exif_reader import format_folder_date
 from .image_io import collect_images, is_supported_image
@@ -726,6 +726,7 @@ def phase2_ai_analyze(
     first_failure = ""
     key_down = ""
     stop = {"why": ""}
+    builtin = using_bundled_key()             # whose key a failure is about
 
     def _worker(item: tuple[int, JobAssignment, list[Path]]) -> tuple[int, dict]:
         idx, _a, pool = item
@@ -733,7 +734,7 @@ def phase2_ai_analyze(
             return idx, {}
         if stop["why"]:
             return idx, {"matched_name": None, "suggested_name": None, "confidence": 0.0,
-                         "reasoning": f"skipped: AI unavailable - {stop['why']}"}
+                         "reasoning": f"skipped: AI unavailable - {ai_down_line(stop['why'], builtin)}"}
         # Pass cancel_event so analyze_group can short-circuit during throttle
         # sleep (free tier = 4 s/call → up to 4 s of quota burn per worker
         # without this).
@@ -795,16 +796,44 @@ def phase2_ai_analyze(
         # is what stopped the run (review, 2026-10-31).
         why = stop["why"] or key_down
         if why:
-            plan.ai_error = (f"AI is unavailable: {why}. "
-                             f"{failed} of {ran} folders were not analyzed.")
+            plan.ai_error = (f"AI is unavailable: {ai_down_line(why, builtin)} "
+                             f"({failed} of {ran} folders were not analyzed.)")
         elif ran and failed == ran:
-            plan.ai_error = f"AI is unavailable: {keymask.redact(first_failure)[:160]}"
+            low = first_failure.lower()
+            if any(t in low for t in _OFFLINE):
+                plan.ai_error = ("AI is unavailable: no internet connection. The app works "
+                                 "without it: name the folders yourself, or try again when online.")
+            else:
+                plan.ai_error = f"AI is unavailable: {keymask.redact(first_failure)[:160]}"
     return plan
 
 
 # What analyze_group / the worker put in "reasoning" when the AI never
 # answered. "parse error" is not here: the AI ran and replied badly.
 _AI_FAILURE_PREFIXES = ("error:", "quota exceeded:", "worker error:", "skipped:")
+_OFFLINE = ("getaddrinfo", "name resolution", "failed to establish a new connection",
+            "connecterror", "network is unreachable", "no route to host")
+
+# The one line the user reads (KEY_EMBED §4), by cause and by whose key it is:
+# the built-in key is shared and is fixed by an update; the user's own key is
+# theirs to change (Ctrl+Shift+K in Settings, or clear it for the built-in one).
+_AI_DOWN_LINES = {
+    ("withdrawn", True): "the built-in key was withdrawn. The app works without it; "
+                         "update when a new version is out.",
+    ("withdrawn", False): "your own key was refused. Press Ctrl+Shift+K in Settings to "
+                          "change it, or clear it to use the built-in key.",
+    ("day", True): "today's shared free quota is used up. The app works without it; "
+                   "try again tomorrow.",
+    ("day", False): "your key's quota for today is used up. Try again tomorrow.",
+    ("busy", True): "the shared free key is busy right now. Try again in a minute.",
+    ("busy", False): "your key is getting too many requests. Try again in a minute.",
+    ("model", True): "the chosen model has no free quota. Choose another model in Settings.",
+    ("model", False): "your key has no quota for the chosen model. Choose another model in Settings.",
+}
+
+
+def ai_down_line(cause: str, builtin: bool) -> str:
+    return _AI_DOWN_LINES.get((cause, bool(builtin)), "the AI key cannot be used right now.")
 
 
 # ─── PHASE 4: Rename temp folders → final folder names ───

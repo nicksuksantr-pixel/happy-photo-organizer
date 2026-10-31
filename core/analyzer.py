@@ -46,8 +46,11 @@ _KEY_WITHDRAWN = ("api key not valid", "api_key_invalid", "api key expired",
 
 
 def ai_down_fields(text: str) -> dict:
-    """{"ai_down": why, "ai_down_permanent": bool} when `text` (an error) says
-    the key cannot be used, else {}.
+    """{"ai_down": <cause>, "ai_down_permanent": bool} when `text` (an error)
+    says the key cannot be used, else {}. Causes: "withdrawn", "day" (today's
+    quota), "busy" (a minute's quota), "model" (no free quota for that model).
+    processor turns a cause into the one line the user reads, which depends on
+    whose key it is (built-in or the user's own).
 
     The HTTP code counts only where google-genai puts it: first, followed by
     its status word ("429 RESOURCE_EXHAUSTED. {...}"). A bare "403" anywhere
@@ -56,16 +59,14 @@ def ai_down_fields(text: str) -> dict:
     low = text.lower()
     if "limit: 0" in low:
         # 429 for a model the free tier does not serve at all: no wait fixes it.
-        return {"ai_down": "the chosen model has no free quota - choose another model in Settings",
-                "ai_down_permanent": True}
+        return {"ai_down": "model", "ai_down_permanent": True}
     code = re.match(r"\s*(401|403|429)\s+[a-z_]+", low)
     if code and code.group(1) in ("401", "403") or any(t in low for t in _KEY_WITHDRAWN):
-        return {"ai_down": "the key was withdrawn", "ai_down_permanent": True}
+        return {"ai_down": "withdrawn", "ai_down_permanent": True}
     if low.startswith("quota exceeded:") or "perday" in low or "per day" in low:
-        return {"ai_down": "the free quota is used up for today", "ai_down_permanent": True}
+        return {"ai_down": "day", "ai_down_permanent": True}
     if code or "resource_exhausted" in low:
-        return {"ai_down": "the free quota is busy right now (too many requests)",
-                "ai_down_permanent": False}
+        return {"ai_down": "busy", "ai_down_permanent": False}
     return {}
 
 
