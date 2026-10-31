@@ -228,7 +228,11 @@ Add a check when a new failure class appears. That means adding it here **and** 
    the release enables: the automatic one and the button, and **every delivery route** the field uses. SM, for
    example, has two: the Server updates from GitHub, and every station updates from its Server. Each check's
    evidence names each route. A route that cannot be drilled yet blocks the release; it is not a footnote. For an auto-install, also drill it with the app busy (a
-   dialog open, text typed). It must wait, not interrupt.
+   dialog open, text typed). It must wait, not interrupt. **Make it busy first, then feed N+1.** With N+1 already
+   on the feed, an app that checks at start downloads from loopback in a second and hands over before its busy
+   window is even open, and the check fails although the app was right (HPO run 2, H8, 2026-10-31). Order:
+   restart with nothing newer on the feed, wait until the busy window is open, then serve N+1 and wait for the
+   app's next periodic check.
 4. **Wait out the cleanup window**, then measure every check in §4 and copy the evidence lines into the log.
 5. **Failure injection.**
    - Serve a corrupted TO: it is refused, and FROM keeps working.
