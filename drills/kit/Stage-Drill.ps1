@@ -37,7 +37,7 @@ foreach ($f in @($FromSetup, $ToSetup)) { if (-not (Test-Path -LiteralPath $f -P
 
 $src = Split-Path -Parent $ManifestPath
 $texts = @($ManifestPath, (Join-Path $src $M.adapter)) + @(Get-ChildItem -LiteralPath $PSScriptRoot -File | ForEach-Object { $_.FullName })
-$secret = 'AIza[0-9A-Za-z_\-]{30,}|ghp_[0-9A-Za-z]{30,}|github_pat_[0-9A-Za-z_]{30,}|sk-[A-Za-z0-9\-]{30,}|-----BEGIN [A-Z ]*PRIVATE KEY'
+$secret = 'AIza[0-9A-Za-z_\-]{30,}|AQ\.[0-9A-Za-z_\-]{30,}|ghp_[0-9A-Za-z]{30,}|github_pat_[0-9A-Za-z_]{30,}|sk-[A-Za-z0-9\-]{30,}|-----BEGIN [A-Z ]*PRIVATE KEY'
 foreach ($t in $texts) {
   if (Select-String -LiteralPath $t -Pattern $secret -Quiet) { throw "refusing to stage: $t contains something that looks like a key or token" }
 }

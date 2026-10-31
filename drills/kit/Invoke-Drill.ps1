@@ -56,6 +56,10 @@ $drillLog = Join-Path $OutDir "logs\$ToVersion.log"
 Start-DrillLog $drillLog
 $checks = [ordered]@{}
 $extra = [ordered]@{}
+# KEY_EMBED 6 (2026-10-31): an app that builds a Gemini key in says so in drill.json; the receipt must then carry the
+# key's fingerprint and the proof that the UPDATED build can use it (HPO's adapter: Get-EmbeddedKeyEvidence)
+$embedsKey = (($M.PSObject.Properties.Name -contains 'embeds_key') -and [bool]$M.embeds_key)
+$embeddedKey = $null
 $ulog = Expand-DrillPath $M.update_log
 $exeName = [string]$M.exe_name
 $appDir = Expand-DrillPath $M.app_dir
@@ -250,6 +254,19 @@ try {
     "fed v$ToVersion itself: " + $(if ($noNewer.Count) { $noNewer[0].Line } else { 'no CHECK line' }) +
     "; FOUND/DOWNLOADED/HANDOVER since: $($offered.Count); asset requests at the feed: $($fetched.Count)")
 
+  # ---- KEY_EMBED 6: the built-in key works from the UPDATED build -----------
+  # TO is up and the drill environment is set; the adapter runs the installed exe's own self-check and returns
+  # result / evidence / fp / repo. A key that never reached the shipped bytes, or that Google refuses, fails here.
+  if ($embedsKey) {
+    if (Get-Command Get-EmbeddedKeyEvidence -ErrorAction SilentlyContinue) {
+      $ek = Get-EmbeddedKeyEvidence -M $M
+      if ([string]$ek.fp) { $embeddedKey = [ordered]@{ fp = [string]$ek.fp; repo = [string]$ek.repo } }
+      Check 'embedded_key_works' ([string]$ek.result -eq 'pass') ([string]$ek.evidence)
+    } else {
+      Check 'embedded_key_works' $false 'drill.json says embeds_key, but the adapter defines no Get-EmbeddedKeyEvidence'
+    }
+  }
+
   # ---- 4. failure injection, on TO through the loopback feed --------------
   $unknown = @()
   $unknownOk = $true
@@ -335,6 +352,7 @@ foreach ($id in @('start_from_released_build', 'real_update_path', 'new_version_
                   'no_update_loop', 'sees_next_release', 'bad_download_refused', 'unknown_is_not_no')) {
   if (-not $checks.Contains($id)) { $checks[$id] = New-Check 'fail' 'not measured: the drill stopped before this check' }
 }
+if ($embedsKey -and -not $checks.Contains('embedded_key_works')) { $checks['embedded_key_works'] = New-Check 'fail' 'not measured: the drill stopped before this check' }
 foreach ($k in $extra.Keys) { if ($k -ne 'stopped') { $checks[$k] = $extra[$k] } }
 
 $receipt = [ordered]@{
@@ -353,6 +371,7 @@ $receipt = [ordered]@{
   routes = @("v$($M.from.version)'s own updater via $($M.from_route.kind) ($($M.drill_repo))", "loopback feed 127.0.0.1:$port for every check made on v$ToVersion")
   checks = $checks
 }
+if ($embeddedKey) { $receipt['embedded_key'] = $embeddedKey }   # the fingerprint, never the key (KEY_EMBED 6)
 if ($M.PSObject.Properties.Name -contains 'not_covered') { $receipt['not_covered'] = @($M.not_covered | ForEach-Object { [string]$_ }) }
 if ($extra.Contains('stopped')) { $receipt['stopped'] = $extra['stopped'] }
 Write-Receipt (Join-Path $OutDir "$ToVersion.json") $receipt
