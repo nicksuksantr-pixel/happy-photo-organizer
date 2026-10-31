@@ -30,6 +30,9 @@ desktop.ini
 # Local config / runtime
 .happy-photo-organizer/
 *.log
+# ...but not a drill's own logs: the #28 lock refuses a receipt whose
+# drill_log is not in the repo (UPDATE_DRILL §5 step 6)
+!drills/logs/*.log
 release-notes-*.md
 
 # Sensitive

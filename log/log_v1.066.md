@@ -108,6 +108,8 @@ task and the test repo later."* (Nick, 2026-10-30.)
   success in order, from the test repo.
 - Not round-tripping the app's JSON through PowerShell 5.1's `ConvertTo-Json` (it can turn an array into
   `{"value": [...], "Count": n}`): fixtures and the busy step edit the text.
+- `*.log` in `.gitignore` hid the drill's own logs (H7, found by JS): `!drills/logs/*.log`, and `Collect-Drill`
+  fails on any collected file git ignores.
 
 ## Not drilled (stated, not papered over)
 

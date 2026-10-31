@@ -45,3 +45,4 @@ Not covered by the drill (stated in `drills/drill.json` `not_covered`): S1's pat
 | H4 | A feed that failed to start stayed running and held the port; the next run failed with no reason. | The feed test's second run |
 | H5 | Route evidence could take a `SUCCESS` line from an earlier, real-repo download. | The adapter test |
 | H6 | Logs read with `File.ReadAllLines` throw a sharing violation while another process appends. | Code review of the reader during the H1 fix |
+| H7 | `.gitignore`'s `*.log` hid `drills/logs/<ver>.log` and `<ver>.update.log`: the receipt would be committed without its `drill_log`, and the lock refuses that in every other checkout. Fixed with `!drills/logs/*.log`, and `Collect-Drill` now exits 1 naming any collected file git ignores. | JS, relayed by the Director (UPDATE_DRILL §5 step 6); the scratch test now covers it (22/22) |

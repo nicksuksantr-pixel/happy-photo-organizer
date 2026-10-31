@@ -36,6 +36,19 @@ if (Test-Path -LiteralPath $t) { Copy-Item -LiteralPath $t -Destination (Join-Pa
 $code = $(if (Test-Path -LiteralPath (Join-Path $out 'exit-code.txt')) { (Get-Content -LiteralPath (Join-Path $out 'exit-code.txt') -Raw).Trim() } else { '?' })
 Write-Host "collected drills\$ToVersion.json (drill exit code $code)"
 
+# A collected file that git ignores never reaches another checkout, and the
+# lock refuses a receipt whose drill_log is not in the repo. A repo-wide
+# '*.log' rule did exactly that (2026-10-31): say so here, not at release.
+$hidden = @()
+if ((Test-Path -LiteralPath (Join-Path $repo '.git')) -and (Get-Command git -ErrorAction SilentlyContinue)) {
+  Push-Location $repo
+  try {
+    $rels = @("drills/$ToVersion.json") + @(Get-ChildItem -LiteralPath (Join-Path $drills 'logs') -File -Filter "$ToVersion.*" | ForEach-Object { "drills/logs/$($_.Name)" })
+    foreach ($r in $rels) { & git check-ignore -q --no-index -- $r; if ($LASTEXITCODE -eq 0) { $hidden += $r } }
+  } finally { Pop-Location }
+  if ($hidden.Count) { Write-Host "IGNORED BY GIT (add a '!' rule to .gitignore): $($hidden -join ', ')" }
+}
+
 $gate = Join-Path $repo 'tools\release-gate.mjs'
 $valid = $null
 if (Test-Path -LiteralPath $gate) {
@@ -44,5 +57,5 @@ if (Test-Path -LiteralPath $gate) {
   Write-Host "release-gate --validate exit $valid"
 }
 if (-not $Keep) { Remove-Item -LiteralPath $stage -Recurse -Force; Write-Host "removed $stage" }
-if ($code -ne '0' -or ($null -ne $valid -and $valid -ne 0)) { exit 1 }
+if ($code -ne '0' -or ($null -ne $valid -and $valid -ne 0) -or $hidden.Count) { exit 1 }
 exit 0
