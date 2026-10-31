@@ -13,6 +13,21 @@ updater found v1.067 and downloaded it, finishing at 00:28:54 (91,707,238 bytes)
 release (v1.066) updating. A machine on v1.065 skips v1.066 and runs v1.065's old update path with v1.067's
 installer. That path was drilled only to v1.066 (the bridge), never to these bytes. The ship PC is also on v1.065.
 
+**It worked on Nick's PC.** Read-only, from his `update.log`:
+- 00:29:54 HANDOVER: the stuck v1.065 (pid 12196) was ended after 20 s (D1);
+- 00:30:02 STAGED;
+- 00:30:10 SWAPPED, 1898 files;
+- 00:30:15 STARTED 1.067;
+- 00:30:20 "nothing newer";
+- 00:30:28 CLEANED.
+
+Afterwards:
+- one process, one install folder, no `.update` left;
+- both shortcuts point to the updated exe;
+- `auth.json` keeps its model, its auto-update setting and the old `api_key` field, untouched and unread.
+
+It is one real machine, not a drill receipt. The ship PC will take the same path.
+
 **Asked:** build Nick's free Gemini key into the app and hide the key page (*"it is a free key"*). Then: the safest
 way is that the key never enters git, test the failure cases hard, and send the tests to the Director. Then the
 house answer: no own-key path at all (*"don't use the key saved in the system; it is the same account anyway"*).
