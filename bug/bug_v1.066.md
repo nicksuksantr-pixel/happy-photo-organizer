@@ -48,6 +48,46 @@ Not covered by the drill (stated in `drills/drill.json` `not_covered`): S1's pat
 **What the harness did well:** the update.log `FAILED` line and the route-evidence breadcrumbs named the failure.
 **What it did badly:** it waited the full 30 minutes after a terminal `FAILED` line for the TO version, and wrote nothing while it waited.
 
+## reviver, round 1 (2026-10-31, `v1.065..c9c6802`, 3 firms, all 7 parts × 10 dimensions)
+
+**Score: 1/5** (lowest dimension, A). All 3 firms gave 1 independently.
+- No firm died, and none left gaps.
+- The intents agree in substance: hand over, exit by itself, swap with rollback, verified bytes only.
+- The "intents differ" flag is wording only.
+- Verdict: **not a pass** (1 BLOCKER and 2 corroborated MAJOR). Every row below was checked by Coddy against the code or by running it.
+
+| # | Sev | Firms | Finding | Checked by Coddy |
+|---|---|---|---|---|
+| R1 | BLOCKER | A B C | = **D1** above: the handing-over app never exits. | Drill run 1 + 15-line repro |
+| R2 | MAJOR | A B C | `swap_in` calls `recover_interrupted` inside the staging `try`. When an interrupted swap's rollback is incomplete (a file still locked), its `OSError` lands in the staging `except`: it logs "staging failed, **nothing was changed**" and `_rmtree(ud)` deletes `.update\old` and the journal, the only way back. The tree stays mixed for good. Double fault: a cut mid-swap, then a lock that outlasts 30 s. | `core/install_swap.py:305-335`, `:280-284` |
+| R3 | MAJOR | A B | `update_log.PAUSED_REPO = "update-paused/after-a-failed-install"` is a slug anyone can register. After a failed bridge install, v1.065 is relaunched pointed there. v1.065 has no digest check and falls back to any `.exe`, so whoever owns that name could run code as the user. | `gh api users/update-paused` → 404 (free to register) |
+| R4 | MINOR | B C | `busy_reason()` sees only Tk `Toplevel`s. A native dialog (messagebox, file picker) does not count, yet Tk timers keep firing inside it. An install can close the app under an open "All Done" box or a folder picker. The log's "any dialog" claim is false. | Probe: 6 `after()` ticks fired inside an open `messagebox`, 0 Toplevel children |
+| R5 | MINOR | C | The phone receiver has no socket timeout, and `do_POST` counts "receiving" before the token check. A stalled or half-open upload, from any LAN host and without the token, holds `any_filing()` True: the update waits "a phone job is arriving" for the rest of the session. | `core/jobshot_server.py:287-293`; `BaseHTTPRequestHandler.timeout` is None |
+| R6 | MINOR | A | The drill's `waits_while_busy` passes without v1.066 coming back after its own handover (`$back` is not required), so D1 in v1.066 would pass it. | `drills/kit/Invoke-Drill.ps1:268-273` |
+| R7 | MINOR | A B C | The harness waited 27 min after the installer's terminal `FAILED`, wrote nothing while it waited, and kept none of the FROM's breadcrumbs (`reset` deletes them). It marked `start_from_released_build` FAIL although the FROM hash was checked at the start. | Run 1 log + receipt |
+
+**Cleared by the firms** (claims checked and found not to be bugs):
+- the drill feed cannot be pointed off-machine;
+- the bridge prune keeps the catalog;
+- `filecmp` rollback of the `.exe`;
+- a truncated download does not stick `in_progress`;
+- `%z` in the log time;
+- the drill's process filter does not touch Nick's HPO;
+- the publish lock order;
+- the suite's isolation of `update-attempt.json`;
+- a refused release is not a pass at the publish gate.
+
+**Noted, not filed:**
+- the 90 MB re-hash and the `rmtree` of the cache run on the Tk thread (a pause of a few seconds at handover);
+- `app_window_open()` does not check visibility;
+- `publish_release.py`'s check writes CHECK/FOUND into the real update.log;
+- some tests leave stubs on `core.install_swap`.
+
+**Not covered:**
+- the frozen v1.066 handover (the drill covers it once R1 is fixed);
+- the RUN-ALL runner's deadline kill (outside this repo);
+- `ui/dialogs`.
+
 ## Found in development — the drill harness's own bugs, caught by its tests before any run
 
 | # | Bug | Found by |
