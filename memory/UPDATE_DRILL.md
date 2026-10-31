@@ -187,7 +187,15 @@ Add a check when a new failure class appears. That means adding it here **and** 
      into `done\` and runs that copy with no keyboard (stdin is NUL) and a deadline, oldest first. It renames the
      copy PASS or FAIL, writes one line per run to `C:\Users\Public\Drills\results.txt`, and repeats until
      nothing new is waiting. The first time, the button does not exist yet: Nick, inside `drill`, presses Win+R,
-     types `C:\Users\Public\Drills\RUN-ALL.cmd` and presses Enter, and that run makes it. A 3-reviewer pass
+     types `C:\Users\Public\Drills\RUN-ALL.cmd` and presses Enter, and that run makes it.
+     **Since 2026-11-01 the button WATCHES (Nick: "it is already open — when someone stages something, let it
+     run the test itself"):** `RUN-ALL.cmd` starts `run-all.ps1 -Watch`, which stays open in the drill account and
+     runs every launcher the moment it is staged — same lock, deadline, UAC detection, `results.txt` line and
+     `done\` log as before — and makes a Startup shortcut in drill's own profile so logging in as `drill` after a
+     reboot restarts it. Nick's part is now **start it once and leave it open**; a project stages and reads
+     `results.txt`, and never asks Nick to click. `STOP-WATCH` in the Drills folder (or Ctrl+C) stops it;
+     `RUN-ALL.cmd -Once` is the old single pass. A watcher that is not running shows as "nothing in results.txt
+     two minutes after staging" — the project tells the Director, who tells Nick. A 3-reviewer pass
      (2026-10-31) found every rule below by reading the real kits, so each is a failure that would have happened:
      - stage **one** launcher, `C:\Users\Public\Drills\<App>.cmd` (no spaces), only when the drill is ready, by
        **copying** it in (a moved file keeps a DACL `drill` cannot read). Staging it IS joining the queue; then
