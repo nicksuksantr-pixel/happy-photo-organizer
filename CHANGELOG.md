@@ -18,8 +18,9 @@ deferred".
   paid key never). The key is never in the repo: the build reads it from a
   file outside it and refuses to build without one.
 - **The key field is hidden.** The installer no longer asks for a key, and
-  Settings no longer shows the field. Ctrl+Shift+K in Settings brings it back,
-  to use your own key. A build with no built-in key shows it as before.
+  Settings no longer shows the field or says how to reach it (a hidden
+  Ctrl+Shift+K remains while Nick decides whether any own-key path stays). A
+  build with no built-in key shows it as before.
 - **Settings says plainly what the free key means:** it is shared by all
   installs, Google may use the photos you send to improve its products, and
   people at Google may look at them. The installer's licence text says the same.

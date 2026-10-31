@@ -119,10 +119,12 @@ class SettingsDialog(ctk.CTkToplevel):
                 # 640 and 460 cut the sentence off at some scale (seen).
                 body, anchor="w", justify="left",
                 text_color=COLOR_MUTED, font=("Segoe UI", 11),
+                # No word about entering a key: Nick wants no key screen shown
+                # ("hide it, don't show it again"); Ctrl+Shift+K stays hidden
+                # until he decides house-wide whether it stays (Director, 2026-10-31).
                 text=("AI runs on a free Google key shared by all installs.\n"
                       "Google may use the photos you send to improve its\n"
-                      "products, and people at Google may look at them.\n"
-                      "Press Ctrl+Shift+K here to use your own key instead."),
+                      "products, and people at Google may look at them."),
             ).pack(fill="x", padx=20, pady=(12, 0))
         self._key_box = ctk.CTkFrame(body, fg_color="transparent")
         ctk.CTkLabel(self._key_box, text="Gemini API Key", anchor="w",
