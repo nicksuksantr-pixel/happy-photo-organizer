@@ -22,6 +22,7 @@ param(
   [Parameter(Mandatory = $true)][string]$ToSetup,
   [Parameter(Mandatory = $true)][string]$ToVersion,
   [string]$NextVersion = '',
+  [string]$ReceiptName = '',          # passed through to Invoke-Drill for a drill from an older field version
   # where the house runner (RUN-ALL.cmd) picks up <launcher>.cmd
   [string]$DrillsDir = 'C:\Users\Public\Drills'
 )
@@ -70,6 +71,7 @@ Copy-Item -LiteralPath $FromSetup -Destination (Join-Path $stage "from\$asset")
 Copy-Item -LiteralPath $ToSetup -Destination (Join-Path $stage "to\$asset")
 
 $next = $(if ($NextVersion) { " -NextVersion '$NextVersion'" } else { '' })
+if ($ReceiptName) { $next += " -ReceiptName '$ReceiptName'" }
 $run = @"
 # written by Stage-Drill.ps1 - run AS THE DRILL ACCOUNT, outside the Claude app
 `$here = `$PSScriptRoot

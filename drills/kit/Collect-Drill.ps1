@@ -11,6 +11,7 @@
 param(
   [Parameter(Mandatory = $true)][string]$Manifest,
   [Parameter(Mandatory = $true)][string]$ToVersion,
+  [string]$ReceiptName = '',          # the name Invoke-Drill was given ('<to>.from-<from>' for an older FROM); default = ToVersion
   [switch]$Keep
 )
 $ErrorActionPreference = 'Stop'
@@ -18,23 +19,24 @@ $ManifestPath = (Resolve-Path -LiteralPath $Manifest).ProviderPath
 $M = Get-Content -LiteralPath $ManifestPath -Raw | ConvertFrom-Json
 $stage = [string]$M.stage_dir
 $out = Join-Path $stage 'out'
+$name = $(if ($ReceiptName) { $ReceiptName } else { $ToVersion })
 $drills = Split-Path -Parent $ManifestPath
 $repo = Split-Path -Parent $drills
-$receipt = Join-Path $out "$ToVersion.json"
+$receipt = Join-Path $out "$name.json"
 if (-not (Test-Path -LiteralPath $receipt)) {
   $why = $(if (Test-Path -LiteralPath (Join-Path $out 'run.transcript.txt')) { "see $out\run.transcript.txt" } else { 'the drill has not run' })
   throw "no receipt at $receipt - $why"
 }
 New-Item -ItemType Directory -Path (Join-Path $drills 'logs') -Force | Out-Null
-Copy-Item -LiteralPath $receipt -Destination (Join-Path $drills "$ToVersion.json") -Force
+Copy-Item -LiteralPath $receipt -Destination (Join-Path $drills "$name.json") -Force
 # every log the run wrote for this version, the FROM's own diagnostics (<ver>.from-*) included
-foreach ($p in @(Get-ChildItem -LiteralPath (Join-Path $out 'logs') -File -Filter "$ToVersion.*" -ErrorAction SilentlyContinue)) {
+foreach ($p in @(Get-ChildItem -LiteralPath (Join-Path $out 'logs') -File -Filter "$name.*" -ErrorAction SilentlyContinue)) {
   Copy-Item -LiteralPath $p.FullName -Destination (Join-Path $drills "logs\$($p.Name)") -Force
 }
 $t = Join-Path $out 'run.transcript.txt'
-if (Test-Path -LiteralPath $t) { Copy-Item -LiteralPath $t -Destination (Join-Path $drills "logs\$ToVersion.transcript.txt") -Force }
+if (Test-Path -LiteralPath $t) { Copy-Item -LiteralPath $t -Destination (Join-Path $drills "logs\$name.transcript.txt") -Force }
 $code = $(if (Test-Path -LiteralPath (Join-Path $out 'exit-code.txt')) { (Get-Content -LiteralPath (Join-Path $out 'exit-code.txt') -Raw).Trim() } else { '?' })
-Write-Host "collected drills\$ToVersion.json (drill exit code $code)"
+Write-Host "collected drills\$name.json (drill exit code $code)"
 
 # A collected file that git ignores never reaches another checkout, and the
 # lock refuses a receipt whose drill_log is not in the repo. A repo-wide
@@ -43,7 +45,7 @@ $hidden = @()
 if ((Test-Path -LiteralPath (Join-Path $repo '.git')) -and (Get-Command git -ErrorAction SilentlyContinue)) {
   Push-Location $repo
   try {
-    $rels = @("drills/$ToVersion.json") + @(Get-ChildItem -LiteralPath (Join-Path $drills 'logs') -File -Filter "$ToVersion.*" | ForEach-Object { "drills/logs/$($_.Name)" })
+    $rels = @("drills/$name.json") + @(Get-ChildItem -LiteralPath (Join-Path $drills 'logs') -File -Filter "$name.*" | ForEach-Object { "drills/logs/$($_.Name)" })
     foreach ($r in $rels) { & git check-ignore -q --no-index -- $r; if ($LASTEXITCODE -eq 0) { $hidden += $r } }
   } finally { Pop-Location }
   if ($hidden.Count) { Write-Host "IGNORED BY GIT (add a '!' rule to .gitignore): $($hidden -join ', ')" }
@@ -53,7 +55,7 @@ $gate = Join-Path $repo 'tools\release-gate.mjs'
 $valid = $null
 if (Test-Path -LiteralPath $gate) {
   Push-Location $repo
-  try { & node $gate --validate "drills/$ToVersion.json"; $valid = $LASTEXITCODE } finally { Pop-Location }
+  try { & node $gate --validate "drills/$name.json"; $valid = $LASTEXITCODE } finally { Pop-Location }
   Write-Host "release-gate --validate exit $valid"
 }
 if (-not $Keep) { Remove-Item -LiteralPath $stage -Recurse -Force; Write-Host "removed $stage" }

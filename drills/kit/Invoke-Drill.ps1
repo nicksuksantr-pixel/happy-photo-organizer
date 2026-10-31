@@ -32,6 +32,7 @@ param(
   [Parameter(Mandatory = $true)][string]$ToVersion,
   [Parameter(Mandatory = $true)][string]$OutDir,
   [string]$NextVersion = '',
+  [string]$ReceiptName = '',          # a drill from an older field version: '<to>.from-<from>' (UPDATE_DRILL 5 step 1); default = ToVersion
   [switch]$Reset
 )
 
@@ -52,7 +53,8 @@ if (-not $NextVersion) {
 }
 
 New-Item -ItemType Directory -Path (Join-Path $OutDir 'logs') -Force | Out-Null
-$drillLog = Join-Path $OutDir "logs\$ToVersion.log"
+$receiptName = $(if ($ReceiptName) { $ReceiptName } else { $ToVersion })
+$drillLog = Join-Path $OutDir "logs\$receiptName.log"
 Start-DrillLog $drillLog
 $stopFile = Join-Path $OutDir 'STOP'
 Set-DrillStopFile $stopFile
@@ -399,7 +401,7 @@ $receipt = [ordered]@{
   drilled_at = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
   machine = "$env:COMPUTERNAME, Windows user '$env:USERNAME'"
   layout = $layout
-  drill_log = "drills/logs/$ToVersion.log"
+  drill_log = "drills/logs/$receiptName.log"
   bootstrap = $false
   routes = @("v$($M.from.version)'s own updater via $($M.from_route.kind) ($($M.drill_repo))", "loopback feed 127.0.0.1:$port for every check made on v$ToVersion")
   checks = $checks
@@ -407,12 +409,12 @@ $receipt = [ordered]@{
 if ($embeddedKey) { $receipt['embedded_key'] = $embeddedKey }   # the fingerprint, never the key (KEY_EMBED 6)
 if ($M.PSObject.Properties.Name -contains 'not_covered') { $receipt['not_covered'] = @($M.not_covered | ForEach-Object { [string]$_ }) }
 if ($extra.Contains('stopped')) { $receipt['stopped'] = $extra['stopped'] }
-Write-Receipt (Join-Path $OutDir "$ToVersion.json") $receipt
+Write-Receipt (Join-Path $OutDir "$receiptName.json") $receipt
 
 $failed = @($checks.Keys | Where-Object { $checks[$_].result -ne 'pass' })
 if ($failed.Count) {
   Write-DrillLog "RESULT: FAIL - $($failed -join ', ')"
   exit 1
 }
-Write-DrillLog "RESULT: PASS - every check passed; receipt $(Join-Path $OutDir "$ToVersion.json")"
+Write-DrillLog "RESULT: PASS - every check passed; receipt $(Join-Path $OutDir "$receiptName.json")"
 exit 0
