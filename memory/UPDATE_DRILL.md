@@ -286,9 +286,12 @@ and for checks before a real release, at the session's judgment. ScanDocs still 
   its emulator vanished mid-onboarding with nothing in its log when a 3 GB Gradle daemon took free RAM down to
   1.8 GB; two minutes later a second AVD booted with no lock held and free RAM was 0.8 GB of 15.4). The PC runs
   several Claude sessions, a desktop drill in `drill`, builds and an emulator at once, so RAM is the shared
-  resource, not the device. Before booting, take `C:\Users\Public\drill-busy.txt` (waiting with a limit) and
-  check for at least **5 GB of free RAM** (`Win32_OperatingSystem.FreePhysicalMemory`); wait, never boot into
-  less. Log "emulator gone" when the device disappears, instead of timing out on a blank screen.
+  resource, not the device. Before booting, wait for at least **5 GB of free RAM**
+  (`Win32_OperatingSystem.FreePhysicalMemory`), and only THEN take `C:\Users\Public\drill-busy.txt` (waiting
+  with a limit) and boot; never boot into less. **Every wait comes before the claim.** The lock is for a drill
+  that is running, never for a wait: on 2026-10-31 JobShot claimed first and then waited for RAM for a quarter
+  of an hour with no emulator up, while EMR's time-boxed bridge drill, which needed neither, sat behind it. Log
+  "emulator gone" when the device disappears, instead of timing out on a blank screen.
 - **Give the drill AVD 4 GB of RAM.** With 2 GB, JobShot's runs 1 and 2 failed on the two flakes below, inside the
   fixture and before the update; with 4 GB, runs 3 and 4 passed with no retry (JS, 2026-10-31).
 - **"System UI isn't responding" can swallow a tap.** Wait for each tap's effect and re-tap only while that
