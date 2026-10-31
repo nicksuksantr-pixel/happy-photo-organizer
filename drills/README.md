@@ -14,21 +14,17 @@ laid out the way users have it, and every check in `memory/UPDATE_DRILL.md` §4 
 
 ## Nick's one-time setup
 
-The account exists (Nick, 2026-10-31): `drill`, a standard user, profile `C:\Users\drill`.
-**No session types, stores or asks for its password.** Every step that needs it is Nick's.
+The account exists (Nick, 2026-10-31): `drill`, a standard user, profile `C:\Users\drill`, **no password**.
+Measured by the Director: `LimitBlankPasswordUse = 1` and Remote Desktop off, so Windows lets it sign in only at
+the keyboard. Every run is **Switch user**, done by Nick, never `runas` and never a scheduled task (UPDATE_DRILL 5.2).
 
 1. **Read the ship PC:** its Windows username (spaces? Thai characters?), whether its Desktop is redirected to
    OneDrive, and the HPO version it runs. If the ship PC runs an older version than v1.065, the drill must also
    start from that version. If its username has a space or Thai characters, a second drill account with that kind
    of name is needed (UPDATE_DRILL 5.2): an ASCII `drill` cannot catch a quoting bug.
-2. **How the run starts, as `drill`** (either one):
-   - **A.** Switch user to `drill`, open Windows PowerShell, run
-     `powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\Public\HPO-drill\run.ps1`, wait for it to end,
-     switch back. Always works.
-   - **B.** A scheduled task `HPO update drill` under `drill`, **"Run only when user is logged on"** (HPO has a
-     window; a task that runs while signed out gets no desktop, and the busy check needs one), action `powershell.exe`
-     with arguments `-NoProfile -ExecutionPolicy Bypass -File "C:\Users\Public\HPO-drill\run.ps1"`. Started with
-     `schtasks /run /tn "HPO update drill"` while `drill` is signed in (switched away from, not signed out).
+2. **How the run starts, as `drill`:** Switch user to `drill`, open Windows PowerShell (not as administrator), run
+   `powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\Public\HPO-drill\run.ps1`, wait for it to end,
+   switch back. HPO has a window and the busy check needs a desktop, so the run needs a signed-in session anyway.
 3. **For the v1.066 bridge only, a public test repo** `nicksuksantr-pixel/hpo-update-drill` (the name is in
    `drill.json` as `drill_repo`; the lock lets a release go there and nowhere else without a receipt).
    v1.065 cannot read a drill feed, so its own updater must fetch the candidate from a real GitHub repo.

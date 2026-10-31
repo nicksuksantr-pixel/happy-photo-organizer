@@ -6,7 +6,7 @@
   The drill account cannot read the developer's profile, so everything the run
   needs is copied into the manifest's stage_dir (e.g. C:\Users\Public\<App>-drill):
   the kit, the manifest and its adapter, the FROM and TO release files. It
-  writes run.ps1 (what the drill account's scheduled task runs) and reset.ps1.
+  writes run.ps1 (what the drill account runs, after Switch user) and reset.ps1.
 
   Every user on the PC can read stage_dir, so it refuses to stage anything that
   looks like a key or a token. Generic: no app name lives here.
@@ -69,4 +69,4 @@ $toSha = (Get-FileHash -LiteralPath $ToSetup -Algorithm SHA256).Hash.ToLower()
 Write-Host "staged in $stage"
 Write-Host "  FROM v$($M.from.version) sha256 $fromSha $(if ($fromSha -eq ([string]$M.from.sha256).ToLower()) { '(the released file)' } else { '(NOT the released file - the drill will refuse it)' })"
 Write-Host "  TO   v$ToVersion sha256 $toSha"
-Write-Host "next: as the drill account, run $stage\reset.ps1 then $stage\run.ps1 (or start its scheduled task)"
+Write-Host "next: as the drill account, run $stage\reset.ps1 then $stage\run.ps1 (Switch user to it; never runas)"

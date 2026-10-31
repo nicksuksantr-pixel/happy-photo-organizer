@@ -44,7 +44,8 @@ The plan as it stood on 2026-10-30:
     through `C:\Users\Public\HappyDrill\`. Keep the generic parts (fake feed, runner, assertions) apart from the
     HPO-only parts (install, fixtures, triggers), so the Director can lift them for EMR, SM and PLC.
 - **Still waiting on Nick:**
-  - create a standard Windows account `drill`, plus one scheduled task that runs the harness as it;
+  - ~~create a standard Windows account `drill`~~ done 2026-10-31: no password, keyboard sign-in only, so Nick
+    runs `run.ps1` himself after Switch user (no scheduled task, no runas);
   - approve creating the public test repo.
 
 ## 🔴 Waiting on Nick — nothing else
