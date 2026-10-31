@@ -1,0 +1,34 @@
+2026-10-31T21:51:33+07:00 UPDATE STAGED 1.066 1897 files, 129614209 bytes in C:\Users\drill\AppData\Local\HappyPhotoOrganizer\.update\new
+2026-10-31T21:51:35+07:00 UPDATE SWAPPED 1.066 1897 files in C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer; pruned 0
+2026-10-31T21:51:43+07:00 STARTED 1.066 C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe
+2026-10-31T21:51:44+07:00 UPDATE CHECK 1.066 v1.067 is newer (feed http://127.0.0.1:47665/latest)
+2026-10-31T21:51:44+07:00 UPDATE FOUND 1.067 HappyPhotoOrganizerSetup.exe 91711287 bytes sha256=71435e02301a3ebaf5276efe32cb57e7d5bf218c63346a80bab573ac7f8f9cdb
+2026-10-31T21:51:45+07:00 UPDATE DOWNLOADED 1.067 C:\Users\drill\.happy-photo-organizer\updates\HappyPhotoOrganizerSetup-v1.067.exe 91711287 bytes
+2026-10-31T21:51:45+07:00 UPDATE VERIFIED 1.067 sha256=71435e02301a3ebaf5276efe32cb57e7d5bf218c63346a80bab573ac7f8f9cdb
+2026-10-31T21:51:45+07:00 UPDATE HANDOVER 1.067 C:\Users\drill\.happy-photo-organizer\updates\HappyPhotoOrganizerSetup-v1.067.exe --silent --upgrade
+2026-10-31T21:51:51+07:00 UPDATE STAGED 1.067 1898 files, 129625451 bytes in C:\Users\drill\AppData\Local\HappyPhotoOrganizer\.update\new
+2026-10-31T21:51:55+07:00 UPDATE SWAPPED 1.067 1898 files in C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer; pruned 0
+2026-10-31T21:51:57+07:00 STARTED 1.067 C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe
+2026-10-31T21:51:58+07:00 UPDATE CHECK 1.067 nothing newer: latest is v1.067 (feed http://127.0.0.1:47665/latest)
+2026-10-31T21:52:09+07:00 UPDATE CLEANED 1.067 removed the rollback copy (1898 files) in C:\Users\drill\AppData\Local\HappyPhotoOrganizer\.update
+2026-10-31T21:52:35+07:00 STARTED 1.067 C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe
+2026-10-31T21:52:36+07:00 UPDATE CHECK 1.067 could not check: GitHub answered HTTP 500 (feed http://127.0.0.1:47665/latest)
+2026-10-31T21:52:38+07:00 STARTED 1.067 C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe
+2026-10-31T21:52:40+07:00 UPDATE CHECK 1.067 could not check: GitHub answered HTTP 403 (feed http://127.0.0.1:47665/latest)
+2026-10-31T21:52:42+07:00 STARTED 1.067 C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe
+2026-10-31T21:52:43+07:00 UPDATE CHECK 1.067 could not check: could not reach GitHub: Remote end closed connection without response (feed http://127.0.0.1:47665/latest)
+2026-10-31T21:52:46+07:00 STARTED 1.067 C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe
+2026-10-31T21:52:47+07:00 UPDATE CHECK 1.067 v1.068 is newer (feed http://127.0.0.1:47665/latest)
+2026-10-31T21:52:47+07:00 UPDATE FOUND 1.068 HappyPhotoOrganizerSetup.exe 91711287 bytes sha256=71435e02301a3ebaf5276efe32cb57e7d5bf218c63346a80bab573ac7f8f9cdb
+2026-10-31T21:52:47+07:00 UPDATE DOWNLOADED 1.068 C:\Users\drill\.happy-photo-organizer\updates\HappyPhotoOrganizerSetup-v1.068.exe 91711287 bytes
+2026-10-31T21:52:47+07:00 UPDATE REFUSED 1.068 the download's sha256 1094df7803e1fb48452ca78f2f9b8850527b46ef581b9a5e425273f7d749be6d is not the release's 71435e02301a3ebaf5276efe32cb57e7d5bf218c63346a80bab573ac7f8f9cdb
+2026-10-31T21:53:01+07:00 STARTED 1.067 C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe
+2026-10-31T21:53:02+07:00 UPDATE CHECK 1.067 nothing newer: latest is v1.067 (feed http://127.0.0.1:47665/latest)
+2026-10-31T21:58:02+07:00 UPDATE CHECK 1.067 v1.068 is newer (feed http://127.0.0.1:47665/latest)
+2026-10-31T21:58:02+07:00 UPDATE FOUND 1.068 HappyPhotoOrganizerSetup.exe 91711287 bytes sha256=71435e02301a3ebaf5276efe32cb57e7d5bf218c63346a80bab573ac7f8f9cdb
+2026-10-31T21:58:02+07:00 UPDATE DOWNLOADED 1.068 C:\Users\drill\.happy-photo-organizer\updates\HappyPhotoOrganizerSetup-v1.068.exe 91711287 bytes
+2026-10-31T21:58:02+07:00 UPDATE VERIFIED 1.068 sha256=71435e02301a3ebaf5276efe32cb57e7d5bf218c63346a80bab573ac7f8f9cdb
+2026-10-31T22:00:03+07:00 UPDATE HANDOVER 1.068 C:\Users\drill\.happy-photo-organizer\updates\HappyPhotoOrganizerSetup-v1.068.exe --silent --upgrade
+2026-10-31T22:00:08+07:00 UPDATE STAGED 1.067 1898 files, 129625451 bytes in C:\Users\drill\AppData\Local\HappyPhotoOrganizer\.update\new
+2026-10-31T22:00:11+07:00 UPDATE SWAPPED 1.067 1898 files in C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer; pruned 0
+2026-10-31T22:00:13+07:00 STARTED 1.067 C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe
