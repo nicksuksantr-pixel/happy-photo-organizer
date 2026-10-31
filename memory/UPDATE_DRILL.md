@@ -163,9 +163,12 @@ Add a check when a new failure class appears. That means adding it here **and** 
      Stage its inputs (FROM and TO release files, fixtures, the harness) in a folder `drill` can read, such as
      `C:\Users\Public\<App>-drill\`, and remove that folder afterwards. Every user on the PC can read it, so
      never stage a key, token or password there. Copy the results back into the repo from Nick's side.
-   - **The account exists** (Nick, 2026-10-31): `drill`, a standard user, profile `C:\Users\drill`. No session
-     types, stores or asks for its password. A step that needs it (a `runas` prompt, a scheduled task that runs
-     while signed out) is Nick's, given to him as numbered steps in Thai.
+   - **The account exists** (Nick, 2026-10-31): `drill`, a standard user, profile `C:\Users\drill`, **with no
+     password** (Nick's choice). Windows lets a blank-password account sign in only at the keyboard
+     (`LimitBlankPasswordUse` = 1, measured; Remote Desktop is off), so `runas /user:drill` and a scheduled task
+     that runs while signed out cannot work. **Every run is Switch user:** Nick double-clicks the launcher inside
+     `drill`'s own session. Write launchers that way, and never tell Nick to use `runas`. No session sets or
+     changes the account's password.
    - **One drill at a time on this PC.** Before starting, check `C:\Users\Public\drill-busy.txt`. If it exists,
      another app is drilling, so wait. Otherwise create it with your app name and start time, and remove it when
      you finish, pass or fail. Claim it when the run starts, never while you build or stage: Nick is the
