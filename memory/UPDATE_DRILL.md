@@ -166,19 +166,51 @@ Add a check when a new failure class appears. That means adding it here **and** 
    - **The account exists** (Nick, 2026-10-31): `drill`, a standard user, profile `C:\Users\drill`, **with no
      password** (Nick's choice). Windows lets a blank-password account sign in only at the keyboard
      (`LimitBlankPasswordUse` = 1, measured; Remote Desktop is off), so `runas /user:drill` and a scheduled task
-     that runs while signed out cannot work. **Every run is Switch user:** Nick double-clicks the launcher inside
-     `drill`'s own session. Write launchers that way, and never tell Nick to use `runas`. No session sets or
+     that runs while signed out cannot work. **Every run is Switch user,** never `runas`. No session sets or
      changes the account's password.
-   - **One drill at a time on this PC.** Before starting, check `C:\Users\Public\drill-busy.txt`. If it exists,
-     another app is drilling, so wait. Otherwise create it with your app name and start time, and remove it when
-     you finish, pass or fail. Claim it when the run starts, never while you build or stage: Nick is the
-     bottleneck, and a lock held over a compile queues another app's ready drill behind it.
+   - **Nick's whole part is one double-click** (Nick, 2026-10-31, after a day of multi-file drills with presses
+     in the app: "nothing is automatic, all by hand"). He switches user to `drill`, double-clicks **Run update
+     drills** on its desktop, and switches back. Nothing else: no press in the app, no second file, no key between
+     steps, no output to read or photograph. The button is the shared runner `C:\Users\Public\Drills\RUN-ALL.cmd`
+     (master: `drill-runner\` in Nick's rules folder, with `run-all.test.ps1`). It moves each waiting launcher
+     into `done\` and runs that copy with no keyboard (stdin is NUL) and a deadline, oldest first. It renames the
+     copy PASS or FAIL, writes one line per run to `C:\Users\Public\Drills\results.txt`, and repeats until
+     nothing new is waiting. The first time, the button does not exist yet: Nick, inside `drill`, presses Win+R,
+     types `C:\Users\Public\Drills\RUN-ALL.cmd` and presses Enter, and that run makes it. A 3-reviewer pass
+     (2026-10-31) found every rule below by reading the real kits, so each is a failure that would have happened:
+     - stage **one** launcher, `C:\Users\Public\Drills\<App>.cmd` (no spaces), only when the drill is ready, by
+       **copying** it in (a moved file keeps a DACL `drill` cannot read). Staging it IS joining the queue; then
+       tell Nick one line, "a drill is waiting in drill";
+     - name the harness by **absolute** path (`C:\Users\Public\<App>-drill\...`), never `%~dp0`: the runner runs
+       the copy in `done\`;
+     - **exit 0 only when every check passed**, and pass the harness's code on unchanged: `set rc=%errorlevel%`,
+       `if not "%DRILL_RUNNER%"=="1" pause`, `exit /b %rc%`. (EMR's harness printed `RESULT: FAILED` and exited
+       0, so the runner would have shown a failed drill as PASS.) Several drills in one launcher fail if any fails;
+     - run **unattended**: drive the app itself (the §3 contract; for a FROM that predates it, a WebView2 control
+       channel on 127.0.0.1, or window messages), and prove it passes with Nick switched back: `drill`'s session
+       is then disconnected, where simulated mouse and keyboard input does not work. A bootstrap case that truly
+       needs a person carries `rem DRILL-NEEDS-NICK: <what to press>`; the runner runs it first and tells Nick to
+       stay. Tell Nick before staging it, with the number of presses. `rem DRILL-TIMEOUT-MIN: <n>` sets a longer
+       deadline than the default 120 minutes. Every wait inside the harness has its own limit;
+     - the harness takes the busy lock itself (below) and **waits** for a held lock with a limit rather than
+       failing at once. A session never claims or removes the lock by hand;
+     - read the result from `results.txt` and `<App>-drill\out\`, and ask Nick nothing about it.
+     Drills that run in Nick's own account (Android on the emulator, SM's driver half) stage no launcher here; they
+     only share the busy lock.
+   - **One drill at a time on this PC.** The harness itself creates `C:\Users\Public\drill-busy.txt` atomically
+     (`CreateNew`, or `'wx'` in node) when the run starts, never while you build or stage. It writes
+     `<App> pid <pid> started <time>`, with the pid of the process that lives for the whole run, and removes the
+     file in a `finally`, on pass, fail and Ctrl-C, but only if the text is still its own. If the file exists,
+     another drill is running, so wait. The pid is what tells a left-over lock from a running drill. The runner
+     clears a lock whose pid is no longer running (it sees other accounts' processes), and one its own launcher
+     left behind. A lock with no pid can only be waited out, for 3 hours (2026-10-31: a lock claimed by hand from a
+     session, with no pid, held EMR's drill back for 45 minutes after SM's run had ended).
    - For a per-machine app, or a release that changes the install mode, use a VirtualBox VM with a snapshot.
 
    ⚠ **Run the harness OUTSIDE the Claude desktop app.** Claude's shell runs inside an MSIX container that
    virtualises `%LOCALAPPDATA%`, so checks made from it can PASS on files that are not really there (memory note
-   `msix-shadow-localappdata`). Start the harness as a scheduled task under the `drill` account, or from a plain
-   PowerShell window, and read its result file back. Sanity check: write a marker from the harness and confirm it
+   `msix-shadow-localappdata`). Start the harness through the runner inside `drill` (above), and read its result
+   file back. Sanity check: write a marker from the harness and confirm it
    from a second, unpackaged shell.
 
     Install FROM exactly as
