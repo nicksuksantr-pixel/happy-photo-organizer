@@ -265,7 +265,8 @@ and for checks before a real release, at the session's judgment. ScanDocs still 
   Android itself rewrites `cache/`, `code_cache/` and `files/profileinstaller*` on an update, so leave those out.
 - **One drill AVD per app,** named `drill_<app>`, wiped (`-wipe-data`) at the start of every drill, so the FROM
   install is clean and two apps never share a device. It holds nothing but drill data, so the wipe is part of the
-  drill. Never use or wipe Nick's own AVDs (`Pixel6_API35`).
+  drill. Never use or wipe an AVD that is not your own `drill_<app>`. (Nick's old `Pixel6_API35` was deleted on his
+  order on 2026-10-31, freeing 11 GB. An app that planned to use it creates its own `drill_<app>`.)
 - **Disk:** about 3.5 GB per AVD, plus 3.5 GB for the image and 1.1 GB for the emulator, shared.
 - **Give the drill AVD 4 GB of RAM.** With 2 GB, JobShot's runs 1 and 2 failed on the two flakes below, inside the
   fixture and before the update; with 4 GB, runs 3 and 4 passed with no retry (JS, 2026-10-31).
