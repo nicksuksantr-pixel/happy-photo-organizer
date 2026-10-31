@@ -136,6 +136,15 @@ been red since `drills/` was committed: the earlier 220/220 run came before thos
   `shortcuts_open_new`, `user_data_intact`, `no_update_loop`, `unknown_is_not_no`, `bad_download_refused`,
   `sees_next_release`.
 - Its receipt pins `ba55637f`. That build will not ship (R2–R7 change the bytes), so the run is evidence only.
+- **It ended at 12:38: 13 pass, 1 fail.** The fail is `waits_while_busy`, and the fault was the harness's, not the
+  app's: H8 in `bug/bug_v1.066.md`. N+1 was on the feed before the app came up busy, so the app installed it 2 s after
+  starting.
+- Seen working in the same run:
+  - v1.066's own handover ended by itself, with no "ended it" line;
+  - the fake N+1 that came up as 1.066 was recorded once as FAILED and not retried (S1).
+- Evidence: `drills/logs/1.066-run2.*`.
+
+**Run 3 is staged with the R2–R7 build `93c4d69c` and the H8 harness.**
 
 **R2–R7 (Nick: "Fix R2–R7 too"):** fixed as tabled in `bug/bug_v1.066.md`. Each has a test, and the app-side ones
 were mutation-checked. The harness pieces were tested on scratch copies (14/14 + 31/31).

@@ -273,11 +273,24 @@ try {
     "fed v$NextVersion with one byte flipped: " + $(if ($ref1) { $ref1.Line } else { 'no REFUSED line' }) +
     "; HANDOVER lines: $($ho.Count); v$ToVersion still running: $($procs.Count -eq 1)")
 
-  # sees N+1 - with the app busy, so it must wait, then install once idle
+  # sees N+1 - with the app ALREADY busy, so it must wait, then install once idle.
+  # Busy first, N+1 second (H8, HPO run 2): with N+1 already on the feed at start, the app
+  # found it, fetched it from loopback in a second and handed over 2 s after starting, before
+  # its busy window was even open. Now it comes up busy with nothing newer on the feed, and
+  # finds N+1 at its next periodic check - minutes, so that wait is update_s, with progress.
   Set-AppBusy -M $M
-  Feed-Release $NextVersion 'none' 'serve'
+  Feed-Release $ToVersion 'none' 'serve'
   $mk = Restart-App
-  $found = Wait-ForLogLine $ulog $mk { param($x) $x.Stage -eq 'FOUND' -and $x.Version -eq $NextVersion } ([int]$T.start_s)
+  $busyBy = (Get-Date).AddSeconds([int]$T.start_s)
+  while (-not (Test-WindowOpen $M.busy_window_prefix) -and (Get-Date) -lt $busyBy) { Start-Sleep -Milliseconds 300 }
+  if (-not (Test-WindowOpen $M.busy_window_prefix)) {
+    throw "could not make the app busy: no '$($M.busy_window_prefix)...' window within $($T.start_s) s"
+  }
+  Write-DrillLog "the app is busy ($($M.busy_description)); now feeding v$NextVersion"
+  Feed-Release $NextVersion 'none' 'serve'
+  $found = Wait-ForLogLine -Path $ulog -AfterLine $mk -TimeoutSec ([int]$T.update_s) `
+    -Match { param($x) $x.Stage -eq 'FOUND' -and $x.Version -eq $NextVersion } `
+    -Progress { param($s) Write-DrillLog "  waiting for the app's next check to find v${NextVersion}: $s s" }
   $verified = Wait-ForLogLine $ulog $mk { param($x) $x.Stage -eq 'VERIFIED' -and $x.Version -eq $NextVersion } ([int]$T.update_s)
   Check 'sees_next_release' ([bool]$found) ("fed a fake v${NextVersion}: " + $(if ($found) { $found.Line } else { 'no FOUND line' }) +
     $(if ($verified) { " | $($verified.Line)" } else { '' }))
