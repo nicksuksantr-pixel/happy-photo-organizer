@@ -268,6 +268,13 @@ and for checks before a real release, at the session's judgment. ScanDocs still 
   drill. Never use or wipe an AVD that is not your own `drill_<app>`. (Nick's old `Pixel6_API35` was deleted on his
   order on 2026-10-31, freeing 11 GB. An app that planned to use it creates its own `drill_<app>`.)
 - **Disk:** about 3.5 GB per AVD, plus 3.5 GB for the image and 1.1 GB for the emulator, shared.
+- **One emulator at a time on this PC, and it takes the busy lock, drill or test** (NTWL, measured 2026-10-31:
+  its emulator vanished mid-onboarding with nothing in its log when a 3 GB Gradle daemon took free RAM down to
+  1.8 GB; two minutes later a second AVD booted with no lock held and free RAM was 0.8 GB of 15.4). The PC runs
+  several Claude sessions, a desktop drill in `drill`, builds and an emulator at once, so RAM is the shared
+  resource, not the device. Before booting, take `C:\Users\Public\drill-busy.txt` (waiting with a limit) and
+  check for at least **5 GB of free RAM** (`Win32_OperatingSystem.FreePhysicalMemory`); wait, never boot into
+  less. Log "emulator gone" when the device disappears, instead of timing out on a blank screen.
 - **Give the drill AVD 4 GB of RAM.** With 2 GB, JobShot's runs 1 and 2 failed on the two flakes below, inside the
   fixture and before the update; with 4 GB, runs 3 and 4 passed with no retry (JS, 2026-10-31).
 - **"System UI isn't responding" can swallow a tap.** Wait for each tap's effect and re-tap only while that
