@@ -54,6 +54,9 @@ if (-not $NextVersion) {
 New-Item -ItemType Directory -Path (Join-Path $OutDir 'logs') -Force | Out-Null
 $drillLog = Join-Path $OutDir "logs\$ToVersion.log"
 Start-DrillLog $drillLog
+$stopFile = Join-Path $OutDir 'STOP'
+Set-DrillStopFile $stopFile
+Write-DrillLog "to stop this run from any account: create the file $stopFile (every wait polls it; the receipt is then a FAIL with that reason)"
 $checks = [ordered]@{}
 $extra = [ordered]@{}
 # KEY_EMBED 6 (2026-10-31): an app that builds a Gemini key in says so in drill.json; the receipt must then carry the
@@ -328,7 +331,7 @@ try {
   Feed-Release $ToVersion 'none' 'serve'
   $mk = Restart-App
   $busyBy = (Get-Date).AddSeconds([int]$T.start_s)
-  while (-not (Test-WindowOpen $M.busy_window_prefix) -and (Get-Date) -lt $busyBy) { Start-Sleep -Milliseconds 300 }
+  while (-not (Test-WindowOpen $M.busy_window_prefix) -and (Get-Date) -lt $busyBy) { Test-DrillStopFile; Start-Sleep -Milliseconds 300 }
   if (-not (Test-WindowOpen $M.busy_window_prefix)) {
     throw "could not make the app busy: no '$($M.busy_window_prefix)...' window within $($T.start_s) s"
   }

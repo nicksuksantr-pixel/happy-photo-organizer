@@ -8,6 +8,12 @@ Set-StrictMode -Version 2.0
 
 $script:DrillLogPath = $null
 
+# A run-level stop: Invoke-Drill names a STOP file under its stage (world-writable C:\Users\Public), every polling wait
+# checks it, and a hung run ends at its next poll with a FAIL receipt — from ANY account, no admin. HPO's run 3
+# (2026-10-31) sat in a 1800-s wait for a feed that had died, owned by the drill account, and nobody could stop it.
+$script:DrillStopFile = ''
+function Set-DrillStopFile([string]$Path) { $script:DrillStopFile = $Path; if ($Path -and (Test-Path -LiteralPath $Path)) { Remove-Item -LiteralPath $Path -Force } }
+function Test-DrillStopFile { if ($script:DrillStopFile -and (Test-Path -LiteralPath $script:DrillStopFile)) { throw "stopped on request: $script:DrillStopFile exists" } }
 function Start-DrillLog([string]$Path) {
   $script:DrillLogPath = $Path
   $dir = Split-Path -Parent $Path
@@ -102,7 +108,7 @@ function Stop-AppProcesses([string]$ExeName) {
     try { Stop-Process -Id $p.Id -Force -ErrorAction Stop } catch {}
   }
   $deadline = (Get-Date).AddSeconds(20)
-  while ((Get-AppProcesses $ExeName).Count -gt 0 -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 250 }
+  while ((Get-AppProcesses $ExeName).Count -gt 0 -and (Get-Date) -lt $deadline) { Test-DrillStopFile; Start-Sleep -Milliseconds 250 }
 }
 
 function Test-IsAdmin {
@@ -171,6 +177,7 @@ function Wait-ForLogLine([string]$Path, [int]$AfterLine, [scriptblock]$Match, [i
       & $Progress ([int]((Get-Date) - $start).TotalSeconds)
       $nextProgress = (Get-Date).AddSeconds($ProgressSec)
     }
+    Test-DrillStopFile
     Start-Sleep -Milliseconds 500
   }
   return $null
@@ -262,6 +269,7 @@ function Enter-DrillLock([string]$App, [int]$WaitSec, [string]$Path = $DrillLock
         throw "another drill still holds $Path after $WaitSec s ($who). If no drill is running, Nick removes that file."
       }
       if (-not $said) { Write-DrillLog "another drill is running ($who); waiting up to $WaitSec s"; $said = $true }
+      Test-DrillStopFile
       Start-Sleep -Seconds 15
     }
   }
@@ -338,4 +346,5 @@ function Write-Receipt([string]$Path, $Receipt) {
   [IO.File]::WriteAllText($Path, $json, (New-Object System.Text.UTF8Encoding($false)))
 }
 
+Export-ModuleMember -Function Set-DrillStopFile, Test-DrillStopFile
 Export-ModuleMember -Function *
