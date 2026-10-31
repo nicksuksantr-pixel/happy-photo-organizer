@@ -4,15 +4,19 @@ When the next cross-project lesson turns up here: write it in this file, say so,
 **one line in the registry form** (`- **slug** (source, date) — fact… **Rule:** …`), so the Director can take it
 verbatim (Director, 2026-10-31).
 
-## ⏳ WAITING — 2026-10-31 (handed to the Director)
+## ⏳ WAITING — 2026-11-01 (handed to the Director)
 
-Landed in the master kit and adopted by copy: the AQ. secret-scan term (0bf2786), the `embedded_key_works` call (5374e69) and the `no_update_loop` window (746d323). Their request rows are cleared. The lesson rows below wait for the Director's next promotion.
+- **a-patch-script-loses-a-backslash-and-writes-a-control-byte** (HPO, 2026-09-26 and 2026-10-31) — twice, a patch script lost one level of backslashes on its way through a shell, and a Python escape wrote an invisible control byte where text belonged. 2026-09-26 (`a52a600`): a Windows path `\emr_sample\25-09-26` in a records patch reached Python as `\25`, an OCTAL escape, so byte 0x15 replaced "25" in the markdown, invisible in the page and in the diff. 2026-10-31 (v1.067 K6): a Python patch run through a Bash-tool heredoc turned `\\b` into `\b`, so two BACKSPACE bytes sat inside `core/analyzer.py`'s HTTP-code regex and it matched nothing; the tests stayed green on other words in the same messages, and an independent review caught it by reading. **Rule:** an escape-bearing patch goes through the Edit tool (or an asserting splice), never a heredoc or an unquoted string; and a control-byte guard runs on SOURCE files as well as records, before the commit (HPO: `tools/pre-commit` and the suite refuse control bytes in `.py/.spec/.json/.mjs/.js/.md`).
 
-- **counts-must-start-when-the-judged-thing-starts** (HPO drill v1.066 -> v1.067, 2026-10-31) — the kit's `no_update_loop` counted every `/asset/` request since the feed started, so FROM v1.066's own legitimate fetch of TO through the feed read as TO looping (a repo-env FROM fetched from GitHub, so it never showed). **Rule:** an oracle that counts events must count from the moment the thing it judges began, or another actor's correct events read as its failure. (Kit fix landed: master 746d323.)
+---
 
-- **a-built-in-key-breaks-a-busy-step-that-held-the-key-back** (HPO v1.067, 2026-10-31) — The kit runs `Set-AppBusy` on the CANDIDATE. HPO's adapter made the app busy by blanking the saved key, so the app opened Settings at start. Once a build carries a built-in key that wins (KEY_EMBED 4), the app never opens a key screen. The candidate never gets busy, and the kit throws "could not make the app busy". Found by reading `Invoke-Drill.ps1` before the drill ran. Fixed in HPO with a drill-only, one-shot marker the app consumes at start (`drill-open-settings`). **Rule:** before an app's first drill with a built-in key, check how its adapter makes it busy. Anything that relied on "no key → a dialog opens" needs its own drill-only trigger in that same release, because a released build cannot be given one later.
-- **a-guard-must-read-the-lock-the-house-writes** (HPO drill v1.067 run 3, 2026-10-31) — before re-staging, HPO's guard checked for a lock at `C:\Users\Public\Drills\drill-busy.txt`. The house lock is `C:\Users\Public\drill-busy.txt`, so the guard saw "free" while Nick's run 3 held the lock. Stage-Drill then deleted `from/`, `kit/`, the logs and the feed state from under the live run; the run went on writing into nothing and its receipt was void. A missing file read as "no lock", so the guard could not fail loud. **Rule:** a guard must read the lock at the path the house writes, taken from the code that writes it, not from memory, and it must be proven to refuse on a real held lock before it is trusted. Better still, the destructive step checks the lock itself (kit fix: master 2567c46 + d12865e, adopted).
-- **amend `a-control-character-from-an-escape`** (HPO, 2026-10-31) — It recurred in CODE. A Python patch run through a Bash-tool heredoc lost one level of backslashes, so `\\b` reached `core/analyzer.py` as two BACKSPACE bytes inside a regex, which then matched nothing. The tests stayed green on other words in the same messages; an independent review caught it by reading. HPO's source guard now refuses control bytes in `.py/.spec/.json/.mjs/.js`. **Rule:** the control-byte guard belongs on source as well as records, and an escape-bearing patch goes through the Edit tool, not a heredoc.
+## ✅ CONSUMED — 2026-11-01
+
+Promoted by the Director and read back in the mirror (`memory/SHARED_LESSONS.md`, sync `35c6344`), so cleared here (#10.1):
+`counts-must-start-when-the-judged-thing-starts`, `a-built-in-key-breaks-a-busy-step-that-held-the-key-back`,
+`a-guard-must-read-the-lock-the-house-writes`. The "amend `a-control-character-from-an-escape`" row named a slug that
+exists nowhere (master, mirrors, other projects: grep, 2026-11-01). The lesson was never promoted under any name, so it
+is rewritten above as one whole row with both events.
 
 ---
 
