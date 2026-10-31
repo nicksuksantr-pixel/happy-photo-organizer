@@ -82,6 +82,35 @@ def _same_ship(a: str, b: str) -> bool:
     return jobshot_receive._norm_ship(a) == jobshot_receive._norm_ship(b)
 
 
+def _native_dialog_open(thread_id: int | None) -> bool:
+    """True while a visible native dialog — a message box, a file or folder
+    picker (window class #32770) — belongs to `thread_id`. None is a Tk
+    Toplevel, and Tk keeps firing timers inside one, so busy_reason missed
+    them and an install could close the app under an open "All Done" box or
+    a folder picker (R4, reviver round 1)."""
+    if sys.platform != "win32" or not thread_id:
+        return False
+    try:
+        import ctypes
+        from ctypes import wintypes
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        found = [False]
+        Proc = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
+
+        def cb(hwnd, _lp):
+            cls = ctypes.create_unicode_buffer(16)
+            user32.GetClassNameW(hwnd, cls, 16)
+            if cls.value == "#32770" and user32.IsWindowVisible(hwnd):
+                found[0] = True
+                return False
+            return True
+
+        user32.EnumThreadWindows(wintypes.DWORD(thread_id), Proc(cb), 0)
+        return found[0]
+    except Exception:
+        return False
+
+
 class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
     def __init__(self):
         super().__init__()
@@ -188,6 +217,8 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
 
         # Auto-update — state owned by the worker; we hold a handle for shutdown
         self._batch_running = False  # True only between batch start and _reset_buttons()
+        # the Tk thread, whose native dialogs busy_reason looks for (R4)
+        self._tk_thread_id = threading.get_native_id()
         self.update_worker = UpdateWorker(self, APP_VERSION)
         # Window-state debounce
         self._geo_save_after_id: str | None = None
@@ -710,6 +741,8 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
                         return f"the {w.title() or 'dialog'} window is open"
                 except tk.TclError:
                     pass
+        if _native_dialog_open(getattr(self, "_tk_thread_id", None)):
+            return "a dialog box is open"
         return ""
 
     def _finish_update_if_any(self) -> None:

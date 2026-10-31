@@ -47,8 +47,28 @@ class _Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     server_version = "HappyPhotoOrganizer"     # no Python version advertised
     sys_version = ""
+    # Seconds a socket read may wait for the next bytes (R5, reviver round 1).
+    # None - the stdlib default - let a phone that left the Wi-Fi mid-upload
+    # (no FIN, no RST) hold its thread, and the update, until HPO restarted.
+    # Per read, not per upload: a slow link that keeps moving is not cut off.
+    timeout = 60
 
     # ─── plumbing ───
+
+    def handle(self):
+        """One connection. A client that went quiet past `timeout`, or went
+        away, ends it without a traceback: there is nobody left to answer."""
+        try:
+            super().handle()
+        except (TimeoutError, ConnectionError):
+            self.close_connection = True
+        except OSError as e:
+            # after a timed-out read the socket file refuses every later read
+            # ("cannot read from timed out object") - the keep-alive loop's next
+            # request line included
+            if "timed out" not in str(e):
+                raise
+            self.close_connection = True
 
     def log_message(self, fmt, *args):         # noqa: N802 (stdlib signature)
         """stderr is not where this belongs — a frozen app has none."""
@@ -285,12 +305,20 @@ class _Handler(BaseHTTPRequestHandler):
         self._send(result.status, result.to_reply())
 
     def do_POST(self):                         # noqa: N802
-        # counted for the updater, which must not close the app mid-request
-        index.begin_receiving()
+        # Counted for the updater, which must not close the app mid-request -
+        # but only a request that carries the token (R5, reviver round 1): any
+        # host on the LAN could otherwise hold every update off by opening a
+        # POST and never finishing it. Both routes check this same token, and
+        # a refused request is drained and answered uncounted.
+        counted = (self.path in (receive.UPLOAD_PATH, receive.SIDECAR_PATH)
+                   and self._authorised())
+        if counted:
+            index.begin_receiving()
         try:
             self._post()
         finally:
-            index.end_receiving()
+            if counted:
+                index.end_receiving()
 
     def _post(self):
         if self.path == receive.SIDECAR_PATH:

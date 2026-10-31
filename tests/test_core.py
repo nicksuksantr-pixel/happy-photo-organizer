@@ -4460,6 +4460,55 @@ def _start_upload(rx, body: bytes, headers: dict, first: int):
     return conn
 
 
+def test_a_stalled_or_unpaired_upload_cannot_hold_an_update_off():
+    """R5 (reviver round 1): the receiver had no socket timeout and counted a
+    POST as "receiving" before checking its token. A phone that left the Wi-Fi
+    mid-upload - or any host on the LAN, without the token - held
+    any_filing() True, and so every update, until HPO restarted. Driven on
+    the real server with the timeout shortened to 1 s."""
+    import http.client
+    import time
+    from core import jobshot_index as ji
+    from core import jobshot_receive as recv
+    from core import jobshot_server as srv
+    real_timeout = srv._Handler.timeout
+    srv._Handler.timeout = 1
+    with tempfile.TemporaryDirectory() as td:
+        rx = _Receiver(Path(td))
+        conns = []
+        try:
+            # paired, but the phone went quiet after 10 bytes of 100 000
+            conns.append(_start_upload(rx, b"x" * 100_000, {}, 10))
+            deadline = time.monotonic() + 5
+            while not ji.any_filing() and time.monotonic() < deadline:
+                time.sleep(0.05)
+            assert ji.any_filing(), "a paired upload in flight should count"
+            deadline = time.monotonic() + 10
+            while ji.any_filing() and time.monotonic() < deadline:
+                time.sleep(0.1)
+            assert not ji.any_filing(), "a stalled upload still holds updates off after its timeout"
+
+            # no token: never counted, from the first byte to the last
+            host, port = rx.base.split("//")[1].split(":")
+            c = http.client.HTTPConnection(host, int(port), timeout=30)
+            c.putrequest("POST", recv.UPLOAD_PATH)
+            c.putheader("Content-Length", "100000")
+            c.endheaders()
+            c.send(b"y" * 10)
+            conns.append(c)
+            for _ in range(10):
+                assert not ji.any_filing(), "a request without the token counted as receiving"
+                time.sleep(0.05)
+        finally:
+            for c in conns:
+                try:
+                    c.close()
+                except Exception:
+                    pass
+            rx.close()
+            srv._Handler.timeout = real_timeout
+
+
 def test_a_named_upload_holds_the_probe_while_its_body_is_still_arriving():
     """LAN_PROTOCOL v1.1.1: `X-JobShot-Job-Ids` names the jobs in an upload, so
     the hold can start at the first byte. Without it HPO learns the job_id only
@@ -6270,6 +6319,151 @@ def test_an_interrupted_swap_is_rolled_back_by_the_next_run():
         assert _tree(inst / "HappyPhotoOrganizer") != before          # half and half
         assert sw.recover_interrupted(inst) == "rolled back an interrupted update"
         assert _tree(inst / "HappyPhotoOrganizer") == before
+
+
+def test_a_native_dialog_counts_as_busy():
+    """R4 (reviver round 1): Tk keeps firing timers inside a native message
+    box or file picker (measured: 6 ticks in 3 s), and none is a Tk Toplevel,
+    so busy_reason said idle and an install could close the app under it.
+    A real message box, opened on this thread, closed by a helper thread."""
+    import ctypes
+    import sys
+    import threading
+    import time
+    import types
+    import tkinter as tk
+    from tkinter import messagebox
+    import main as _app
+    if sys.platform != "win32":
+        return
+    tid = threading.get_native_id()
+    seen = []
+    root = tk.Tk()
+    root.withdraw()
+
+    def closer():
+        hwnd = 0
+        for _ in range(100):                     # up to 5 s for the box to appear
+            hwnd = ctypes.windll.user32.FindWindowW("#32770", "R4 probe")
+            if hwnd:
+                break
+            time.sleep(0.05)
+        time.sleep(0.6)
+        ctypes.windll.user32.PostMessageW(hwnd, 0x0010, 0, 0)       # WM_CLOSE
+
+    def probe():
+        seen.append(("inside", _app._native_dialog_open(tid)))
+
+    def show():
+        seen.append(("before", _app._native_dialog_open(tid)))
+        threading.Thread(target=closer, daemon=True).start()
+        root.after(400, probe)
+        messagebox.showinfo("R4 probe", "closes itself", parent=root)
+        seen.append(("after", _app._native_dialog_open(tid)))
+        root.after(50, root.destroy)
+
+    try:
+        root.after(100, show)
+        root.mainloop()
+    finally:
+        try:
+            root.destroy()
+        except tk.TclError:
+            pass
+    assert dict(seen) == {"before": False, "inside": True, "after": False}, seen
+
+    # and busy_reason says so, after the Tk checks it already had
+    host = types.SimpleNamespace(_batch_running=False, plan=None, _tk_thread_id=tid,
+                                 winfo_children=lambda: [])
+    real = _app._native_dialog_open
+    try:
+        _app._native_dialog_open = lambda t: t == tid
+        assert _app.MainWindow.busy_reason(host) == "a dialog box is open"
+        _app._native_dialog_open = lambda t: False
+        assert _app.MainWindow.busy_reason(host) == ""
+    finally:
+        _app._native_dialog_open = real
+
+
+def test_the_paused_repo_names_no_repo_and_never_reaches_the_network():
+    """R3 (reviver round 1): after a failed install the installer relaunches
+    an app older than v1.066 with HAPPY_UPDATE_REPO = PAUSED_REPO. Those builds
+    check no digest and run the first .exe of any release they find, so the
+    value must never be a GitHub name anyone could register (the first one
+    was). Built into a request the way v1.065 builds it, it must fail before
+    DNS or a connection."""
+    import re
+    import socket
+    import urllib.request
+    p = _update_log.PAUSED_REPO
+    owner_repo = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}/[A-Za-z0-9._-]{1,100}$")
+    assert not owner_repo.match(p), f"{p!r} is a name someone could register on GitHub"
+    calls = []
+
+    def refuse(*a, **k):
+        calls.append(a[:1])
+        raise AssertionError("the paused repo reached the network")
+
+    real = socket.getaddrinfo, socket.create_connection
+    socket.getaddrinfo = socket.create_connection = refuse
+    try:
+        req = urllib.request.Request(f"https://api.github.com/repos/{p}/releases/latest",
+                                     headers={"User-Agent": "HappyPhotoOrganizer-Updater"})
+        try:
+            _REAL_URLOPEN(req, timeout=5)
+            raise AssertionError("a request for the paused repo went through")
+        except AssertionError:
+            raise
+        except Exception:
+            pass                                 # refused before it left the PC (InvalidURL)
+    finally:
+        socket.getaddrinfo, socket.create_connection = real
+    assert calls == [], calls
+
+
+def test_a_recovery_that_cannot_finish_keeps_the_way_back():
+    """R2 (reviver round 1): a power cut mid-swap, then a lock that outlasts
+    the retry on the next run. The recovery used to land in the staging
+    `except`: logged "nothing was changed" and deleted `.update` - the only
+    copy of the old files still out. Now it keeps `.update`, says so, and the
+    run after that finishes the rollback."""
+    from core import install_swap as sw
+    _attempt_clean()
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        inst = td / "HappyPhotoOrganizer"
+        assert sw.swap_in(_payload(td / "v1.zip", _V1), inst, "none", "1.065")[0]
+        before = _tree(inst / "HappyPhotoOrganizer")
+        real_rollback, real_wait = sw.rollback, sw.LOCK_RETRY_SECONDS
+        sw.LOCK_RETRY_SECONDS = 0.5
+        try:
+            sw.rollback = lambda *a, **k: (False, "the power went out")
+            held = open(inst / "HappyPhotoOrganizer" / "_internal" / "same.pyd", "rb")
+            try:
+                assert not sw.swap_in(_payload(td / "v2.zip", _V2), inst, "1.065", "1.066")[0]
+            finally:
+                held.close()
+            sw.rollback = real_rollback
+            ud = inst / sw.UPDATE_DIR
+            saved = sorted(p for p in (ud / "old").rglob("*") if p.is_file())
+            assert saved, "the interrupted swap left nothing in .update/old to put back"
+            mark = len(_log_lines())
+            held = open(saved[0], "rb")                 # the next run cannot move it back
+            try:
+                ok, msg = sw.swap_in(_payload(td / "v3.zip", _V2), inst, "1.065", "1.066")
+            finally:
+                held.close()
+            assert not ok and "could not be rolled back yet" in msg, msg
+            assert (ud / "journal.json").exists() and saved[0].exists(), "the way back was deleted"
+            new = _log_lines()[mark:]
+            assert any("could not be rolled back yet" in ln and "kept .update" in ln for ln in new), new
+            assert not any("nothing was changed" in ln for ln in new), new
+            # the lock is gone: the run after that finishes it
+            assert sw.recover_interrupted(inst) == "rolled back an interrupted update"
+            assert _tree(inst / "HappyPhotoOrganizer") == before
+        finally:
+            sw.rollback, sw.LOCK_RETRY_SECONDS = real_rollback, real_wait
+            _attempt_clean()
 
 
 def test_a_file_the_installer_did_not_put_there_is_never_pruned():

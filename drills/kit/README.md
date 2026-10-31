@@ -28,6 +28,13 @@ The manifest's `adapter` is dot-sourced by the runner and must define:
 `Get-FromRouteEvidence`, `Set-AppBusy`, `Clear-AppBusy`, `Restore-AfterBusy`, `Reset-DrillAccount`,
 `Get-LayoutDescription`. The header of `Invoke-Drill.ps1` lists their parameters.
 
+It may also define `Get-FromDiagnostics`: the files the OLD build writes about its own update, which only the
+drill account can read. Added after HPO's first run, where the developer's account could not see why v1.065 had
+not updated.
+- While the update is awaited, the runner quotes their last line in its progress line, written every minute.
+- It copies them to `<OutDir>\logs\<ver>.from-<name>` before `-Reset` deletes them.
+- An installer's `FAILED` line for the TO version ends that wait 2 minutes later, instead of after `update_s`.
+
 ## Rules it keeps
 
 - Runs **outside the Claude app** (its MSIX container virtualises `%LOCALAPPDATA%`); the runner writes a marker

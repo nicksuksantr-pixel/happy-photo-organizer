@@ -14,6 +14,10 @@
     Get-FromRouteEvidence -M <manifest>                lines showing the OLD build's own updater did the fetching
     Set-AppBusy / Clear-AppBusy / Restore-AfterBusy -M make the app busy the way a user would, and undo it
     Reset-DrillAccount  -M <manifest>                  remove everything a drill installed (refuses outside a drill account)
+  and may define:
+    Get-FromDiagnostics -M <manifest>                  files the OLD build writes about its own update (only the drill
+                                                       account can read them): quoted in the progress lines while the
+                                                       update is awaited, copied to <OutDir>\logs\<ver>.from-<name>
 
   Run it OUTSIDE the Claude app (its shell virtualises %LOCALAPPDATA%), as a
   standard (not admin) Windows user made for drills, from a folder that user
@@ -62,6 +66,7 @@ $feedState = Join-Path $OutDir 'feed-state.json'
 $feedAccess = Join-Path $OutDir "logs\$ToVersion.feed.jsonl"
 $feedProc = $null
 $lock = $null
+$diagFiles = @()     # the adapter's optional Get-FromDiagnostics: files only the drill account can read
 $T = $M.timeouts
 
 function Check([string]$Id, [bool]$Pass, [string]$Evidence) {
@@ -105,6 +110,8 @@ try {
   if ($fromSha -ne ([string]$M.from.sha256).ToLower()) {
     throw "FROM is not the released file: sha256 $fromSha, the manifest's release is $($M.from.sha256)"
   }
+  # measured here, where it is checked: a drill that stops later must not report it as not measured (R7)
+  Check 'start_from_released_build' $true ("FROM = $FromSetup, sha256 $fromSha = the released v$($M.from.version) file named in drills/drill.json")
   foreach ($g in $M.install_glob) {
     $hits = @(Get-ChildItem -Path (Expand-DrillPath $g) -Directory -ErrorAction SilentlyContinue)
     if ($hits.Count) { throw "not a clean account: $($hits[0].FullName) exists. Run with -Reset first." }
@@ -152,9 +159,24 @@ try {
   }
   $mark = Get-LogLineCount $ulog
   $t0 = Get-Date
+  if (Get-Command Get-FromDiagnostics -ErrorAction SilentlyContinue) { $diagFiles = @(Get-FromDiagnostics -M $M) }
   Start-TheApp -M $M
   Write-DrillLog "started FROM; the harness starts nothing else until the checks"
-  $started = Wait-ForLogLine $ulog $mark { param($e) $e.Kind -eq 'STARTED' -and $e.Version -eq $ToVersion } ([int]$T.update_s)
+  # Never silent, never waiting on a lost cause (R7, run 1 sat 27 min mute after a terminal FAILED):
+  # every minute a line with what update.log and the FROM's own diagnostics say; a FAILED for TO
+  # ends the wait 2 minutes later (long enough for a recovery that logs FAILED and goes on).
+  $waitProgress = {
+    param($s)
+    $new = @(Lines-Since $mark)
+    $last = $(if ($new.Count) { $new[-1].Line } else { '-' })
+    $from = @($diagFiles | ForEach-Object { Get-LastLine $_ } | Where-Object { $_ })
+    Write-DrillLog ("  waiting for v{0} to start: {1} s; update.log +{2} line(s), last: {3}{4}" -f $ToVersion, $s,
+      $new.Count, $last, $(if ($from.Count) { "; FROM says: $($from[-1])" } else { '' }))
+  }
+  $started = Wait-ForLogLine -Path $ulog -AfterLine $mark -TimeoutSec ([int]$T.update_s) `
+    -Match { param($e) $e.Kind -eq 'STARTED' -and $e.Version -eq $ToVersion } `
+    -GiveUp { param($e) $e.Kind -eq 'UPDATE' -and $e.Stage -eq 'FAILED' -and $e.Version -eq $ToVersion } `
+    -Progress $waitProgress
   $since = Lines-Since $mark
   foreach ($e in $since) { Write-DrillLog "  update.log: $($e.Line)" }
   $swapped = @($since | Where-Object { $_.Stage -eq 'SWAPPED' -and $_.Version -eq $ToVersion })
@@ -165,7 +187,6 @@ try {
     "; then the TO installer: " + (($swapped | ForEach-Object { $_.Line }) -join ' | '))
   if (-not $started) { throw "TO never started within $($T.update_s) s - see the update log lines above" }
   Check 'new_version_running' ($started.Version -eq $ToVersion) $started.Line
-  Check 'start_from_released_build' $true ("FROM = $FromSetup, sha256 $fromSha = the released v$($M.from.version) file named in drills/drill.json")
 
   # ---- 3. after the cleanup window: measure --------------------------------
   $cleaned = Wait-ForLogLine $ulog $mark { param($e) $e.Stage -eq 'CLEANED' -and $e.Version -eq $ToVersion } ([int]$T.cleanup_s)
@@ -266,11 +287,16 @@ try {
   Clear-AppBusy -M $M
   $mk2 = Get-LogLineCount $ulog
   $hoIdle = Wait-ForLogLine $ulog $mk { param($x) $x.Stage -eq 'HANDOVER' -and $x.Version -eq $NextVersion } ([int]$T.idle_retry_s)
-  $back = Wait-ForLogLine $ulog $mk2 { param($x) $x.Kind -eq 'STARTED' } ([int]$T.update_s)
+  $back = Wait-ForLogLine -Path $ulog -AfterLine $mk2 -TimeoutSec ([int]$T.update_s) `
+    -Match { param($x) $x.Kind -eq 'STARTED' } `
+    -GiveUp { param($x) $x.Kind -eq 'UPDATE' -and $x.Stage -eq 'FAILED' } `
+    -Progress { param($s) Write-DrillLog "  waiting for the app to come back after its own handover: $s s" }
   Restore-AfterBusy -M $M
-  $extra['waits_while_busy'] = New-Check $(if ($verified -and $hoBusy.Count -eq 0 -and $hoIdle) { 'pass' } else { 'fail' }) (
+  # ...and it must come BACK from that handover: one that never ends is not a pass (R6)
+  $extra['waits_while_busy'] = New-Check $(if ($verified -and $hoBusy.Count -eq 0 -and $hoIdle -and $back) { 'pass' } else { 'fail' }) (
     "busy ($($M.busy_description)) for $($T.busy_hold_s) s after VERIFIED: HANDOVER lines $($hoBusy.Count); once idle: " +
-    $(if ($hoIdle) { $hoIdle.Line } else { 'no HANDOVER' }) + $(if ($back) { " | $($back.Line)" } else { '' }))
+    $(if ($hoIdle) { $hoIdle.Line } else { 'no HANDOVER' }) +
+    $(if ($back) { " | $($back.Line)" } elseif ($hoIdle) { ' | never came back after that handover' } else { '' }))
   Write-DrillLog ("CHECK waits_while_busy {0} :: {1}" -f $extra['waits_while_busy'].result.ToUpper(), $extra['waits_while_busy'].evidence)
 } catch {
   Write-DrillLog "DRILL STOPPED: $($_.Exception.Message)"
@@ -280,6 +306,15 @@ try {
   if ($feedProc) { Stop-FakeFeed $feedProc $feedState }
   Exit-DrillLock $lock
   try { Copy-Item -LiteralPath $ulog -Destination (Join-Path $OutDir "logs\$ToVersion.update.log") -Force } catch {}
+  # the FROM's own diagnostics, before -Reset deletes them: the developer's account cannot read
+  # the drill profile, so this copy is the only way to see why a FROM step failed (R7)
+  foreach ($f in $diagFiles) {
+    try {
+      if (Test-Path -LiteralPath $f) {
+        Copy-Item -LiteralPath $f -Destination (Join-Path $OutDir ("logs\{0}.from-{1}" -f $ToVersion, (Split-Path -Leaf $f))) -Force
+      }
+    } catch {}
+  }
 }
 
 foreach ($id in @('start_from_released_build', 'real_update_path', 'new_version_running', 'one_process', 'one_install',

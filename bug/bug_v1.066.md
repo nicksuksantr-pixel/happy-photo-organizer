@@ -87,6 +87,17 @@ Not covered by the drill (stated in `drills/drill.json` `not_covered`): S1's pat
 | R6 | MINOR | A | The drill's `waits_while_busy` passes without v1.066 coming back after its own handover (`$back` is not required), so D1 in v1.066 would pass it. | `drills/kit/Invoke-Drill.ps1:268-273` |
 | R7 | MINOR | A B C | The harness waited 27 min after the installer's terminal `FAILED`, wrote nothing while it waited, and kept none of the FROM's breadcrumbs (`reset` deletes them). It marked `start_from_released_build` FAIL although the FROM hash was checked at the start. | Run 1 log + receipt |
 
+**R2–R7 fixed (Nick: "Fix R2–R7 too", 2026-10-31):**
+
+| # | Fix | Test (mutation-checked where noted) |
+|---|---|---|
+| R2 | `recover_interrupted` raises `InterruptedRollbackIncomplete` after logging "could not be rolled back yet … kept .update for the next run". `swap_in` returns before the staging `except`, so it never runs `_rmtree(ud)` and never logs "nothing was changed" for it. Every other failure is unchanged. | `test_a_recovery_that_cannot_finish_keeps_the_way_back`: a real locked file, the next run finishes the rollback (mutant killed: "the way back was deleted") |
+| R3 | `PAUSED_REPO = "update paused/after a failed install"`. A space is not allowed in a GitHub name, and http.client refuses the URL before DNS or a connection. Measured on v1.065's own `updater.check_for_update` from the tag: `InvalidURL`, 0 network calls; its `_poll_github` catches it and shows "offline". | `test_the_paused_repo_names_no_repo_and_never_reaches_the_network`: GitHub's owner/name grammar (the old value matches it) plus sockets that fail if touched |
+| R4 | `busy_reason()` also answers "a dialog box is open" while the Tk thread owns a visible `#32770` window (message box, file or folder picker). The Tk thread id is kept at start. | `test_a_native_dialog_counts_as_busy`: a real message box, closed by a helper thread: before False, inside True, after False |
+| R5 | The receiver counts a POST as "receiving" only once it carries the token, and its socket reads time out after 60 s (per read, not per upload). A timed-out or vanished client ends its connection without a traceback. | `test_a_stalled_or_unpaired_upload_cannot_hold_an_update_off`: the real server, timeout 1 s (mutant `counted = True` killed) |
+| R6 | `waits_while_busy` needs the app to come back after its own handover. | Scratch run of the harness pieces |
+| R7 | The update wait writes a progress line every minute, quoting the FROM's own diagnostics (new optional adapter function `Get-FromDiagnostics`). It ends 2 min after a terminal `FAILED` for TO, copies the FROM's breadcrumbs to `out\logs\<ver>.from-*` before reset deletes them, and checks `start_from_released_build` where it is measured. `Collect-Drill` brings back every `<ver>.*` log. | `test_wait.ps1` 14/14 (parse ×6, early stop, progress, STARTED after a non-terminal FAILED, positional call, `Get-LastLine` ×4 including a file held open for writing); `test_stage.ps1` 31/31 |
+
 **Cleared by the firms** (claims checked and found not to be bugs):
 - the drill feed cannot be pointed off-machine;
 - the bridge prune keeps the catalog;

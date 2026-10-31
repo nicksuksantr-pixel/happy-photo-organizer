@@ -27,9 +27,9 @@ if (-not (Test-Path -LiteralPath $receipt)) {
 }
 New-Item -ItemType Directory -Path (Join-Path $drills 'logs') -Force | Out-Null
 Copy-Item -LiteralPath $receipt -Destination (Join-Path $drills "$ToVersion.json") -Force
-foreach ($f in @("$ToVersion.log", "$ToVersion.update.log", "$ToVersion.feed.jsonl")) {
-  $p = Join-Path $out "logs\$f"
-  if (Test-Path -LiteralPath $p) { Copy-Item -LiteralPath $p -Destination (Join-Path $drills "logs\$f") -Force }
+# every log the run wrote for this version, the FROM's own diagnostics (<ver>.from-*) included
+foreach ($p in @(Get-ChildItem -LiteralPath (Join-Path $out 'logs') -File -Filter "$ToVersion.*" -ErrorAction SilentlyContinue)) {
+  Copy-Item -LiteralPath $p.FullName -Destination (Join-Path $drills "logs\$($p.Name)") -Force
 }
 $t = Join-Path $out 'run.transcript.txt'
 if (Test-Path -LiteralPath $t) { Copy-Item -LiteralPath $t -Destination (Join-Path $drills "logs\$ToVersion.transcript.txt") -Force }

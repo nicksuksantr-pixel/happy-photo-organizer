@@ -424,6 +424,10 @@ def rollback(install_dir: Path, journal: dict | None = None) -> tuple[bool, str]
     return True, f"{len(old_files)} file(s) of the old version restored"
 
 
+class InterruptedRollbackIncomplete(OSError):
+    """An earlier interrupted swap could not be fully put back on this run."""
+
+
 def recover_interrupted(install_dir: Path, to_version: str = "?") -> str:
     """Before a new swap: finish whatever an earlier run left in `.update\\`."""
     ud = install_dir / UPDATE_DIR
@@ -433,10 +437,15 @@ def recover_interrupted(install_dir: Path, to_version: str = "?") -> str:
     state = (j or {}).get("state")
     if state == "swapping":
         ok, detail = rollback(install_dir, j)
-        update_log.log("FAILED", str(j.get("to_version") or to_version),
-                       f"an earlier swap was interrupted; rolled back on the next run: {detail}")
         if not ok:
-            raise OSError(f"an earlier interrupted update could not be rolled back: {detail}")
+            # `.update` is the only way back now (bug R2): swap_in keeps it
+            update_log.log("FAILED", str(j.get("to_version") or to_version),
+                           f"an earlier swap was interrupted and could not be rolled back yet: "
+                           f"{detail}; kept {UPDATE_DIR} for the next run")
+            raise InterruptedRollbackIncomplete(
+                f"an earlier interrupted update could not be rolled back yet: {detail}")
+        update_log.log("FAILED", str(j.get("to_version") or to_version),
+                       f"an earlier swap was interrupted; rolled back on this run: {detail}")
         return "rolled back an interrupted update"
     _rmtree(ud)        # "staging", "swapped", or no journal: nothing to keep
     return f"cleared an old {UPDATE_DIR} ({state or 'no journal'})"
@@ -482,6 +491,12 @@ def swap_in(payload_zip: Path, install_dir: Path, from_version: str, to_version:
                 zf.extract(info, staging)
                 if n % 25 == 0 or n == len(infos):
                     progress(0.5 * n / len(infos), f"Unpacking {Path(info.filename).name[:40]}")
+    except InterruptedRollbackIncomplete as e:
+        # Not "nothing was changed", and never `_rmtree(ud)`: `.update\old`
+        # and the journal are the only way back for the files still out
+        # (bug R2, reviver round 1). recover_interrupted logged it; the next
+        # run tries again.
+        return False, str(e)
     except Exception as e:      # BadZipFile (CRC), zlib.error, OSError, a bad layout
         # nothing installed has been touched yet
         why = too_long(ud / "new", [i.filename for i in infos]) or f"{type(e).__name__}: {e}"

@@ -29,6 +29,19 @@ deferred".
   again by itself every few minutes: the update button shows "Retry vX" and says
   why it failed. A newer release still updates normally. A path too long for
   Windows is now named as such in the log.
+- **The update from v1.065 actually completes.** Every version up to v1.066
+  handed over to the installer but never finished closing (its tray icon kept
+  it alive); old installers force-killed every copy of the app to hide that.
+  The new installer gives the copy that handed over 20 seconds, then closes
+  exactly that one, and v1.066 itself now closes cleanly. Found by the first
+  update drill.
+- **A message box or file picker counts as busy**, so an update never closes
+  the app under one.
+- **A phone upload that stalls cannot hold updates off for the session**, and a
+  device without the pairing token cannot either.
+- **An update interrupted twice keeps its way back** instead of deleting it.
+- **After a failed install, an older version's update checks are switched off
+  for that session in a way that can never reach any server.**
 - **A Desktop shortcut you deleted stays deleted** after an update.
 - **The update path writes a log** (`~/.happy-photo-organizer/logs/update.log`),
   one line per step, from the app and from the installer.

@@ -108,7 +108,13 @@ def started(version: str, exe: str) -> None:
 # An installer relaunching an app older than v1.066 points that one session's
 # update checks here: such an app cannot remember a failure, and would hand
 # over again at once. (`HAPPY_UPDATE_REPO`, which every build reads at start.)
-PAUSED_REPO = "update-paused/after-a-failed-install"
+# It must name NO repo, ever (R3, reviver round 1): those builds check no
+# digest and run the first .exe of whatever release they find, and the first
+# value, "update-paused/after-a-failed-install", was a GitHub name anyone could
+# register. A space is not allowed in a GitHub name, and http.client refuses
+# the URL before DNS or a connection (measured on v1.065's own updater): the
+# app says "offline" for that session.
+PAUSED_REPO = "update paused/after a failed install"
 
 
 def attempt_path() -> Path:

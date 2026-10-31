@@ -145,16 +145,46 @@ function Read-UpdateLog([string]$Path) {
   return $out
 }
 
-function Wait-ForLogLine([string]$Path, [int]$AfterLine, [scriptblock]$Match, [int]$TimeoutSec) {
-  # the first parsed line after line number AfterLine for which Match is true
-  $deadline = (Get-Date).AddSeconds($TimeoutSec)
+function Wait-ForLogLine([string]$Path, [int]$AfterLine, [scriptblock]$Match, [int]$TimeoutSec,
+                         [scriptblock]$GiveUp = $null, [int]$GiveUpGraceSec = 120,
+                         [scriptblock]$Progress = $null, [int]$ProgressSec = 60) {
+  # The first parsed line after line number AfterLine for which Match is true.
+  # GiveUp: a line after which Match cannot come any more (an installer's
+  # terminal FAILED); the wait then ends GiveUpGraceSec later instead of at
+  # TimeoutSec. Run 1 waited 27 minutes after one. Progress: called with the
+  # seconds waited, every ProgressSec, so a long wait is never silent.
+  $start = Get-Date
+  $deadline = $start.AddSeconds($TimeoutSec)
+  $nextProgress = $start.AddSeconds($ProgressSec)
+  $gaveUp = $false
   while ((Get-Date) -lt $deadline) {
     foreach ($e in (Read-UpdateLog $Path)) {
-      if ($e.N -gt $AfterLine -and (& $Match $e)) { return $e }
+      if ($e.N -le $AfterLine) { continue }
+      if (& $Match $e) { return $e }
+      if ($GiveUp -and -not $gaveUp -and (& $GiveUp $e)) {
+        $gaveUp = $true
+        $g = (Get-Date).AddSeconds($GiveUpGraceSec)
+        if ($g -lt $deadline) { $deadline = $g }
+      }
+    }
+    if ($Progress -and (Get-Date) -ge $nextProgress) {
+      & $Progress ([int]((Get-Date) - $start).TotalSeconds)
+      $nextProgress = (Get-Date).AddSeconds($ProgressSec)
     }
     Start-Sleep -Milliseconds 500
   }
   return $null
+}
+
+function Get-LastLine([string]$Path) {
+  # the last non-empty line of a file another process may be appending to; '' if none
+  # (assigned, never piped: Read-SharedLines returns ,$array - see H1)
+  if (-not (Test-Path -LiteralPath $Path)) { return '' }
+  try { $all = Read-SharedLines $Path } catch { return '' }
+  for ($i = $all.Count - 1; $i -ge 0; $i--) {
+    if ([string]$all[$i] -match '\S') { return [string]$all[$i] }
+  }
+  return ''
 }
 
 function Get-LogLineCount([string]$Path) {

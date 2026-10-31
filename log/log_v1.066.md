@@ -14,7 +14,8 @@ task and the test repo later."* (Nick, 2026-10-30.)
   `digest`, hashes the download (`REFUSED` + delete on a mismatch, and that tag+hash is not fetched again), and
   hashes it once more right before running it. The download URL must be https on the real feed.
 - **U5 — an update waits while the app is busy.** Busy = a batch running, a phone job arriving (from its first
-  byte: `jobshot_server.do_POST` counts it), Step 3 holding folders that are not filed yet, or any dialog open.
+  byte: `jobshot_server.do_POST` counts it), Step 3 holding folders that are not filed yet, or any dialog open (native message boxes and pickers too
+  since R4: Tk keeps firing timers inside them).
   The worker re-checks every 60 s and installs on its own once idle. "Install now" refuses while busy and says why.
   The confirm dialog no longer promises that Step 3 survives an update.
 - **U3, U4 — the installer replaces the app folder exactly, with a way back** (`core/install_swap.py`):
@@ -124,6 +125,20 @@ been red since `drills/` was committed: the earlier 220/220 run came before thos
 - Staged into `C:\Users\Public\HPO-drill` + `Public\Drills\HPO.cmd`. The 09:57 runner pass is still open in `drill`, so
   it picks the launcher up after ShipMonitor and EMR.
 - Suite: **226/226** under the process watcher: no HPO process started, and no `logs` folder in Nick's profile.
+
+## Drill run 2 (11:57, the D1-only candidate `ba55637f`) and R2–R7
+
+**Run 2:** the bridge went through for the first time.
+- The installer logged `HANDOVER 1.066 the app that handed over (pid 31644) had not exited after 20 s; ended it`,
+  then `STAGED`, `SWAPPED`, and `STARTED 1.066` at 12:05:28.
+- Every check up to the busy step passed: `real_update_path`, `new_version_running`, `start_from_released_build`,
+  `one_process`, `relaunched_itself`, `one_install`, `tree_matches_fresh_install` (1,899 files identical),
+  `shortcuts_open_new`, `user_data_intact`, `no_update_loop`, `unknown_is_not_no`, `bad_download_refused`,
+  `sees_next_release`.
+- Its receipt pins `ba55637f`. That build will not ship (R2–R7 change the bytes), so the run is evidence only.
+
+**R2–R7 (Nick: "Fix R2–R7 too"):** fixed as tabled in `bug/bug_v1.066.md`. Each has a test, and the app-side ones
+were mutation-checked. The harness pieces were tested on scratch copies (14/14 + 31/31).
 
 ## Found by smoke-testing the built installer (before any release)
 

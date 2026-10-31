@@ -130,6 +130,12 @@ function Invoke-FreshInstall([string]$Setup, [string]$Into, $M) {
   return ($p.ExitCode -eq 0)
 }
 
+function Get-FromDiagnostics($M) {
+  # v1.065's updater breadcrumbs: why it did or did not fetch, download, hand over.
+  # Reset deletes them, and Nick's account cannot read %TEMP% here (run 1, R7).
+  return @(Join-Path $env:TEMP $script:HpoBreadcrumbs)
+}
+
 function Get-FromRouteEvidence($M) {
   # v1.065 writes no update.log; its updater leaves breadcrumbs in %TEMP%.
   # Evidence only if it asked the test repo itself and THEN fetched from it,
