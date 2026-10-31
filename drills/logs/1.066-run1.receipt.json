@@ -1,0 +1,84 @@
+{
+    "schema":  "update-drill/1",
+    "profile":  "desktop-self-update",
+    "app":  "Happy Photo Organizer",
+    "from_version":  "1.065",
+    "from_artifact_sha256":  "46902c7913499f5dd303825593d2e10781abe237e1d5b6101c5f1fe861bccb88",
+    "to_version":  "1.066",
+    "assets":  [
+                   {
+                       "name":  "HappyPhotoOrganizerSetup.exe",
+                       "sha256":  "bf7f2efdf4b4cd08aa2a76bf9703c41c0911b2901c683c2ca10d5c9c202c79a1"
+                   }
+               ],
+    "drilled_at":  "2026-10-31T03:35:45Z",
+    "machine":  "NICKSUKSANTR, Windows user \u0027drill\u0027",
+    "layout":  "v1.065 installed by its own released setup (--silent: the default folder C:\\Users\\drill\\AppData\\Local\\HappyPhotoOrganizer, the layout the GUI setup leaves with its default boxes ticked), as standard user \u0027drill\u0027; shortcuts: C:\\Users\\drill\\Desktop\\Happy Photo Organizer.lnk; C:\\Users\\drill\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Happy Photo Organizer.lnk; C:\\Users\\drill\\AppData\\Roaming\\Microsoft\\Internet Explorer\\Quick Launch\\User Pinned\\TaskBar\\Happy Photo Organizer.lnk",
+    "drill_log":  "drills/logs/1.066.log",
+    "bootstrap":  false,
+    "routes":  [
+                   "v1.065\u0027s own updater via repo-env (nicksuksantr-pixel/hpo-update-drill)",
+                   "loopback feed 127.0.0.1:47665 for every check made on v1.066"
+               ],
+    "checks":  {
+                   "real_update_path":  {
+                                            "result":  "fail",
+                                            "evidence":  "the harness started only the FROM v1.065 exe; its own updater fetched: [2026-10-31 10:05:50] _fetch_latest_release: GET https://api.github.com/repos/nicksuksantr-pixel/hpo-update-drill/releases/latest | [2026-10-31 10:05:51] download_installer start: url=https://github.com/nicksuksantr-pixel/hpo-update-drill/releases/download/v1.066/HappyPhotoOrganizerSetup.exe dest=C:\\Users\\drill\\.happy-photo-organizer\\updates\\HappyPhotoOrganizerSetup-v1.066.exe expected_size=91686951 | [2026-10-31 10:07:03]   attempt 1: SUCCESS — 91,686,951 bytes; then the TO installer: "
+                                        },
+                   "start_from_released_build":  {
+                                                     "result":  "fail",
+                                                     "evidence":  "not measured: the drill stopped before this check"
+                                                 },
+                   "new_version_running":  {
+                                               "result":  "fail",
+                                               "evidence":  "not measured: the drill stopped before this check"
+                                           },
+                   "one_process":  {
+                                       "result":  "fail",
+                                       "evidence":  "not measured: the drill stopped before this check"
+                                   },
+                   "one_install":  {
+                                       "result":  "fail",
+                                       "evidence":  "not measured: the drill stopped before this check"
+                                   },
+                   "tree_matches_fresh_install":  {
+                                                      "result":  "fail",
+                                                      "evidence":  "not measured: the drill stopped before this check"
+                                                  },
+                   "shortcuts_open_new":  {
+                                              "result":  "fail",
+                                              "evidence":  "not measured: the drill stopped before this check"
+                                          },
+                   "relaunched_itself":  {
+                                             "result":  "fail",
+                                             "evidence":  "not measured: the drill stopped before this check"
+                                         },
+                   "user_data_intact":  {
+                                            "result":  "fail",
+                                            "evidence":  "not measured: the drill stopped before this check"
+                                        },
+                   "no_update_loop":  {
+                                          "result":  "fail",
+                                          "evidence":  "not measured: the drill stopped before this check"
+                                      },
+                   "sees_next_release":  {
+                                             "result":  "fail",
+                                             "evidence":  "not measured: the drill stopped before this check"
+                                         },
+                   "bad_download_refused":  {
+                                                "result":  "fail",
+                                                "evidence":  "not measured: the drill stopped before this check"
+                                            },
+                   "unknown_is_not_no":  {
+                                             "result":  "fail",
+                                             "evidence":  "not measured: the drill stopped before this check"
+                                         }
+               },
+    "not_covered":  [
+                        "profile path: the drill account is plain ASCII \u0027drill\u0027 (C:\\Users\\drill); the ship PC\u0027s Windows username has not been read, so a profile path with a space or Thai characters is NOT covered by this drill (UPDATE_DRILL 5.2)",
+                        "the \u0027Install now\u0027 button: in v1.066 it matters only while the app is busy, where it refuses (unit test test_the_install_button_refuses_while_busy_and_says_why), so it is not driven here",
+                        "v1.066\u0027s own updater against real GitHub: every check on v1.066 runs through the loopback feed; tools/publish_release.py reads the real endpoint back after publishing",
+                        "a failed install: the attempt record (update-attempt.json), no automatic retry of that version, the Retry button, and a pre-v1.066 app relaunched with its update checks paused for that session are unit-tested only; the drill runs the success path"
+                    ],
+    "stopped":  "TO never started within 1800 s - see the update log lines above"
+}
