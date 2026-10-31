@@ -282,7 +282,7 @@ const u16 = (s) => [...s].map((c) => c.replace(/[.*+?^${}()|[\]\\\/-]/g, '\\$&')
 export function secretProblems(root, { staged = false, all = false, untracked = false, paths = [], cwd = root, refs = ['HEAD'], message = '', exclude = [] } = {}) {
   const out = []; const dir = cwd || root
   const probe = gitAt(dir, ['rev-parse', '--show-toplevel'])
-  if (probe.error) return [fs.existsSync(dir) ? `could not run git (${probe.error.message}), so nothing here can be judged: a commit or a publish waits until git runs` : `the folder ${dir} does not exist, so nothing there can be judged`]
+  if (probe.error) return [fs.existsSync(dir) ? `${CANNOT}could not run git (${probe.error.message}), so nothing here can be judged: a commit or a publish waits until git runs` : `${CANNOT}the folder ${dir} does not exist, so nothing there can be judged`]
   if (probe.status !== 0) return []                       // not a repository: git refuses the command by itself
   const top = String(probe.stdout).trim(); const sp = paths.length ? ['--', ...paths] : []
   if (message) for (const k of keysInText(message)) out.push(`the commit message holds ${describeKey(k)}: a key is never committed, not even in a message`)
@@ -394,6 +394,27 @@ function bodyOf(w) {
   if (/^(bash|sh|zsh|dash|ksh)$/.test(exe)) { const i = w.findIndex((x) => x === '-c'); return i >= 0 ? w.slice(i + 1).join(' ') : null }
   return null
 }
+/** The data bodies a command carries: heredoc bodies (<<TAG … TAG) and PowerShell here-strings (@' … '@). */
+export function dataBodies(cmd) {
+  const lines = String(cmd || '').split('\n'); const out = []
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    const hd = /(?<!<)<<(?!<)(-?)\s*(['"]?)([A-Za-z_][\w.-]*)\2/.exec(line)
+    if (hd && !insideQuotes(line, hd.index)) {
+      const body = []; let j = i + 1
+      while (j < lines.length && (hd[1] ? lines[j].replace(/^\t+/, '') : lines[j]).trimEnd() !== hd[3]) { body.push(lines[j]); j++ }
+      out.push(body.join('\n')); i = j; continue
+    }
+    const hs = /@(['"])\s*$/.exec(line)
+    if (hs) {
+      const body = []; let j = i + 1
+      while (j < lines.length && !lines[j].startsWith(hs[1] + '@')) { body.push(lines[j]); j++ }
+      out.push(body.join('\n')); i = j
+    }
+  }
+  return out
+}
+const CANNOT = 'cannot check: '                            // a refusal because the gate could not READ, not because it found a key
 /** `git commit` / `git push` in a command, with the folder each runs in, what the same line staged before it, the
  *  message, the pathspecs. A `cd` carries forward; a folder held in a variable is reported, never guessed. */
 export function gitWriteIntents(cmd, cwd = '.') {
@@ -717,14 +738,18 @@ export function judge(cmd, cwd) {
   // #2.1 — `hard` problems are keys and secrets: Nick's release note never waives them
   const hard = []
   for (const it of gitWriteIntents(cmd, cwd || '.')) {
-    if (it.unknownDir) { hard.push(`${it.kind}: cannot read the folder "${it.seg}" runs in (a variable, or a cd the gate cannot follow); write it literally so the right repo is scanned`); continue }
+    if (it.unknownDir) { hard.push(`${CANNOT}${it.kind}: the folder "${it.seg}" runs in is a variable or a cd the gate cannot follow; write the path literally so the right repo is scanned`); continue }
     if (it.gitExe) GIT = it.gitExe
     const dir = it.dir || cwd || root; const r = repoRoot(dir)
-    if (!fs.existsSync(dir)) { hard.push(`${it.kind}: the folder "${it.seg}" runs in does not exist (${dir}); write the path the shell will really use`); continue }
+    if (!fs.existsSync(dir)) { hard.push(`${CANNOT}${it.kind}: the folder "${it.seg}" runs in does not exist yet (${dir}); run the mkdir/init/cd in its own command first, then commit in a second one`); continue }
     if (it.kind === 'commit') {
       let message = it.message || ''; const paths = [...it.paths]
-      if (it.messageFile) { const m = it.messageFile === '-' ? '' : read(path.resolve(dir, it.messageFile)); if (!m) hard.push(`commit: cannot read the message in ${it.messageFile}; give it with -m`); else message += '\n' + m }
-      if (it.pathsFile) { const m = it.pathsFile === '-' ? '' : read(path.resolve(dir, it.pathsFile)); if (!m) hard.push(`commit: cannot read --pathspec-from-file ${it.pathsFile}; name the paths on the line`); else paths.push(...m.split(/\r?\n/).filter(Boolean)) }
+      if (it.messageFile === '-') {                                             // the message comes from stdin: readable only when a heredoc/here-string on this command feeds it
+        const bodies = dataBodies(cmd)
+        if (bodies.length) message += '\n' + bodies.join('\n')
+        else hard.push(`${CANNOT}commit: the message comes from stdin (-F -) through a pipe the gate cannot read; use -F <file>, -m, or a heredoc on the same command`)
+      } else if (it.messageFile) { const m = read(path.resolve(dir, it.messageFile)); if (!m) hard.push(`${CANNOT}commit: the message file ${it.messageFile} cannot be read; give the message with -m or a readable -F <file>`); else message += '\n' + m }
+      if (it.pathsFile) { const m = it.pathsFile === '-' ? '' : read(path.resolve(dir, it.pathsFile)); if (!m) hard.push(`${CANNOT}commit: --pathspec-from-file ${it.pathsFile} cannot be read; name the paths on the line`); else paths.push(...m.split(/\r?\n/).filter(Boolean)) }
       hard.push(...secretProblems(r, { staged: true, all: it.all || paths.length > 0, untracked: it.untracked || false, paths, cwd: dir, message }).map((p) => `commit: ${p}`))
     } else {
       // a commit earlier on the line replaces files in HEAD: those are judged as they will land, not as HEAD has them now
@@ -809,14 +834,18 @@ Repo: ${root}
 Only Nick can waive it, once, by having ~/.claude/release-approval.json written with this tag.
 A publish script reaches that note by naming its tag: node tools/release-gate.mjs --check --tag <tag> <assets>`
 
-const KEY_MESSAGE = (hard, root) => `RULE #2.1 — KEY BLOCKED: a free key may be built in, never committed; a paid key is never built in.
-${hard.map((p) => ' • ' + p).join('\n')}
+const KEY_MESSAGE = (hard, root) => (hard.every((p) => p.startsWith(CANNOT))
+  ? `RULE #2.1 — CANNOT CHECK: no key was found; the gate could not read what it must scan, so this command does not run as written.
+${hard.map((p) => ' • ' + p.slice(CANNOT.length)).join('\n')}
+Write the folder and the message so the gate can read them (a literal path; -m or -F <file> or a heredoc on the same command), then run it again.`
+  : `RULE #2.1 — KEY BLOCKED: a free key may be built in, never committed; a paid key is never built in.
+${hard.map((p) => ' • ' + p.replace(CANNOT, 'cannot check — ')).join('\n')}
 
 A key reaches a build only from %USERPROFILE%\\.embed-keys\\<RepoFolder>.json, registered free by Nick for that one repo
 (node tools/register-key.mjs free --repo <RepoFolder> --project "<Google project>" --no-billing; fingerprints only, one key
 per app, a Google project with no billing account). Check by hand: node tools/release-gate.mjs --scan [--staged] [<artifact>…]
 Standard: memory/KEY_EMBED.md        Repo: ${root}
-Nick's release note does not waive this; a leak is not a release decision.`
+Nick's release note does not waive this; a leak is not a release decision.`)
 
 // ── entry points ─────────────────────────────────────────────────────────────────────────────────
 const isMain = !!process.argv[1] && path.resolve(process.argv[1]).toLowerCase() === fileURLToPath(import.meta.url).toLowerCase()

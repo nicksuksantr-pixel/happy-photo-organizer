@@ -153,12 +153,32 @@ Each check is `{"result": "pass" | "fail" | "n/a", "evidence": "<what was measur
 
 Add a check when a new failure class appears. That means adding it here **and** in `release-gate.mjs` `PROFILES`.
 
+**Added 2026-11-01 (EMR v0.5.6, round-2 review) — in the receipt from now, required by the gate for drills dated after
+2026-11-15 (desktop profiles):** `never_elevated` — with a shortcut ticked "Run as administrator" just before the update,
+every shortcut reads unelevated after it, measured before any relaunch (a still-elevated shortcut hangs the drill at UAC;
+v0.5.4's move kept the flag) · `no_leftover` — nothing left in the app's "to retire" list and no old install folder on the
+Desktop or beside the fixed folder after the update, drilled with the blocking condition present (an unwritable Desktop
+shortcut, as on Nick's PC); a clean-up that must wait says so to the user after N tries and retries while the app runs,
+not only at the next start (Nick's PC kept two folders for hours, 11-01). Every delete of an "old install" goes through
+ONE gate asked when the folder is noted and again right before deleting: a fixed drive, this account's profile, never a
+newer build, a USB stick, a share, OneDrive, another account, a junction or a checkout (EMR's two inherited MAJORs,
+5d22af5).
+
 ## 5 · The drill, step by step
 
-1. **FROM.** The version users actually run, normally the current Latest release. If the field may be older (a ship
-   PC whose version nobody has read), find out first: Nick reads it from the app. Until then, also drill from the
-   oldest version that could still be in use. An unknown field version is never assumed to be the Latest. Download
-   its release file and record its SHA-256.
+0. **Review the candidate before its first drill, and drill only a build that carries every fix known at that
+   moment.** The session reads the candidate's diff against `memory/CODE_REVIEW_RUBRIC.md` itself (0 agents) and lists
+   the known fixes in the log; `reviver` runs only when Nick types it (#26). A drill of an older candidate is evidence,
+   not a receipt (HPO 10-31: run 1 failed on a bug all three firms had found; 11-01: run 1 on the old candidate
+   counted for nothing; reviewing first saves one run of 11–41 min).
+1. **FROM is every version still in the field.** `drills/drill.json` carries `field_versions: [{version, where,
+   read_on, by}]`, kept by the project from Nick's reports and the `STARTED` lines; a unit whose version nobody has read,
+   or an entry older than 60 days, counts as the oldest listed. The release is drilled from the previous release AND
+   from every listed version older than it — one receipt per FROM, the extra ones named `drills/<to>.from-<from>.json`
+   with the log beside — or the release notes name the FROMs drilled and every other unit updates to the bridge first,
+   which stays `latest` until nobody is behind it. (HPO 11-01: Nick's PC went v1.065 → v1.067 at 00:16 on bytes drilled
+   only from 1.066; it worked by the luck of the same swap code. The gate's receipt-per-FROM check lands with the next
+   gate edit, ≤ 2026-11-08; the naming holds now.) Download each FROM's release file and record its SHA-256.
 2. **A clean machine state.** Use a separate local **standard** (not admin) Windows user account named `drill`.
    - Windows 11 Home has no Sandbox and no Hyper-V.
    - A per-user install in another account cannot touch Nick's real one.
@@ -179,7 +199,8 @@ Add a check when a new failure class appears. That means adding it here **and** 
      (`LimitBlankPasswordUse` = 1, measured; Remote Desktop is off), so `runas /user:drill` and a scheduled task
      that runs while signed out cannot work. **Every run is Switch user,** never `runas`. No session sets or
      changes the account's password.
-   - **Nick's whole part is one double-click** (Nick, 2026-10-31, after a day of multi-file drills with presses
+   **5.2 — the drill account, the watcher and the launcher contract.**
+   - **Nick's whole part: start the watcher once** (2026-11-01; before that, one double-click per drill — Nick, 2026-10-31, after a day of multi-file drills with presses
      in the app: "nothing is automatic, all by hand"). He switches user to `drill`, double-clicks **Run update
      drills** on its desktop, and switches back. Nothing else: no press in the app, no second file, no key between
      steps, no output to read or photograph. The button is the shared runner `C:\Users\Public\Drills\RUN-ALL.cmd`
@@ -198,8 +219,17 @@ Add a check when a new failure class appears. That means adding it here **and** 
      two minutes after staging" — the project tells the Director, who tells Nick. A 3-reviewer pass
      (2026-10-31) found every rule below by reading the real kits, so each is a failure that would have happened:
      - stage **one** launcher, `C:\Users\Public\Drills\<App>.cmd` (no spaces), only when the drill is ready, by
-       **copying** it in (a moved file keeps a DACL `drill` cannot read). Staging it IS joining the queue; then
-       tell Nick one line, "a drill is waiting in drill";
+       **copying** it in (a moved file keeps a DACL `drill` cannot read). **Staging it IS launching it** under the
+       watcher, so FAIL = STOP (#16) covers staging: diagnose before re-staging, never re-stage "as is", and the next
+       stage changes the drill's conditions and the receipt says what changed (SM run 5 repeated run 4 and lost the same
+       way, 10-31; HPO run 2 on a dead network would only have failed again, 11-01). Then write the staging in the
+       record; nothing is asked of Nick. The staging session waits at most `DRILL-TIMEOUT-MIN` (default 120) + 10
+       minutes for its `results.txt` line; silence past that is reported to the Director as "runner dead or stuck",
+       never waited out (HPO run 3 died with its runner and wrote no line, 10-31);
+     - a stage whose `out\<version>.json` was never collected is not cleared — collect it into `drills/logs/` first
+       (HPO copied run 2's out\ by hand at 23:25; under the watcher a hasty re-stage wipes the evidence);
+     - a driver-based kit (SM): the launcher names its driver's pid and the serve side stops when that pid is gone, so
+       a launcher whose driver died after staging never runs unattended;
      - name the harness by **absolute** path (`C:\Users\Public\<App>-drill\...`), never `%~dp0`: the runner runs
        the copy in `done\`;
      - **exit 0 only when every check passed**, and pass the harness's code on unchanged: `set rc=%errorlevel%`,
@@ -210,17 +240,21 @@ Add a check when a new failure class appears. That means adding it here **and** 
        is then disconnected, where simulated mouse and keyboard input does not work. Rehearse a GUI kit while
        Nick is away from the PC: in his live session his mouse and focus stole a click and a window twice
        (EMR, 2026-10-31); the retries that absorb it are not the proof. A bootstrap case that truly
-       needs a person carries `rem DRILL-NEEDS-NICK: <what to press>`; the runner runs it first and tells Nick to
-       stay. Tell Nick before staging it, with the number of presses. `rem DRILL-TIMEOUT-MIN: <n>` sets a longer
+       needs a person carries `rem DRILL-NEEDS-NICK: <what to press>` and is **never staged under the watcher** —
+       it runs with `RUN-ALL.cmd -Once` at a time Nick names, with the number of presses told beforehand. `rem DRILL-TIMEOUT-MIN: <n>` sets a longer
        deadline than the default 120 minutes. Every wait inside the harness has its own limit;
      - the harness takes the busy lock itself (below) and **waits** for a held lock with a limit rather than
-       failing at once. A session never claims or removes the lock by hand;
+       failing at once; **one launcher claims the lock once, with its own pid, and holds it across every drill it
+       runs** — a harness inside it never claims or releases (EMR lost the lock between two of its drills and
+       NotiWallet took it 2 s later, 10-31). A session never claims or removes the lock by hand;
      - read the result from `results.txt` and `<App>-drill\out\`, and ask Nick nothing about it.
      Drills that run in Nick's own account (Android on the emulator, SM's driver half) stage no launcher here; they
      only share the busy lock.
    - **One drill at a time on this PC.** The harness itself creates `C:\Users\Public\drill-busy.txt` atomically
-     (`CreateNew`, or `'wx'` in node) when the run starts, never while you build or stage. It writes
-     `<App> pid <pid> started <time>`, with the pid of the process that lives for the whole run, and removes the
+     (`CreateNew`, or `'wx'` in node) when the run starts, never while you build or stage. It writes ONE line,
+     written by the kit's one function: `<App> pid <pid> started <local time with offset, e.g. 2026-11-01T01:23:45+07:00>
+     <what runs>` — a reader accepts the old UTC `…Z` form until every app is on the kit (three formats stood in the
+     file on 10-31 and the Director read a UTC stamp as local). The pid is the process that lives for the whole run, and the harness removes the
      file in a `finally`, on pass, fail and Ctrl-C, but only if the text is still its own. If the file exists,
      another drill is running, so wait. The pid is what tells a left-over lock from a running drill. The runner
      clears a lock whose pid is no longer running (it sees other accounts' processes), and one its own launcher
@@ -243,6 +277,9 @@ Add a check when a new failure class appears. That means adding it here **and** 
    - the hashes of every data file;
    - every shortcut's target;
    - the install file list.
+   When the released FROM itself needs a person to install (an elevating `--setup`), install it the one way that
+   never does, record that in `layout`, and the receipt says the verdict covers the update road only (SM v1.569,
+   10-31).
 3. **Serve TO** through the loopback feed (§3.1) and trigger the update through FROM's own path. Drill **each** path
    the release enables: the automatic one and the button, and **every delivery route** the field uses. SM, for
    example, has two: the Server updates from GitHub, and every station updates from its Server. Each check's
@@ -257,9 +294,25 @@ Add a check when a new failure class appears. That means adding it here **and** 
    - Serve a corrupted TO: it is refused, and FROM keeps working.
    - Serve TO to TO: there is no offer.
    - Serve a fake TO+1: it is offered.
+   **Judging user data.** A file the app makes from the user's data is judged by its SOURCE: the receipt says in words
+   what was byte-compared, what was derived and why it changes (a password file re-salted at every start, a pointer
+   file the drill switch moves), and an allow-list entry is never widened without naming the writer in the code
+   (SM 21:33 run: 13/14 with every row intact, 8e5b3f7f). A judge changed after a FAIL is committed WITH the test that
+   shows each source still fails, BEFORE the receipt (8e5b3f7f before 4ca655bc); re-judging the same sound measurement
+   is then the honest path, not a re-run.
 6. **Write the receipt** with the drill script, never by hand, as `drills/<version>.json`, with the log at
-   `drills/logs/<version>.log`. Then run `node tools/release-gate.mjs --validate drills/<version>.json`. Commit both,
-   then publish.
+   `drills/logs/<version>.log` (an extra FROM: `drills/<to>.from-<from>.json`). Optional fields the gate ignores but the
+   house reads: `drill_sessions` (the drill account's session state at each mark — Active/Disconnected — a fact, never a
+   check; SM 4ca655bc), `ram_free_gb_at_claim` and `ram_free_gb_min` (sampled every 15 s; a floor waived on every run is
+   not a floor — JS 11-01). Then run `node tools/release-gate.mjs --validate drills/<version>.json`. Commit both,
+   then publish — the publish script takes the notes' and assets' SHA from the receipt, never typed (EMR's v0.5.5 first
+   publish was refused on a pre-rebuild SHA; the gate caught it before the note was consumed).
+   **Clean up and close.** The drill's clean-up removes what it may and NAMES what it may not in the receipt notes; a
+   key file, token or password left anywhere readable fails the step; a staged installer it cannot delete (another
+   account's ACL) is removed by the session that staged it before the receipt is committed, and the chat_log says so
+   (SM ~23:4x: a WebView2 profile folder stopped `clean` with 1,283 files still there, 1631f5ea). A release is closed in
+   `log/` by Nick's one line from the field — which unit, which version, the STARTED line read back — or by the drilled
+   bootstrap route for Nick's own copy; until then V-Log says "released, not yet seen in the field".
    **Check that the log is really committed.** Flutter's template `.gitignore` and most Python ones carry `*.log`,
    which also hides `drills/logs/<version>.log`: the receipt goes in without its log, and the lock refuses a receipt
    whose `drill_log` is missing, so no other checkout (a clone, the cloud) can ship it. `git check-ignore -v
@@ -328,6 +381,11 @@ and for checks before a real release, at the session's judgment. ScanDocs still 
   effect is missing. Never tap a fixed number of times. The "isn't responding" dialog of ANY app on the image
   (NTWL run 9: the image's own Messages app, mid-typing) can cover the app under test, and the uiautomator dump
   then holds only the dialog: answer it with Wait on EVERY screen read, not only inside the tap-wait loop.
+- **Rehearse a screen-driven drill the day its script is written, and again whenever onboarding or the first screens
+  change; a string the drill taps changes in the same commit as the drill** (NTWL needed 10 rehearsals on 10-31 to reach
+  7/7; its pending splash-i18n fix renames the tapped button — that commit carries the drill change). Before a real
+  drill, run the receipt-writing path once (canned results through the writer, or a no-undef lint): JS BUG-021 passed
+  8/8 then died inside the receipt write, 9 min lost (913c724).
 - **A rehearsal is not a drill.** A receipt written for a test build carries `"rehearsal": true` and stays under
   `build/`; the lock refuses any receipt with that marker, so copying one into `drills/` cannot ship anything
   (NTWL, 2026-10-31).
@@ -347,7 +405,12 @@ on pass, fail and Ctrl-C, never removing another app's), and checks no `qemu-sys
 - assert versionCode, job count and content, and the same signing certificate;
 - launch, and check there is no FATAL in logcat.
 
-Only then `adb install -r` the exact drilled file to Nick's phone, written literally, or run the Play upload.
+Only then `adb install -r` the exact drilled file to Nick's phone, written literally, or run the Play upload. After the
+install the record (`log/` for the version, not the receipt, which is already committed) carries: `base.apk` pulled back
+with its SHA-256 = the receipt's asset; `firstInstallTime` unchanged; the `STARTED <version>` line; the user's record count
+before and after — from the app's own `STARTED` line (`records=<n>`) where the app writes it, else a slow read of the list
+that stops after two dry pages (JS's first fast read missed 6 of 28 jobs, 10-31); the phone found by `ro.serialno`, never
+a remembered ip:port.
 Never `flutter install`, `flutter run --release` or `gradlew install…Release` to the phone: they rebuild, so the bytes
 on the phone are not the drilled ones, and the lock refuses them. For Play, the FROM is the APK from the previous uploaded bundle (`bundletool build-apks --mode=universal`). The lock allows emulator installs, so the drill itself is never blocked.
 
@@ -358,7 +421,9 @@ on the phone are not the drilled ones, and the lock refuses them. For Play, the 
 shared drill lock, in PowerShell and in Node, with tests; `windows/` is HPO's kit verbatim plus EMR's unattended
 Tk driver (`drill-ui.ps1`); `android/` is the plan for the core still to be lifted from JobShot and NotiWallet.
 An app adopts it by COPYING the folder it needs into its own `drills/kit/` and writing an adapter, on a scratch
-copy first; nothing in production is touched. Its README says what is proven where. A fix to the kit goes to the
+copy first; nothing in production is touched. A dev rehearsal never runs in Nick's session while his copy of the app runs
+(the single-instance lock raises his window), uses a SHORT `-DevRoot` under `%TEMP%` (a path over 260 characters broke a zip
+extract) outside any checkout, and counts as evidence of nothing — only the `drill` account counts (EMR, 11-01). Its README says what is proven where. A fix to the kit goes to the
 master first (`memory/TO_PROMOTE.md` names the file and the change), never only to a copy.
 
 Four hand-written updaters are why every lesson had to be learned four times, so the drill must not be four
@@ -414,7 +479,8 @@ So each app crosses **once**, in this order:
    (SM v1.570, 2026-10-31: Nick chose to write the one-click driver first and drill with it hours later, with his
    own Ship Monitor kept closed meanwhile; the earlier "within the hour" was only a proxy for this). A failure
    means the fix ships at once, on the same waiver road.
-4. **From the next release on, every release is drilled before it ships, with no exceptions.**
+4. **From the next release on, every release is drilled before it ships, with no exceptions — from every version still
+   in the field (§5 step 1); a bridge that is replaced as `latest` before every unit crossed it is the gap this closes.**
 
 If the app's updater already has an override that can point at a separate public test repo (HPO's
 `HAPPY_UPDATE_REPO`), the bridge itself can be drilled first against that repo. Do that instead of the waiver.

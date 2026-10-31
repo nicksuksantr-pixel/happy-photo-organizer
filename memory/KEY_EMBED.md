@@ -8,7 +8,7 @@
 
 ## 0 · The rule in four lines
 
-1. An app may ship with a Gemini key built in, so the user never sees a key screen — **only a key from a Google Cloud
+1. **Nick names the apps that build a key in** (2026-11-01: "I say which project embeds; it is not a rule that an app must" — three today: JobShot, HPO, EMR). Such an app ships with a Gemini key built in, so the user never sees a key screen — **only a key from a Google Cloud
    project that has no billing account.** A key on a billed project is never built in, never in a repo, never in a build.
 2. **One key per app**, from its own Google project with no billing account (Nick, 2026-10-31: *"no billing, and three
    different keys"*). Name a new one `embed-free-<app>` so the name itself reminds that it never gets billing; an existing
@@ -39,7 +39,7 @@ What it does **not** change — say it, do not hide it:
 - **Free tier = Google may use the content, and human reviewers may read it** (Gemini API terms, 2026-03-23: content
   sent through unpaid services is used to improve Google's products; "do not submit sensitive, confidential, or personal
   information"). For HPO that is the user's photos, for EMR the ship's maintenance text. The app says so in one line in
-  About/Settings. A user who wants the paid-tier promise uses their own key (§4).
+  About/Settings.
 - A key inside a **public** artifact (HPO's installer on a public repo) is readable by the world. Allowed only because the
   key is free, restricted and disposable; prefer a private distribution when the app has one (JobShot: phone over adb).
 - Google retires the old `AIza…` Standard keys through 2026; AI Studio now issues `AQ.…` Auth keys. Any scan or validation
@@ -79,20 +79,24 @@ What it does **not** change — say it, do not hide it:
 ## 4 · In the app
 
 - **No key screen at first run.** The app starts working with the built-in key.
-- **No own-key field, in any app — the built-in key is the only key** (Nick, 2026-10-31, first to EMR: *"no place for
-  others to enter a key at all — we built it in and hid it; remove that field and everything about entering a key"*,
-  then to the Director: *"ข้อหนึ่งถูกต้อง"* = that is the house answer). Every path that reads a pasted or stored key goes
-  — the field, Paste/Show/Test, the per-user key file, every message that points to Settings, hidden shortcuts included.
-  The escape when the shared key is withdrawn or out of quota is the next release (§7), which is why the next bullet is
-  not optional. An app shipped before this answer (HPO v1.067 with a hidden Ctrl+Shift+K path) removes it in its next
-  version; a candidate not yet staged removes it before the drill.
+- **An app that builds a key in has no own-key field or stored-key path — the built-in key is its only key** (Nick,
+  2026-10-31, first to EMR: *"no place for others to enter a key at all — we built it in and hid it; remove that field
+  and everything about entering a key"*, then to the Director: that is the house answer). Every path that reads a pasted
+  or stored key goes — the field, Paste/Show/Test, the per-user key file, every message that points to Settings, hidden
+  shortcuts included. The escape when the shared key is withdrawn or out of quota is the next release (§7), which is why
+  the next bullet is not optional. An app shipped before this answer (HPO v1.067 with a hidden Ctrl+Shift+K path)
+  removes it in its next version; a candidate not yet staged removes it before the drill.
+- **An app that builds no key in keeps its own-key field** (Nick, 2026-11-01, in NotiWallet's chat: NotiWallet keeps the
+  field — the user's own key is its only AI path and its payload is users' bank notifications). Such an app is outside
+  this standard's embed clauses (registry, embed-free project, `embeds_key`) and inside #2 and the commit/push gate.
+  Whether an app whose payload is personal or financial may ever build a free key in is Nick's line to draw (§8a).
 - **A dead key never breaks the app.** On 400/401/403/429 or no network the AI step reports one readable line
   ("AI unavailable: key withdrawn / today's shared quota used up / offline — the app works without it; update when a
   new version is out") and everything else keeps working. Never a crash, never a silent "done" with every row failed
   (HPO found exactly that gap), never the key in a log or an error text.
 - The app logs "ai: key built in" at most; it never logs the key, not even masked.
-- One line in About/Settings: *"AI runs on a free Google key shared by all installs; Google may use what is sent to
-  improve its products. Use your own key in Settings › Advanced for a private quota."*
+- One line in About/Settings, one sentence: *"AI runs on a free Google key shared by all installs; Google may use what is
+  sent to improve its products."* (nothing about an own key — there is no field).
 - The build **refuses to produce a keyless app with a hidden field** (HPO's spec exits 1 without the key file). An
   explicit override exists only for a test build, and a test build never ships (#28: rehearsal receipts are refused).
 
@@ -112,7 +116,8 @@ What it refuses, with the reason printed and no way past it in the command line:
   as a note and exits 0 — an unregistered, paid, retired or other app's key still exits 1).
 - A build that carries a key is released from Nick's PC, where `~/.embed-keys` is; a machine without the registry refuses it
   and says so (a cloud instance never releases a keyed build).
-- Not seen: `gh pr create` (pushes a branch), `Start-Process git`, history under a pushed tree — the §8 check covers history by hand.
+- Not seen: `gh pr create` (pushes a branch), `gh repo create --push`, `Start-Process git`, history under a pushed tree — the §8 check covers history by hand.
+- A refusal because the gate could not READ what it must scan (a folder in a variable, a folder that does not exist yet, a message on stdin from a pipe) prints "RULE #2.1 — CANNOT CHECK" with the way to write the command so it can, never "KEY BLOCKED" (three sessions, 11-01). `git commit -F -` with a heredoc on the same line is read as the message.
 - The note (`~/.claude/release-approval.json`) is read only after the key checks pass and is never consumed by one.
 - A desktop installer compresses its payload, so the byte scan sees nothing inside an Inno/MSI package: for those the
   guard is the receipt (§6) plus `embeds_key: true` in `drills/drill.json`. Set it the day the app builds a key in.
@@ -130,8 +135,7 @@ The receipt (`drills/<version>.json`) of an app that builds a key in carries:
   (JobShot searches TO's `libapp.so` for the key file's value; HPO's exe writes `logs\embedded-key-check.json`), never a value
   copied from the registry — a copied fingerprint would make a wrong key "pass".
 - These receipt problems are never waived by Nick's release note: the note waives a drill, not the key proof.
-- `embedded_key_works` = one real call made by the **updated** build with its **built-in** key (the user's own key cleared
-  for that run). That is the only proof the key reached the shipped bytes and the shipped code reads it. A build that
+- `embedded_key_works` = one real call made by the **updated** build with its **built-in** key. That is the only proof the key reached the shipped bytes and the shipped code reads it. A build that
   was made with the "no key" override, a masked key that does not unmask, a wrong `_MEIPASS` path, a stale
   `dart-define` — every one of these fails this check and nothing ships.
 - `drills/drill.json` gets `"embeds_key": true` so a receipt that forgets the field is refused.
@@ -157,6 +161,7 @@ A key that leaks, is abused, or is found in the wrong place:
 - [ ] `drills/drill.json` has `"embeds_key": true`
 - [ ] the receipt has `embedded_key.fp` = the registry entry, and `embedded_key_works` passed from the updated build
 - [ ] no key screen, no own-key field or path anywhere (hidden shortcuts included); the About/Settings line present
+- [ ] the key's project has no billing (Nick's word in the registry, `--no-billing`); an API restriction to the Generative Language API is recommended, not required (Nick 11-01: HPO's key is a normal key like the others, no card)
 - [ ] a dead key: the app says one line and goes on (tested with a well-formed fake key, not by reading the code)
 - [ ] `git log --all -G'AIza[0-9A-Za-z_-]{35}|AQ\.[0-9A-Za-z_-]{30,}'` finds nothing in history (a public repo: this is the one that matters)
 
@@ -169,7 +174,10 @@ A key that leaks, is abused, or is found in the wrong place:
 - 2026-10-31 Nick, asked whether the `embed-free-*` projects should live in a separate Google account from the paid one:
   the account they are in **has no billing and no card at all** (checked) — so an abuse report cannot reach a paid
   project through it. Closed.
-- 2026-10-31 Nick: **no own-key field in any app** (§4) — the house answer, not an EMR exception.
+- 2026-10-31 Nick: **no own-key field in an app that builds a key in** (§4) — the house answer, not an EMR exception.
+  *Corrected 2026-11-01:* "in any app" overreached — NotiWallet (no built-in key, bank data) keeps its field on Nick's word
+  in its chat ("ยกเว้นได้"), and a server (LTB, key in Secret Manager) builds nothing in.
+- 2026-11-01 Nick: **which app embeds a key is his call, app by app — never a rule that an app must** ("ส่วนที่ว่าโปรเจกต์ไหนจะให้ฝังคีย์ นิกจะเป็นคนบอกเอง"); three embed today. So no house line on payload classes is needed: an app asks Nick, and his answer settles it.
 - Staging the drilled installer in `C:\Users\Public` carries the built-in key by design: that is the product, the same
   bytes the release carries, not a key file — no clash with "never stage a key or token in Public" (HPO asked, 2026-10-31).
 
@@ -177,8 +185,9 @@ A key that leaks, is abused, or is found in the wrong place:
 
 - Not a licence to put a **paid** key anywhere but Nick's own `.env`. #2 stands.
 - Not a promise of secrecy: the key is public the moment the build is. Everything above is what makes that acceptable.
-- Not a server. A proxy that holds the key on Nick's side would be the only real protection; it needs an always-on
-  reachable machine, which the house does not run. If that changes, this standard is revisited.
+- Not a server standard. A server that reads its key at runtime from a secret store (LTB: Secret Manager) builds nothing
+  in: no registry entry, no embed-free project, no About line; #2 (the key never enters git) and the commit/push gate
+  apply. A proxy that holds a key for a client app would be a different design, not yet in the house.
 
 ---
 *2026-10-31 · written the evening the first three apps built a key in · enforced by `tools/release-gate.mjs` (tests in
