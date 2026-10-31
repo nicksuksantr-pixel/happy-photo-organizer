@@ -75,6 +75,9 @@ def _never_run_an_installer(path, silent=True, version=""):
 _urlreq.urlopen = _loopback_only
 _UPDATE_CACHE = Path(tempfile.mkdtemp(prefix="hpo-test-update-cache-"))
 _updater.cache_dir = lambda: _UPDATE_CACHE
+# ...and never the app's breadcrumbs in %TEMP%, which Nick's installed app also
+# writes and a person reads after a failed update (2026-11-01).
+_updater._LOG_PATH = _UPDATE_CACHE / "updater-breadcrumbs.log"
 _REAL_LAUNCH_INSTALLER = _updater.launch_installer_and_exit
 _updater.launch_installer_and_exit = _never_run_an_installer
 
@@ -5902,6 +5905,8 @@ def _release_tool():
             Path(__file__).resolve().parents[1] / "tools" / "publish_release.py")
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
+        if hasattr(mod, "GATE_LOG"):        # the gates' own breadcrumbs: not in %TEMP% either
+            mod.GATE_LOG = _UPDATE_CACHE / "publish-gates.log"
         _RELEASE_TOOL.append(mod)
     return _RELEASE_TOOL[0]
 
@@ -6123,6 +6128,28 @@ def test_the_app_gate_waits_for_the_updater_to_catch_up_too():
                          lambda: mod.gate_the_app_would_offer_it("1.063", "1.062"),
                          delays=(1, 2), sleep=slept.append)))
     assert slept == [1, 2] and "invisible to the people on it" in msg, (slept, msg)
+
+
+def test_the_publish_gates_keep_the_apps_own_logs_clean():
+    """2026-11-01: publishing v1.067 left `UPDATE CHECK 1.066 ...`, `UPDATE
+    CHECK 0 ...` and `FOUND` lines in Nick's real update.log, and the
+    re-download's breadcrumbs in the app's %TEMP% log - the two files a person
+    reads after a failed update, now saying things his app never did. The gates
+    run the app's own updater on the dev PC, so they keep its logs out of the
+    app's files, and put both switches back as they found them."""
+    mod = _release_tool()
+    log, crumbs = _update_log.log_path(), _updater._LOG_PATH
+
+    def text(p):
+        return p.read_text(encoding="utf-8") if p.exists() else ""
+
+    before = (text(log), text(crumbs))
+    _with_github(_answers(_release("v1.063")), lambda: _quietly(
+        lambda: mod.gate_the_app_would_offer_it("1.063", "1.062")))
+    assert (text(log), text(crumbs)) == before, "a publish gate wrote into the app's logs"
+    assert _update_log._ENABLED and _updater._LOG_PATH == crumbs, "a switch was left changed"
+    # the same holds for the gate that re-downloads the asset
+    assert hasattr(mod.gate_the_download_is_the_drilled_file, "__wrapped__")
 
 
 def test_the_version_gate_refuses_a_binary_that_is_behind_its_source():

@@ -95,3 +95,24 @@ With own-key-first they would have kept spending that key, not the built-in one.
   - Tested in PS 5.1 with the guard lifted from the file: it refused on the LIVE run-3 lock
     (`Happy Photo Organizer | pid 31716 | drill | ...`) and on the runner's form, and let a dead pid, another app or
     an empty lock through.
+- **K15 - The publish gates wrote into Nick's real app logs (tooling, not shipped).** Publishing v1.067 (00:15)
+  left `UPDATE CHECK 1.066 ...`, `UPDATE CHECK 0 ...` and FOUND lines in `~/.happy-photo-organizer/logs/update.log`.
+  It also left the re-download's breadcrumbs in `%TEMP%\happy-photo-organizer-updater.log`, finishing at 00:29:30.
+  - Those are the two files a person reads after a failed update. v1.066's publish did the same at 13:21.
+  - The test suite also wrote the updater's breadcrumbs into that real `%TEMP%` file. Only `update.log` was
+    redirected.
+  - **Fix:** `tools/publish_release.py` wraps the two gates that run the app's updater in `app_logs_elsewhere()`.
+    It turns off update.log lines (the switch the drill's reference install uses), sends the breadcrumbs to
+    `%TEMP%\hpo-publish-gates.log`, and puts both back afterwards.
+  - The suite redirects `updater._LOG_PATH` and the gate log to its temp dir.
+  - **Proof:**
+    - the new test `test_the_publish_gates_keep_the_apps_own_logs_clean` was red on the old script and is green
+      now;
+    - a live `--check 1.067 --previous 1.066` passed with 0 new lines in Nick's update.log or breadcrumbs, and 2
+      in the gate log;
+    - a full suite run added 0 lines to the real gate log.
+- **K16 - I adopted master kits without running the HPO suite.** 80052c3 put an em dash (3 non-ASCII bytes) into
+  `drills/kit/DrillKit.psm1:12`, and `test_the_drill_scripts_are_plain_ascii` has been red since 2ef2821.
+  - I ran only PS 5.1 tests for 80052c3, ae8d478 and 51ddc0f. Run 4 passed on it, because it is a comment.
+  - Sent to the Director for a master fix (master-first; drills/kit is not edited alone).
+  - **Rule:** every kit adoption runs the full suite before its commit.

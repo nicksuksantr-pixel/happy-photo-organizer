@@ -35,6 +35,8 @@ be offered that digest, and the asset re-downloaded must hash to it.
 from __future__ import annotations
 
 import argparse
+import contextlib
+import functools
 import hashlib
 import json
 import subprocess
@@ -276,6 +278,37 @@ def gate_published(version: str, *, expect_bytes: int, fetch=None,
     return body
 
 
+GATE_LOG = Path(tempfile.gettempdir()) / "hpo-publish-gates.log"
+
+
+@contextlib.contextmanager
+def app_logs_elsewhere():
+    """The two gates below run the APP's updater on this PC, which is also an
+    installed user's PC. On 2026-11-01 they wrote `UPDATE CHECK 0 …` and FOUND
+    lines into Nick's real update.log, and the re-download's breadcrumbs into
+    the app's %TEMP% log, the two files a person reads after a failed update.
+    So for the length of a gate: no update.log lines (the switch the drill's
+    reference install uses), breadcrumbs to GATE_LOG, and both put back."""
+    from core import update_log, updater
+    was_on, was_path = getattr(update_log, "_ENABLED", True), updater._LOG_PATH
+    update_log.set_enabled(False)
+    updater._LOG_PATH = GATE_LOG
+    try:
+        yield
+    finally:
+        update_log.set_enabled(was_on)
+        updater._LOG_PATH = was_path
+
+
+def _keeps_app_logs_clean(gate):
+    @functools.wraps(gate)
+    def run_gate(*a, **k):
+        with app_logs_elsewhere():
+            return gate(*a, **k)
+    return run_gate
+
+
+@_keeps_app_logs_clean
 def gate_the_app_would_offer_it(version: str, previous: str, *,
                                 expect_sha256: str = "") -> None:
     """Ask the APP, not the API. The updater is the only consumer that matters,
@@ -321,6 +354,7 @@ def gate_the_app_would_offer_it(version: str, previous: str, *,
                       f"the version comparison is wrong")
 
 
+@_keeps_app_logs_clean
 def gate_the_download_is_the_drilled_file(version: str, expect_sha256: str) -> None:
     """§5.7: re-download the asset the way the field does — through the app's
     own updater, from the URL `latest` gives — and hash it."""
