@@ -196,6 +196,11 @@ Add a check when a new failure class appears. That means adding it here **and** 
 6. **Write the receipt** with the drill script, never by hand, as `drills/<version>.json`, with the log at
    `drills/logs/<version>.log`. Then run `node tools/release-gate.mjs --validate drills/<version>.json`. Commit both,
    then publish.
+   **Check that the log is really committed.** Flutter's template `.gitignore` and most Python ones carry `*.log`,
+   which also hides `drills/logs/<version>.log`: the receipt goes in without its log, and the lock refuses a receipt
+   whose `drill_log` is missing, so no other checkout (a clone, the cloud) can ship it. `git check-ignore -v
+   drills/logs/<version>.log` must print nothing; if it prints a line, add `!drills/logs/*.log` on a line after it
+   (JS, 2026-10-31; six of the fourteen repos had the trap that day).
 7. **Publish with the project's publish script, never by hand.** The script must do all of these:
    - call `node tools/release-gate.mjs --check --tag <tag> <assets>` first, and stop on a non-zero exit. With
      `--tag`, a bridge release can reach Nick's one-shot note (§8) through the script; the note is consumed right
@@ -227,11 +232,21 @@ and for checks before a real release, at the session's judgment. ScanDocs still 
   install is clean and two apps never share a device. It holds nothing but drill data, so the wipe is part of the
   drill. Never use or wipe Nick's own AVDs (`Pixel6_API35`).
 - **Disk:** about 3.5 GB per AVD, plus 3.5 GB for the image and 1.1 GB for the emulator, shared.
+- **Give the drill AVD 4 GB of RAM.** With 2 GB, JobShot's runs 1 and 2 failed on the two flakes below, inside the
+  fixture and before the update; with 4 GB, runs 3 and 4 passed with no retry (JS, 2026-10-31).
+- **"System UI isn't responding" can swallow a tap.** Wait for each tap's effect and re-tap only while that
+  effect is missing. Never tap a fixed number of times.
+- **`takePicture()` on the emulated camera can hang,** and the app then ignores the shutter for good. Leave the
+  camera screen and reopen it. (JobShot's script does this; the reopen path has not been exercised yet.)
 - **Shut it down when the drill ends,** pass or fail (`adb -s emulator-NNNN emu kill`), and check that no
   `qemu-system` process is left. A forgotten emulator holds 2 to 4 GB of RAM (ScanDocs, 2026-06-12: Nick had
   to ask for it to be closed).
 
-**Android (`android`, sideloaded with adb or delivered by Play).** On the emulator:
+**Android (`android`, sideloaded with adb or delivered by Play).** A worked example to copy: JobShot's
+`tools/update-drill.mjs` (first passing android receipt, v0.047, 2026-10-31). It wipe-boots `drill_jobshot`, makes
+real jobs through FROM's own screens, hashes `/data/data` as root around the update, checks the receipt with the
+lock's own validator, writes a failed drill only to `build/`, holds the busy file from boot to the end (released
+on pass, fail and Ctrl-C, never removing another app's), and checks no `qemu-system` is left. On the emulator:
 - install the FROM APK (its release file) and create real jobs;
 - `adb install -r` the TO APK;
 - assert versionCode, job count and content, and the same signing certificate;
