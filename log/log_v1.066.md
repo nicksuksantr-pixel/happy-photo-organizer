@@ -1,7 +1,8 @@
 # Log — v1.066 (2026-10-31) — the bridge release: an update you can prove
 
 **Built, not released.** Rule #28: it ships only after a drill has updated the released v1.065 to these exact
-bytes and `drills/1.066.json` passes. Waiting on Nick for the run as `drill` and the public test repo.
+bytes and `drills/1.066.json` passes. The test repo exists and the drill is staged (see "The drill, staged"); the
+receipt waits on the run as `drill`.
 
 **Asked:** *"Go. Start building v1.066 and the drill harness now. I'll set up the drill account, the scheduled
 task and the test repo later."* (Nick, 2026-10-30.)
@@ -69,6 +70,21 @@ task and the test repo later."* (Nick, 2026-10-30.)
     `STAGED`, `SWAPPED`, `CLEANED`, and the result is byte-identical to the fresh install (1,896 files compared;
     `uninstall.bat`, `installed-files.json` and the catalog excluded). This is the swap code on its own: the real
     run, through v1.065's updater and the silent installer, is the drill.
+
+## The drill, staged (2026-10-31, on Nick's go: "เอาเลย")
+
+- **Test repo:** `nicksuksantr-pixel/hpo-update-drill` (public, created 10:00). Release `v1.066` "drill v1.066" carries
+  the candidate as `HappyPhotoOrganizerSetup.exe`. Read back: `releases/latest` = v1.066, GitHub digest
+  `sha256:bf7f2efd…c79a1`, and a re-download hashes the same. The candidate was not rebuilt: no app source is
+  newer than the onedir build.
+- **FROM:** v1.065 downloaded from the real release; sha256 `46902c79…bccb88` = `drill.json`'s `from.sha256`.
+- **Staged** at 10:01:40 into `C:\Users\Public\HPO-drill`, with the launcher at `C:\Users\Public\Drills\HPO.cmd`.
+  - The secret scan passed.
+  - `drill` can write the stage: `INTERACTIVE` has Modify, inherited from `C:\Users\Public`.
+  - The house runner was already running a pass inside `drill`: ShipMonitor's drill held the lock, and EMR had
+    failed in 0.2 min. The runner rescans after each launcher, so HPO joins that pass and needs no new double-click.
+- **If the candidate is rebuilt:** its sha256 changes, so replace the asset on the test repo and re-stage.
+  Otherwise v1.065 downloads the old bytes, and the receipt cannot match the file being released.
 
 ## Found by smoke-testing the built installer (before any release)
 

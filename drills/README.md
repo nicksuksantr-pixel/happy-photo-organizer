@@ -34,8 +34,9 @@ the keyboard. Every run is **Switch user**, done by Nick, never `runas` and neve
    - Nick switches back while it runs, so the drill runs in a disconnected session. The harness uses no input and
      no screen capture, only `EnumWindows` and `PostMessage`, which work there. That is read from the code; the
      first run's result is the proof.
-3. **For the v1.066 bridge only, a public test repo** `nicksuksantr-pixel/hpo-update-drill` (the name is in
-   `drill.json` as `drill_repo`; the lock lets a release go there and nowhere else without a receipt).
+3. **For the v1.066 bridge only, a public test repo** `nicksuksantr-pixel/hpo-update-drill` (created 2026-10-31 on
+   Nick's go; the name is in `drill.json` as `drill_repo`; the lock lets a release go there and nowhere else
+   without a receipt).
    v1.065 cannot read a drill feed, so its own updater must fetch the candidate from a real GitHub repo.
    From v1.066 on, the loopback feed is enough and this repo is not needed.
 
