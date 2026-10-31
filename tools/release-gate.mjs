@@ -31,9 +31,22 @@
 // The way past it is not a flag. It is a drill, or Nick's one-shot note (~/.claude/release-approval.json
 // {"tag":"v1.2.3","reason":"…","expiresEpochMs":…}), consumed on use — the same road as the agent cap.
 // Like the cap hook, it fails OPEN if it cannot run at all (no node): the rule is still the rule.
+//
+// SINCE 2026-10-31 IT ALSO ENFORCES command_pattern #2.1: A FREE KEY MAY BE BUILT IN, A PAID KEY NEVER.
+// Nick's word that night: a free Gemini key may be built into an app so no key screen is shown; a key on a
+// billed project never; "make the rule strict and the guard good; a bad key we delete in the Google console".
+// Three apps started building keys in the same evening, so the guard had to exist the same evening:
+//   git commit / git push   refused while the index/HEAD holds a key-shaped string (AIza…, AQ.…), the text of a
+//                           registered key, or a file that is a secret by its name (.env, *.jks, service-account*.json…)
+//   a release / an install  refused while HEAD holds one of those, or the artifact carries a key that is not
+//                           registered FREE for THIS repo (~/.embed-keys/registry.json, fingerprints only), or a
+//                           registered key the drill receipt does not declare (embedded_key + check embedded_key_works)
+// The note waives the drill, never a key: a leak is not a release decision. Standard: memory/KEY_EMBED.md.
 
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
+import zlib from 'node:zlib'
 import crypto from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
@@ -41,6 +54,8 @@ import { spawnSync } from 'node:child_process'
 const HOME = process.env.USERPROFILE || process.env.HOME || ''
 const APPROVAL = path.join(HOME, '.claude', 'release-approval.json')
 const INSTALLABLE = /\.(exe|zip|msi|msix|msixbundle|appinstaller|apk|aab|7z)$/i
+const KEY_DIR = path.join(HOME, '.embed-keys')            // <Repo>.json = the key a build reads; registry.json = fingerprints
+const REGISTRY = path.join(KEY_DIR, 'registry.json')
 
 // ── the standard (UPDATE_DRILL.md) — keep these lists and that document in step ──────────────────
 export const PROFILES = {
@@ -65,7 +80,7 @@ export const PROFILES = {
   },
 }
 
-const read = (f) => { try { return fs.readFileSync(f, 'utf8') } catch { return '' } }
+const read = (f) => { try { return fs.readFileSync(f, 'utf8').replace(/^\uFEFF/, '') } catch { return '' } }
 const sha256 = (f) => crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex')
 const normTag = (t) => String(t || '').trim().replace(/^v/i, '')
 
@@ -84,7 +99,7 @@ export function receiptProblems(r) {
     out.push('from_version equals to_version: an update drill starts from the PREVIOUS release')
   if (!/^[0-9a-f]{64}$/i.test(r.from_artifact_sha256 || ''))
     out.push('from_artifact_sha256 missing: the drill must start from the real released file, by hash')
-  if (!Array.isArray(r.assets) || !r.assets.length || !r.assets.every((a) => /^[0-9a-f]{64}$/i.test(a?.sha256 || '')))
+  if (!Array.isArray(r.assets) || !r.assets.length || !r.assets.every((a) => a && typeof a === 'object' && /^[0-9a-f]{64}$/i.test(a.sha256 || '')))
     out.push('assets[] must list every published file with its sha256')
   if (!r.drilled_at) out.push('drilled_at missing')
   if (!r.layout || String(r.layout).length < 15)
@@ -100,7 +115,360 @@ export function receiptProblems(r) {
       else if (ev.length < 15) out.push(`check "${id}" is n/a without a reason`)
     } else out.push(`check "${id}" is ${c.result || 'empty'}, not pass`)
   }
+  // #2.1: a build that carries a key says so, and the drill proved that key works from the UPDATED build
+  if (r.embedded_key !== undefined) {
+    const k = r.embedded_key
+    if (!k || typeof k !== 'object' || !/^[0-9a-f]{64}$/i.test(k.fp || ''))
+      out.push('embedded_key must be {fp: <sha256 of the key>, repo: <repo folder>} — the fingerprint, never the key')
+    else if (KEY_SHAPES.some((re) => new RegExp(re.source).test(JSON.stringify(k))))
+      out.push('embedded_key holds the key itself; a receipt carries the fingerprint only')
+    const c = checks.embedded_key_works
+    if (!c) out.push('check "embedded_key_works" missing: one real call from the updated build with the built-in key (evidence: status 200 + model)')
+    else if (c.result !== 'pass') out.push(`check "embedded_key_works" is ${c.result || 'empty'}, not pass`)
+    else if (String(c.evidence || '').trim().length < 10) out.push('check "embedded_key_works" passed with no evidence')
+  }
   return out
+}
+
+// ── keys (command_pattern #2.1, memory/KEY_EMBED.md) ─────────────────────────────────────────────
+// The two shapes Google AI Studio has issued: AIza + 35 (the Standard key, being retired through 2026) and
+// AQ. + ~50 (the Auth key it issues now; JS found that a scan matching AIza alone lets it into git unseen).
+// Shapes catch an unknown key; the registered keys are also searched by their text, whatever their shape.
+// Round 2 (2026-10-31, three review firms): the index is read by BLOB (binary, UTF-16, a zip inside), what an earlier
+// `git add` in the same line stages is read from disk, a push scans the refs it pushes, `cd`/wrappers/`-am` are read.
+export const KEY_SHAPES = [/AIza[0-9A-Za-z_-]{35}/g, /(?<![0-9A-Za-z_-])AQ\.[0-9A-Za-z_-]{30,}/g]
+const PRIVATE_BLOCK = /-----BEGIN [A-Z ]*PRIVATE KEY-----/
+const NOT_A_KEY = /not-a-key/i                            // a fixture line says so and is skipped — never for a registered key
+// files that are secrets by their name: never tracked, whatever they hold. .env.example and friends are templates; a .md or
+// .py that merely talks about a key is not a key file (EMR's ADR 0002-built-in-shared-gemini-key.md would have been refused)
+const SECRET_PATH = /(^|\/)(\.env(?![^/]*\.(example|sample|template|dist)(\.|$))(\.[^/]*)?|[^/]*\.(jks|keystore|p12|pfx)|service-account[^/]*\.json|release-approval\.json|[^/]*gemini[^/]*key[^/]*\.(txt|json|key|env|bin)|keys?\/gemini\.json|secrets?\/[^/]*\.(txt|json|key|env))$/i
+const MEDIA = /\.(png|jpe?g|webp|gif|bmp|ico|mp3|mp4|m4a|ogg|wav|ttf|otf|woff2?)$/i
+const ZIPPY = /\.(apk|aab|aar|jar|zip|msix|msixbundle|appx|xapk|apks|ipa|whl|nupkg)$/i
+const BIG = 64 << 20                                      // a blob or zip member above this is not read; a problem says so
+const fpOf = (k) => crypto.createHash('sha256').update(String(k)).digest('hex')
+const readJson = (f) => { try { return JSON.parse(read(f)) } catch { return null } }
+
+/** What the gate knows about keys, read once per process: the registry (fingerprints) and the texts a build reads. */
+let KNOWN = null
+export function known() {
+  if (KNOWN) return KNOWN
+  const reg = readJson(REGISTRY); const keys = Array.isArray(reg?.keys) ? reg.keys : []
+  const texts = []
+  let names = []; try { names = fs.readdirSync(KEY_DIR) } catch {}
+  for (const n of names) {
+    if (!/\.json$/i.test(n) || /^registry\.json$/i.test(n)) continue
+    const o = readJson(path.join(KEY_DIR, n))
+    if (!o || typeof o !== 'object') { process.stderr.write(`release-gate: ${path.join(KEY_DIR, n)} is not readable JSON; its key cannot be searched by text\n`); continue }
+    // only the values that ARE keys: a note or a project name in the same file must not become a search pattern
+    for (const [name, v] of Object.entries(o)) if (/key|token|secret/i.test(name) && typeof v === 'string' && v.trim().length >= 20) texts.push(v.trim())
+  }
+  return (KNOWN = { keys, texts, dirExists: fs.existsSync(KEY_DIR), registryExists: !!reg })
+}
+/** What the registry says about a key, or null when it is unregistered. */
+const whose = (key) => { const fp = fpOf(key); return known().keys.find((e) => String(e.fp || '').toLowerCase() === fp) || null }
+const isRegistered = (key) => !!whose(key) || known().texts.includes(key)
+function describeKey(key) {
+  const e = whose(key)
+  if (!e) return `an UNREGISTERED key (sha256 ${fpOf(key).slice(0, 12)}…)`
+  if (e.tier === 'paid') return `Nick's PAID key (${e.note || 'registered paid'})`
+  return `the free key registered for ${e.repo}${e.status && e.status !== 'active' ? ` (status: ${e.status})` : ''}`
+}
+/** A shape match that runs past a registered key (the bytes after it were letters) is that key, not a second one. */
+function normalize(found) {
+  const texts = known().texts; const out = new Set()
+  for (const k of found) { const t = texts.find((x) => k !== x && k.startsWith(x)); out.add(t || k) }
+  return [...out]
+}
+export function keysInText(text) {
+  const s = String(text); const found = new Set()
+  for (const re of KEY_SHAPES) for (const m of s.matchAll(re)) found.add(m[0])
+  for (const k of known().texts) if (s.includes(k)) found.add(k)
+  return normalize(found)
+}
+/** Keys in raw bytes: the latin1 and the UTF-16LE view, 8 MB chunks with overlap, plus every registered text by indexOf. */
+function keysInBytes(buf) {
+  const found = new Set(); const CH = 8 << 20; const OV = 512
+  for (let o = 0; o < buf.length; o += CH) {
+    const part = buf.subarray(Math.max(0, o - OV), Math.min(buf.length, o + CH))
+    for (const s of [part.toString('latin1'), part.toString('utf16le')]) for (const re of KEY_SHAPES) for (const m of s.matchAll(re)) found.add(m[0])
+  }
+  for (const k of known().texts) if (buf.indexOf(k, 0, 'latin1') >= 0 || buf.indexOf(Buffer.from(k, 'utf16le')) >= 0) found.add(k)
+  return found
+}
+/** The members of a zip (APK, AAB, MSIX, .zip): stored or deflated, under 64 MB, not zip64/encrypted. [] when not a zip. */
+export function zipEntries(buf) {
+  const out = []
+  let eocd = -1
+  for (let i = buf.length - 22; i >= Math.max(0, buf.length - 66000); i--) if (buf.readUInt32LE(i) === 0x06054b50) { eocd = i; break }
+  if (eocd < 0) return out
+  const n = buf.readUInt16LE(eocd + 10); let p = buf.readUInt32LE(eocd + 16)
+  for (let i = 0; i < n && p + 46 <= buf.length; i++) {
+    if (buf.readUInt32LE(p) !== 0x02014b50) break
+    const flags = buf.readUInt16LE(p + 8); const method = buf.readUInt16LE(p + 10); const csize = buf.readUInt32LE(p + 20); const usize = buf.readUInt32LE(p + 24)
+    const nl = buf.readUInt16LE(p + 28); const el = buf.readUInt16LE(p + 30); const cl = buf.readUInt16LE(p + 32); const lho = buf.readUInt32LE(p + 42)
+    const name = buf.toString('utf8', p + 46, p + 46 + nl)
+    p += 46 + nl + el + cl
+    if (name.endsWith('/')) continue
+    const skip = (why) => out.push({ name, data: null, skipped: why })
+    if (csize === 0xffffffff || usize === 0xffffffff || lho === 0xffffffff) { skip('zip64'); continue }
+    if (usize > BIG) { skip('over 64 MB'); continue }
+    if (flags & 1) { skip('encrypted'); continue }
+    if (lho + 30 > buf.length || buf.readUInt32LE(lho) !== 0x04034b50) { skip('bad local header'); continue }
+    const start = lho + 30 + buf.readUInt16LE(lho + 26) + buf.readUInt16LE(lho + 28)
+    const raw = buf.subarray(start, start + csize)
+    if (method === 0) out.push({ name, data: raw })
+    else if (method === 8) { try { out.push({ name, data: zlib.inflateRawSync(raw) }) } catch { skip('deflate error') } }
+    else skip(`compression method ${method}`)
+  }
+  return out
+}
+/** Every key a buffer carries, looking inside zip-shaped data two levels deep (an APK's libapp.so, a bundle inside it). */
+export function keysInBuffer(buf, name = '', depth = 0, notes = []) {
+  const found = new Set(keysInBytes(buf))
+  const zipShaped = ZIPPY.test(name) || (buf.length > 4 && buf.readUInt32LE(0) === 0x04034b50)
+  if (zipShaped && depth < 2) for (const e of zipEntries(buf)) {
+    if (MEDIA.test(e.name)) continue
+    if (!e.data) { notes.push(`${path.basename(name) || 'zip'}: member ${e.name} not read (${e.skipped})`); continue }
+    for (const k of keysInBuffer(e.data, e.name, depth + 1, notes)) found.add(k)
+  }
+  return normalize(found)
+}
+export function keysInArtifact(file, notes = []) { return keysInBuffer(fs.readFileSync(file), file, 0, notes) }
+
+// ── git: what a commit or a push is about to publish ──────────────────────────────────────────────
+let GIT = 'git'                                            // the executable the command named by path, when it did
+const gitAt = (dir, args, input) => spawnSync(GIT, args, { cwd: dir, encoding: 'utf8', maxBuffer: 256 << 20, input })
+const gitBuf = (dir, args, input) => spawnSync(GIT, args, { cwd: dir, maxBuffer: 1 << 30, input })
+const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
+const headOr = (dir) => gitAt(dir, ['rev-parse', '--verify', '-q', 'HEAD']).status === 0 ? 'HEAD' : EMPTY_TREE
+const zlist = (r) => String(r.stdout || '').split('\0').filter(Boolean)
+const allHeads = (dir) => String(gitAt(dir, ['for-each-ref', '--format=%(refname:short)', 'refs/heads']).stdout || '').split('\n').filter(Boolean)
+/** The blobs behind object names such as ":path" (the index) or "REF:path", read in one git process. */
+function blobs(dir, names) {
+  if (!names.length) return []
+  const r = gitBuf(dir, ['cat-file', '--batch'], names.join('\n') + '\n'); const b = r.stdout || Buffer.alloc(0); const out = []
+  let p = 0
+  for (const name of names) {
+    const nl = b.indexOf(0x0a, p); if (nl < 0) break
+    const m = /^(\S+) (\S+) (\d+)$/.exec(b.toString('utf8', p, nl)); p = nl + 1
+    if (!m) { out.push({ name, data: null, missing: true }); continue }
+    const size = Number(m[3]); const data = b.subarray(p, p + size); p += size + 1
+    out.push({ name, data: size > BIG ? null : Buffer.from(data), big: size > BIG })
+  }
+  return out
+}
+const looksText = (buf) => !buf.subarray(0, 8000).includes(0)
+/** The keys a file holds, as sentences into `out`: by line for text (where a fixture may say not-a-key), by bytes otherwise. */
+function hitsIn(buf, where, out) {
+  if (looksText(buf)) {
+    const lines = buf.toString('utf8').split('\n')
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]
+      if (PRIVATE_BLOCK.test(line)) out.push(`${where}:${i + 1} holds a private key block: never committed`)
+      for (const k of keysInText(line)) {
+        if (NOT_A_KEY.test(line) && !isRegistered(k)) continue     // a fixture may say so; a real key may not
+        out.push(`${where}:${i + 1} holds ${describeKey(k)}: a key is never committed — take the line out (git reset the file, edit, add again; a fixture may say not-a-key)`)
+      }
+    }
+  } else {
+    for (const k of keysInBuffer(buf, where)) out.push(`${where} (binary) holds ${describeKey(k)}: a key is never committed`)
+    if (PRIVATE_BLOCK.test(buf.toString('latin1'))) out.push(`${where} (binary) holds a private key block: never committed`)
+  }
+}
+const u16 = (s) => [...s].map((c) => c.replace(/[.*+?^${}()|[\]\\\/-]/g, '\\$&') + '\\x00').join('')
+/** Keys and secret-named files in what git is about to publish. Sentences; empty = clean.
+ *  staged: the index (+ the worktree with `all`, + untracked files with `untracked` = true or a path list), scoped to
+ *  `paths` as git resolves them from `cwd`. Otherwise: the trees of `refs` (a push, a release), default HEAD. */
+export function secretProblems(root, { staged = false, all = false, untracked = false, paths = [], cwd = root, refs = ['HEAD'], message = '' } = {}) {
+  const out = []; const dir = cwd || root
+  const probe = gitAt(dir, ['rev-parse', '--show-toplevel'])
+  if (probe.error) return [`could not run git (${probe.error.message}), so nothing here can be judged: a commit or a publish waits until git runs`]
+  if (probe.status !== 0) return []                       // not a repository: git refuses the command by itself
+  const top = String(probe.stdout).trim(); const sp = paths.length ? ['--', ...paths] : []
+  if (message) for (const k of keysInText(message)) out.push(`the commit message holds ${describeKey(k)}: a key is never committed, not even in a message`)
+  if (staged) {
+    const at = paths.length ? dir : top                   // a pathspec is read from where the command runs; the whole index from the top
+    const names = zlist(gitAt(at, ['diff', '--cached', '--name-only', '-z', '--diff-filter=AMRC', ...sp]))
+    const work = all ? zlist(gitAt(at, ['diff', '--name-only', '-z', '--diff-filter=AMRC', headOr(at), ...sp])) : []
+    const usp = Array.isArray(untracked) ? (untracked.length ? ['--', ...untracked] : []) : sp
+    const others = untracked ? zlist(gitAt(Array.isArray(untracked) && untracked.length ? dir : top, ['ls-files', '--others', '--exclude-standard', '--full-name', '-z', ...usp])) : []
+    for (const q of new Set([...names, ...work, ...others])) if (SECRET_PATH.test(q)) out.push(`${q} is a secret by its name and would be committed: keep it out (git rm --cached, .gitignore)`)
+    for (const b of blobs(at, names.slice(0, 5000).map((q) => `:${q}`))) {
+      const q = b.name.slice(1)
+      if (b.big) { out.push(`${q} is over 64 MB and cannot be scanned: a file that size is not committed`); continue }
+      if (b.data) hitsIn(b.data, q, out)
+    }
+    for (const q of [...new Set([...work, ...others])].slice(0, 5000)) {   // git names them from the top (--full-name / diff default)
+      const f = path.resolve(top, q)
+      let st; try { st = fs.statSync(f) } catch { continue }
+      if (!st.isFile()) continue
+      if (st.size > BIG) { out.push(`${q} is over 64 MB and cannot be scanned: a file that size is not committed`); continue }
+      hitsIn(fs.readFileSync(f), q, out)
+    }
+    return [...new Set(out)]
+  }
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'rgate-')); const f1 = path.join(d, 'f'); const f2 = path.join(d, 'p')
+  try {
+    const texts = known().texts
+    if (texts.length) fs.writeFileSync(f1, texts.join('\n') + '\n', { mode: 0o600 })   // registered keys by text: a private file, never argv
+    fs.writeFileSync(f2, [...texts.map(u16), 'A\\x00I\\x00z\\x00a\\x00(?:[0-9A-Za-z_-]\\x00){35}', 'A\\x00Q\\x00\\.\\x00(?:[0-9A-Za-z_-]\\x00){30,}'].join('\n') + '\n', { mode: 0o600 })
+    const E = [...KEY_SHAPES.map((r) => r.source.replace(/^\(\?<!\[[^\]]*\]\)/, '')), PRIVATE_BLOCK.source].join('|')
+    for (const ref of [...new Set(refs)]) {
+      const tree = gitAt(top, ['ls-tree', '-r', '--name-only', '-z', ref])
+      if (tree.status !== 0) continue                     // an unborn HEAD, a ref that does not exist yet
+      const label = ref === 'HEAD' ? '' : `${ref}:`
+      for (const q of zlist(tree)) if (SECRET_PATH.test(q)) out.push(`${label}${q} is a secret by its name and is tracked: git rm --cached it and list it in .gitignore`)
+      const lines = [
+        ...String(gitAt(top, ['grep', '--text', '-n', '-E', E, ref, '--', '.']).stdout || '').split('\n'),
+        ...(texts.length ? String(gitAt(top, ['grep', '--text', '-n', '-F', '-f', f1, ref, '--', '.']).stdout || '').split('\n') : []),
+        ...String(gitAt(top, ['grep', '--text', '-n', '-P', '-f', f2, ref, '--', '.']).stdout || '').split('\n'),   // UTF-16 files
+      ]
+      for (const raw of lines) {
+        if (!raw.startsWith(ref + ':')) continue
+        const m = /^([^\n]+?):(\d+):([\s\S]*)$/.exec(raw.slice(ref.length + 1)); if (!m) continue
+        const text = m[3].replace(/\0/g, '')
+        if (PRIVATE_BLOCK.test(text)) out.push(`${label}${m[1]}:${m[2]} holds a private key block: never committed`)
+        for (const k of keysInText(text)) {
+          if (NOT_A_KEY.test(text) && !isRegistered(k)) continue
+          out.push(`${label}${m[1]}:${m[2]} holds ${describeKey(k)}: a key is never committed — take it out of the history that is pushed`)
+        }
+      }
+    }
+  } finally { try { fs.rmSync(d, { recursive: true, force: true }) } catch {} }
+  return [...new Set(out)]
+}
+function drillManifest(root) { return readJson(path.join(root, 'drills', 'drill.json')) }
+/** What is wrong with the key(s) built into `file`, judged against the registry and the receipt `r` that covers it.
+ *  `strict` false (--scan by hand before a drill): "the receipt says nothing" is a note, not a problem. */
+export function embeddedKeyProblems(root, file, r, { strict = true, notes = [] } = {}) {
+  const out = []; const repo = path.basename(root).toLowerCase(); const base = path.basename(file)
+  let keys = []
+  try { keys = keysInArtifact(file, notes) } catch (e) { return [`could not scan ${base} for keys (${e.message})`] }
+  const declared = r && r.embedded_key && typeof r.embedded_key === 'object' ? r.embedded_key : null
+  if (keys.length && !known().dirExists) return [`${base} carries a key, and this machine has no key registry (${KEY_DIR}): a build that carries a key is released from Nick's PC, where the registry is`]
+  for (const k of keys) {
+    const e = whose(k)
+    if (!e) out.push(`${base} carries ${describeKey(k)}: a key ships only after Nick registers it free for this repo (node tools/register-key.mjs free --repo ${path.basename(root)} --project "<Google project>" --no-billing)`)
+    else if (e.tier !== 'free') out.push(`${base} carries ${describeKey(k)}: a paid key is NEVER built in`)
+    else if (String(e.repo || '').toLowerCase() !== repo) out.push(`${base} carries ${describeKey(k)}, not this repo's: one key per app`)
+    else if (e.status && e.status !== 'active') out.push(`${base} carries ${describeKey(k)}: register the replacement and rebuild`)
+    else if (!declared) {
+      const s = `${base} carries ${describeKey(k)} but the receipt has no embedded_key {fp, repo}: the drill must prove the built-in key works from the updated build (check embedded_key_works)`
+      if (strict) out.push(s); else notes.push(s + ' — drill it, then --scan again')
+    }
+    else if (String(declared.fp || '').toLowerCase() !== fpOf(k)) out.push(`receipt embedded_key.fp is not the key built into ${base}`)
+  }
+  if (declared && /^[0-9a-f]{64}$/i.test(declared.fp || '')) {
+    const e = known().keys.find((x) => String(x.fp || '').toLowerCase() === String(declared.fp).toLowerCase())
+    if (!e) out.push('receipt embedded_key.fp is not in ~/.embed-keys/registry.json: register the key, then drill')
+    else if (e.tier !== 'free' || String(e.repo || '').toLowerCase() !== repo) out.push(`receipt embedded_key.fp is ${e.tier === 'free' ? `${e.repo}'s key, not this repo's` : 'a PAID key'}`)
+    if (declared.repo && String(declared.repo).toLowerCase() !== repo) out.push(`receipt embedded_key.repo is "${declared.repo}", this repo is "${path.basename(root)}"`)
+  }
+  if (!declared && drillManifest(root)?.embeds_key) out.push('drills/drill.json says this app builds a key in, but the receipt has no embedded_key: the drill must prove it (check embedded_key_works)')
+  return out
+}
+
+// ── reading the git command ───────────────────────────────────────────────────────────────────────
+const CD = /^(cd|chdir|pushd|set-location|sl|push-location)$/i
+const STAGES = /^(add|rm|mv|stash|apply|am|cherry-pick|merge|rebase|revert|restore|checkout|switch)$/
+/** The command inside a shell construct: `if (...) { git push }`, `do git commit …`, `{ … }`, `sudo env git …`. */
+function unwrap(seg) {
+  let s = seg.trim()
+  for (;;) {
+    const before = s
+    s = s.replace(/^(if|elseif|foreach|while|switch|for)\s*\([^)]*\)\s*\{\s*/i, '').replace(/^(else|try|catch|finally|do)\s*\{\s*/i, '')
+    s = s.replace(/^[{(]\s*/, '').replace(/\s*[})]+\s*$/, '')
+    s = s.replace(/^(do|then|else|elif|time|env|nice|nohup|sudo|exec|command|builtin)\s+/, '')
+    if (s === before) return s
+  }
+}
+/** `cmd /c "…"`, `powershell -Command "…"`, `bash -c "…"`: the body those wrappers run. */
+function bodyOf(w) {
+  const exe = path.basename(w[0] || '').toLowerCase().replace(/\.exe$/, '')
+  if (exe === 'cmd') { const i = w.findIndex((x) => /^\/[ck]$/i.test(x)); return i >= 0 ? w.slice(i + 1).join(' ') : null }
+  if (/^(powershell|pwsh)$/.test(exe)) { const i = w.findIndex((x) => /^-(c|command)$/i.test(x)); return i >= 0 ? w.slice(i + 1).join(' ') : null }
+  if (/^(bash|sh|zsh|dash|ksh)$/.test(exe)) { const i = w.findIndex((x) => x === '-c'); return i >= 0 ? w.slice(i + 1).join(' ') : null }
+  return null
+}
+/** `git commit` / `git push` in a command, with the folder each runs in, what the same line staged before it, the
+ *  message, the pathspecs. A `cd` carries forward; a folder held in a variable is reported, never guessed. */
+export function gitWriteIntents(cmd, cwd = '.') {
+  const found = []; let cur = null; let unknown = false
+  const walk = (text) => {
+    for (const seg of splitSegments(stripDataBodies(String(text || '')))) {
+      let w = words(unwrap(seg))
+      while (w.length && (w[0] === '&' || /^[A-Z_][A-Z0-9_]*=/.test(w[0]))) w = w.slice(1)
+      if (!w.length) continue
+      const exe = path.basename(w[0]).toLowerCase().replace(/\.exe$/, '')
+      if (CD.test(exe)) {
+        const d = w.slice(1).find((x) => !x.startsWith('-'))
+        if (!d || isVar(d) || d === '-' || d === '~') { unknown = true; cur = null } else { cur = path.resolve(cwd, cur || '.', d); unknown = false }
+        continue
+      }
+      if (/^(popd|pop-location)$/i.test(exe)) { cur = null; unknown = false; continue }
+      const body = bodyOf(w); if (body) { walk(body); continue }
+      if (exe !== 'git') continue
+      const gitExe = /[\\/]/.test(w[0]) ? w[0] : null
+      let i = 1; let dir = null; let dirVar = false
+      for (; i < w.length && w[i].startsWith('-'); i++) {
+        if (w[i] === '-C') { const d = w[++i]; if (!d || isVar(d)) dirVar = true; else dir = d }
+        else if (/^-C./.test(w[i])) dir = w[i].slice(2)
+        else if (w[i] === '-c' || w[i] === '--git-dir' || w[i] === '--work-tree') i++
+      }
+      const verb = w[i]; const rest = w.slice(i + 1)
+      const base = { seg, gitExe, dir: dirVar ? null : (dir ? path.resolve(cwd, cur || '.', dir) : cur), unknownDir: dirVar || (unknown && !dir) }
+      if (STAGES.test(verb)) {
+        const all = verb !== 'add' || rest.some((x) => /^(-A|--all|--no-ignore-removal|\.|\*)$/.test(x) || /^-[a-zA-Z]*A[a-zA-Z]*$/.test(x))
+        found.push({ kind: 'stage', ...base, all, paths: verb === 'add' ? rest.filter((x) => !x.startsWith('-')) : [] })
+        continue
+      }
+      if (verb === 'push') {
+        let all = false; const pos = []
+        for (let k = 0; k < rest.length; k++) {
+          const x = rest[k]
+          if (x === '--all' || x === '--branches' || x === '--mirror') all = true
+          else if (x.startsWith('-')) { if (/^(-o|--push-option|--receive-pack|--exec|--repo)$/.test(x)) k++ }
+          else pos.push(x)
+        }
+        const refs = pos.slice(1).map((r) => r.replace(/^\+/, '').split(':')[0]).filter(Boolean)
+        found.push({ kind: 'push', ...base, all, refs: refs.length ? refs : ['HEAD'] })
+        continue
+      }
+      if (verb !== 'commit') continue
+      let all = false; const paths = []; const msgs = []; let messageFile = null; let pathsFile = null
+      const TAKES = /^(--author|--date|-c|-C|--reuse-message|--reedit-message|--fixup|--squash|-t|--template|--trailer|--cleanup)$/
+      for (let k = 0; k < rest.length; k++) {
+        const x = rest[k]
+        if (x === '--') { paths.push(...rest.slice(k + 1)); break }
+        if (x === '-m' || x === '--message') { msgs.push(rest[++k] || ''); continue }
+        if (x.startsWith('--message=')) { msgs.push(x.slice(10)); continue }
+        if (x === '-F' || x === '--file') { messageFile = rest[++k] || '-'; continue }
+        if (x.startsWith('--file=')) { messageFile = x.slice(7); continue }
+        if (x === '--pathspec-from-file') { pathsFile = rest[++k] || '-'; continue }
+        if (x.startsWith('--pathspec-from-file=')) { pathsFile = x.slice(21); continue }
+        if (x === '-a' || x === '--all' || x === '--include' || x === '-i') { all = true; continue }
+        if (/^-[a-zA-Z]+$/.test(x)) {                                           // a cluster: -am "msg", -qam, -sm
+          if (x.includes('a') || x.includes('i')) all = true
+          if (/m$/.test(x)) { msgs.push(rest[++k] || ''); continue }
+          if (/F$/.test(x)) { messageFile = rest[++k] || '-'; continue }
+          if (/[cCt]$/.test(x)) k++
+          continue
+        }
+        if (x.startsWith('-')) { if (TAKES.test(x)) k++; continue }
+        paths.push(x)
+      }
+      found.push({ kind: 'commit', ...base, all: all || paths.length > 0, paths, message: msgs.join('\n'), messageFile, pathsFile })
+    }
+  }
+  walk(cmd)
+  // what an earlier segment stages lands in the commit; the commit lands in the push: read what WILL be there
+  let stagedAll = false; const stagedPaths = []; let committed = false
+  for (const it of found) {
+    if (it.kind === 'stage') { if (it.all) stagedAll = true; stagedPaths.push(...it.paths); continue }
+    if (it.kind === 'commit') { if (stagedAll || stagedPaths.length) { it.all = true; it.untracked = stagedAll ? true : [...stagedPaths] }; committed = true; continue }
+    if (it.kind === 'push' && (committed || stagedAll || stagedPaths.length)) it.worktree = true
+  }
+  return found.filter((it) => it.kind !== 'stage')
 }
 
 function receiptsIn(dir) {
@@ -127,12 +495,12 @@ function repoRoot(start) {
 
 function passingReceiptFor(root, { sha, tag }) {
   for (const { file, r } of receiptsIn(root)) {
-    const hit = sha ? (r.assets || []).some((a) => String(a.sha256).toLowerCase() === sha)
+    const hit = sha ? (Array.isArray(r.assets) ? r.assets : []).some((a) => a && String(a.sha256 || '').toLowerCase() === sha)
       : normTag(r.to_version) === normTag(tag)
     if (!hit) continue
     const p = receiptProblems(r)
     // the receipt is a summary; the drill's own log is the evidence, and it has to exist beside it
-    if (!r.drill_log) p.push('drill_log missing: commit the drill\'s own log and name it here')
+    if (!r.drill_log || typeof r.drill_log !== 'string') p.push('drill_log missing: commit the drill\'s own log and name it here')
     else if (!fs.existsSync(path.resolve(root, r.drill_log))) p.push(`drill_log ${r.drill_log} not found in the repo`)
     else {
       // 2026-10-31: six of fourteen repos hid drills/logs/*.log behind a template `*.log` ignore, so a receipt reached
@@ -143,7 +511,7 @@ function passingReceiptFor(root, { sha, tag }) {
       if (ls.error) p.push(`could not ask git whether ${r.drill_log} is tracked (${ls.error.message}); commit the log and run this where git works`)
       else if (ls.status !== 0) p.push(`drill_log ${r.drill_log} is not tracked in git: \`git add\` it (check .gitignore for *.log; add !drills/logs/*.log) and commit it with the receipt`)
     }
-    return { file, problems: p }
+    return { file, problems: p, r }
   }
   return null
 }
@@ -342,7 +710,25 @@ function isDrillRepo(root, repo) {
 export function judge(cmd, cwd) {
   const root = repoRoot(cwd)
   const problems = []
-  for (const it of publishIntents(cmd)) {
+  // #2.1 — `hard` problems are keys and secrets: Nick's release note never waives them
+  const hard = []
+  for (const it of gitWriteIntents(cmd, cwd || '.')) {
+    if (it.unknownDir) { hard.push(`${it.kind}: cannot read the folder "${it.seg}" runs in (a variable, or a cd the gate cannot follow); write it literally so the right repo is scanned`); continue }
+    if (it.gitExe) GIT = it.gitExe
+    const dir = it.dir || cwd || root; const r = repoRoot(dir)
+    if (it.kind === 'commit') {
+      let message = it.message || ''; const paths = [...it.paths]
+      if (it.messageFile) { const m = it.messageFile === '-' ? '' : read(path.resolve(dir, it.messageFile)); if (!m) hard.push(`commit: cannot read the message in ${it.messageFile}; give it with -m`); else message += '\n' + m }
+      if (it.pathsFile) { const m = it.pathsFile === '-' ? '' : read(path.resolve(dir, it.pathsFile)); if (!m) hard.push(`commit: cannot read --pathspec-from-file ${it.pathsFile}; name the paths on the line`); else paths.push(...m.split(/\r?\n/).filter(Boolean)) }
+      hard.push(...secretProblems(r, { staged: true, all: it.all || paths.length > 0, untracked: it.untracked || false, paths, cwd: dir, message }).map((p) => `commit: ${p}`))
+    } else {
+      hard.push(...secretProblems(r, { refs: it.all ? allHeads(r) : it.refs, cwd: r }).map((p) => `push: ${p}`))
+      if (it.worktree) hard.push(...secretProblems(r, { staged: true, all: true, untracked: true, cwd: r }).map((p) => `push (what the commit before it lands): ${p}`))
+    }
+  }
+  const intents = publishIntents(cmd)
+  if (intents.some((it) => it.kind === 'asset' || it.kind === 'publish-tag')) hard.push(...secretProblems(root))
+  for (const it of intents) {
     if (it.repo && isDrillRepo(root, it.repo)) continue               // publishing to the drill's test repo is the drill
     if (it.kind === 'device-install') { problems.push(it.why); continue }
     if (it.kind === 'raw-api') { problems.push(`"${it.seg}" publishes through the raw API, which this gate cannot read. Use gh release create/upload/edit.`); continue }
@@ -364,18 +750,27 @@ export function judge(cmd, cwd) {
       if (!it.tag || isVar(it.tag)) { problems.push(`cannot read the tag in "${it.seg}"; write it literally.`); continue }
       const hit = passingReceiptFor(root, { tag: it.tag })
       if (!hit) problems.push(`no drill receipt in drills/ for ${it.tag}.`)
-      else if (hit.problems.length) problems.push(`${hit.file} for ${it.tag} does not pass: ${hit.problems.join('; ')}.`)
+      else splitReceipt(hit, `${hit.file} for ${it.tag}`, problems, hard)
       continue
     }
     if (isVar(it.file)) { problems.push(`cannot read the asset in "${it.seg}"; write the path literally so it can be hashed.`); continue }
     const p = path.resolve(cwd || root, it.file)
+    if (/[*?[]/.test(it.file)) { problems.push(`cannot read the asset "${it.file}": a glob could match any build; write each path literally.`); continue }
     if (!fs.existsSync(p)) { problems.push(`asset ${it.file} not found from ${cwd || root}; cannot hash it.`); continue }
-    const sha = sha256(p)
+    let sha; try { sha = sha256(p) } catch (e) { problems.push(`asset ${it.file} cannot be read (${e.message}).`); continue }
     const hit = passingReceiptFor(root, { sha })
     if (!hit) problems.push(`no drill receipt in drills/ lists ${path.basename(p)} (sha256 ${sha.slice(0, 12)}…). A receipt for a different build does not count.`)
-    else if (hit.problems.length) problems.push(`${hit.file} lists ${path.basename(p)} but does not pass: ${hit.problems.join('; ')}.`)
+    else splitReceipt(hit, `${hit.file} lists ${path.basename(p)} but`, problems, hard)
+    hard.push(...embeddedKeyProblems(root, p, hit ? hit.r : null))
   }
-  return { root, problems }
+  return { root, problems, hard: [...new Set(hard)] }
+}
+/** A receipt's problems: the drill ones (the note may waive) and the key ones (it may not). */
+const KEY_RECEIPT = /^embedded_key|^check "embedded_key_works"/
+function splitReceipt(hit, label, problems, hard) {
+  const drill = hit.problems.filter((p) => !KEY_RECEIPT.test(p)); const key = hit.problems.filter((p) => KEY_RECEIPT.test(p))
+  if (drill.length) problems.push(`${label} does not pass: ${drill.join('; ')}.`)
+  for (const k of key) hard.push(`${hit.file}: ${k}`)
 }
 
 /** Nick's one-shot note, if `matches(tag)` accepts its tag; consumed on use. */
@@ -407,6 +802,15 @@ Repo: ${root}
 Only Nick can waive it, once, by having ~/.claude/release-approval.json written with this tag.
 A publish script reaches that note by naming its tag: node tools/release-gate.mjs --check --tag <tag> <assets>`
 
+const KEY_MESSAGE = (hard, root) => `RULE #2.1 — KEY BLOCKED: a free key may be built in, never committed; a paid key is never built in.
+${hard.map((p) => ' • ' + p).join('\n')}
+
+A key reaches a build only from %USERPROFILE%\\.embed-keys\\<RepoFolder>.json, registered free by Nick for that one repo
+(node tools/register-key.mjs free --repo <RepoFolder> --project "<Google project>" --no-billing; fingerprints only, one key
+per app, a Google project with no billing account). Check by hand: node tools/release-gate.mjs --scan [--staged] [<artifact>…]
+Standard: memory/KEY_EMBED.md        Repo: ${root}
+Nick's release note does not waive this; a leak is not a release decision.`
+
 // ── entry points ─────────────────────────────────────────────────────────────────────────────────
 const isMain = !!process.argv[1] && path.resolve(process.argv[1]).toLowerCase() === fileURLToPath(import.meta.url).toLowerCase()
 if (isMain) {
@@ -418,9 +822,24 @@ if (isMain) {
     if (p.length) { console.error(`FAIL ${args[1]}\n${p.map((x) => ' • ' + x).join('\n')}`); process.exit(1) }
     console.log(`PASS ${args[1]}`); process.exit(0)
   }
+  if (args[0] === '--scan') {           // #2.1 by hand: what git holds, and what the named artifacts carry
+    const root = repoRoot(process.cwd())
+    const staged = args.includes('--staged'); const files = args.slice(1).filter((a) => !a.startsWith('--'))
+    const hard = secretProblems(root, staged ? { staged: true, all: true, untracked: true, cwd: process.cwd() } : { cwd: root }); const notes = []
+    for (const f of files) {
+      if (!fs.existsSync(f)) { hard.push(`artifact ${f} not found`); continue }
+      const r = passingReceiptFor(root, { sha: sha256(f) })
+      hard.push(...embeddedKeyProblems(root, f, r ? r.r : null, { strict: false, notes }))
+      const keys = keysInArtifact(f)
+      console.log(`${path.basename(f)}: ${keys.length ? keys.map(describeKey).join('; ') : 'no key found in its bytes'}`)
+    }
+    for (const n of notes) console.log(`note: ${n}`)
+    if (hard.length) { console.error(KEY_MESSAGE([...new Set(hard)], root)); process.exit(1) }
+    console.log(`release-gate: no key or secret in ${staged ? 'the index, the worktree or the untracked files' : 'HEAD'}${files.length ? ', and the artifacts carry nothing that is not allowed' : ''}`); process.exit(0)
+  }
   if (args[0] === '--check') {
     const root = repoRoot(process.cwd())
-    const problems = []
+    const problems = []; const hard = secretProblems(root)
     let tag = null; const files = []
     for (let i = 1; i < args.length; i++) {
       if (args[i] === '--tag') tag = args[++i] || ''
@@ -430,23 +849,35 @@ if (isMain) {
     if (!files.length) problems.push('--check needs the asset paths it is about to publish')
     for (const f of files) {
       if (!fs.existsSync(f)) { problems.push(`asset ${f} not found`); continue }
-      const sha = sha256(f); const hit = passingReceiptFor(root, { sha })
+      let sha; try { sha = sha256(f) } catch (e) { problems.push(`asset ${f} cannot be read (${e.message})`); continue }
+      const hit = passingReceiptFor(root, { sha })
       if (!hit) problems.push(`no drill receipt in drills/ lists ${path.basename(f)} (sha256 ${sha.slice(0, 12)}…)`)
-      else if (hit.problems.length) problems.push(`${hit.file}: ${hit.problems.join('; ')}`)
+      else splitReceipt(hit, hit.file, problems, hard)
+      hard.push(...embeddedKeyProblems(root, f, hit ? hit.r : null))
     }
+    if (hard.length) { console.error(KEY_MESSAGE([...new Set(hard)], root)); process.exit(1) }   // before the note: never consumed for a leak
     if (problems.length && files.length && tag && approvalForTag(tag)) process.exit(0)
     if (problems.length) { console.error(MESSAGE(problems, root)); process.exit(1) }
-    console.log('release-gate: every asset has a passing drill receipt'); process.exit(0)
+    console.log('release-gate: every asset has a passing drill receipt and no stray key'); process.exit(0)
   }
   // hook mode
   let hook = {}
   try { hook = JSON.parse(fs.readFileSync(0, 'utf8') || '{}') } catch { process.exit(0) }
   if (!['Bash', 'PowerShell'].includes(hook.tool_name)) process.exit(0)
   const cmd = hook.tool_input?.command || ''
-  if (!/\bgh\b|adb|install|publish|release|deploy|upload|promote/i.test(cmd)) process.exit(0)   // fast path
+  if (!/\bgh\b|adb|install|publish|release|deploy|upload|promote|\bgit\b/i.test(cmd)) process.exit(0)   // fast path
   const cwd = hook.cwd || process.env.CLAUDE_PROJECT_DIR || process.cwd()
   let verdict
-  try { verdict = judge(cmd, cwd) } catch (e) { process.exit(0) }        // a bug in the gate must not brick the shell
+  try { verdict = judge(cmd, cwd) } catch (e) {
+    // a bug in the gate must not brick the shell — but a command that commits or publishes is refused until the gate
+    // is fixed (review 2026-10-31: a malformed receipt made judge() throw and the fail-open path let a paid key through)
+    let writes = false
+    try { writes = gitWriteIntents(cmd, cwd).length > 0 || publishIntents(cmd).length > 0 } catch {}
+    if (!writes) process.exit(0)
+    process.stderr.write(`release-gate: could not judge this command (${e.message}); it commits or publishes, so it is refused until the gate is fixed (node tools/release-gate.test.mjs).\n`)
+    process.exit(2)
+  }
+  if (verdict.hard.length) { process.stderr.write(KEY_MESSAGE(verdict.hard, verdict.root) + '\n'); process.exit(2) }
   if (!verdict.problems.length) process.exit(0)
   if (approvalFor(cmd)) process.exit(0)
   process.stderr.write(MESSAGE(verdict.problems, verdict.root) + '\n')

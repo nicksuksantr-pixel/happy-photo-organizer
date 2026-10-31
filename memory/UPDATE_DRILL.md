@@ -400,9 +400,12 @@ So each app crosses **once**, in this order:
    from their own Server, not from GitHub. A released station pointed at a local candidate Server reaches the
    bridge before it is published.
 2. It ships on **Nick's one-shot waiver**, with this written in its notes: *bridge, not drilled before release*.
-3. Within the hour, it is **drilled after the fact**: a `drill` account on the previous release updates itself
-   through the real channel, and every §4 check is recorded in `drills/<version>.json` with
-   `"bootstrap": true`. A failure means the fix ships at once, on the same waiver road.
+3. It is **drilled after the fact, before any field unit takes that route**: a `drill` account on the previous
+   release updates itself through the real channel, and every §4 check is recorded in `drills/<version>.json` with
+   `"bootstrap": true`. Until that receipt passes, no real unit is told to update — Nick's own copy included
+   (SM v1.570, 2026-10-31: Nick chose to write the one-click driver first and drill with it hours later, with his
+   own Ship Monitor kept closed meanwhile; the earlier "within the hour" was only a proxy for this). A failure
+   means the fix ships at once, on the same waiver road.
 4. **From the next release on, every release is drilled before it ships, with no exceptions.**
 
 If the app's updater already has an override that can point at a separate public test repo (HPO's
@@ -411,6 +414,9 @@ Declare the repo in `drills/drill.json`, giving `"drill_repo": "<owner>/<name-wi
 `"release_repo": "<the real one>"`. The lock then lets `gh release … --repo <drill_repo>` through without a
 receipt, because that upload IS the drill. It refuses the same command against any other repo. It also refuses
 a `drill_repo` whose name lacks "drill" or that equals the real repo.
+- `"embeds_key": true` in `drills/drill.json` when the app builds a Gemini key in (KEY_EMBED §5/§6): the gate then refuses a receipt
+  that does not declare `embedded_key {fp, repo}` with a passing `embedded_key_works` — so a keyless test build or a
+  forgotten field can never ship on a passing drill.
 
 ## 8 · What the lock does, and does not, do
 
