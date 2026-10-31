@@ -1,0 +1,105 @@
+reset: Happy Photo Organizer removed from 'drill'
+2026-10-31T23:31:47.7126804+07:00 drill of Happy Photo Organizer 1.066 -> 1.067 as NICKSUKSANTR\drill on NICKSUKSANTR
+2026-10-31T23:31:47.8090659+07:00 drill lock taken: C:\Users\Public\drill-busy.txt (Happy Photo Organizer | pid 31716 | drill | started 2026-10-31T23:31:47.7809104+07:00)
+2026-10-31T23:31:48.4451221+07:00 FROM C:\Users\Public\HPO-drill\from\HappyPhotoOrganizerSetup.exe sha256=93c4d69c9c2346882d8c38eb27051a269be23e1b4f2d387a68a5636328b0579b
+2026-10-31T23:31:48.4451221+07:00 TO   C:\Users\Public\HPO-drill\to\HappyPhotoOrganizerSetup.exe sha256=bf807b97243c71b3e3b72239e6275afdd1aab9b63b07eb7c32b87f545d429364
+2026-10-31T23:31:48.4698622+07:00 CHECK start_from_released_build PASS :: FROM = C:\Users\Public\HPO-drill\from\HappyPhotoOrganizerSetup.exe, sha256 93c4d69c9c2346882d8c38eb27051a269be23e1b4f2d387a68a5636328b0579b = the released v1.066 file named in drills/drill.json
+2026-10-31T23:31:48.5101585+07:00 MSIX sanity marker: C:\Users\drill\AppData\Local\drill-marker-b1fa210c.txt (confirm it from a second, unpackaged shell)
+2026-10-31T23:31:48.5184548+07:00 installing FROM: C:\Users\Public\HPO-drill\from\HappyPhotoOrganizerSetup.exe --silent
+2026-10-31T23:32:06.9324421+07:00 FROM setup exit 0; app launched by it: True
+2026-10-31T23:32:07.9368225+07:00 fixtures: auth.json (placeholder key + pairing token + destination), jobshot_filed.json (1 receipt), 1 user job in the catalog, a taskbar-pin .lnk
+2026-10-31T23:32:14.5200298+07:00 FROM installed: 1900 files under C:\Users\drill\AppData\Local\HappyPhotoOrganizer
+2026-10-31T23:32:14.5317131+07:00   data jobshot_filed.json sha256=a098d6e07ca395092b248b61aa86dead8af36d71b0d675218c88e564ee332264
+2026-10-31T23:32:14.5367996+07:00   shortcut C:\Users\drill\Desktop\Happy Photo Organizer.lnk -> C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe
+2026-10-31T23:32:14.5408117+07:00   shortcut C:\Users\drill\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Happy Photo Organizer.lnk -> C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe
+2026-10-31T23:32:14.5438684+07:00   shortcut C:\Users\drill\AppData\Roaming\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\Happy Photo Organizer.lnk -> C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe
+2026-10-31T23:32:14.5486375+07:00   fixture auth.api_key = sha256:34a706916020
+2026-10-31T23:32:14.5552563+07:00   fixture auth.model = gemini-3.5-flash-lite
+2026-10-31T23:32:14.5587802+07:00   fixture auth.auto_check_updates = True
+2026-10-31T23:32:14.5627707+07:00   fixture auth.jobshot_token = sha256:bdf0fe5c9a09
+2026-10-31T23:32:14.5658795+07:00   fixture auth.last_dest_root = C:\Users\drill\Documents\Drill archive
+2026-10-31T23:32:14.5712103+07:00   fixture catalog.user_job = 1
+2026-10-31T23:32:15.3946303+07:00 route: FROM's own updater, through the loopback feed
+2026-10-31T23:32:15.4280107+07:00 started FROM; the harness starts nothing else until the checks
+2026-10-31T23:32:39.1950563+07:00   update.log: 2026-10-31T23:32:17+07:00 STARTED 1.066 C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe
+2026-10-31T23:32:39.1991291+07:00   update.log: 2026-10-31T23:32:19+07:00 UPDATE CHECK 1.066 v1.067 is newer (feed http://127.0.0.1:47665/latest)
+2026-10-31T23:32:39.2024631+07:00   update.log: 2026-10-31T23:32:19+07:00 UPDATE FOUND 1.067 HappyPhotoOrganizerSetup.exe 91707238 bytes sha256=bf807b97243c71b3e3b72239e6275afdd1aab9b63b07eb7c32b87f545d429364
+2026-10-31T23:32:39.2089839+07:00   update.log: 2026-10-31T23:32:20+07:00 UPDATE DOWNLOADED 1.067 C:\Users\drill\.happy-photo-organizer\updates\HappyPhotoOrganizerSetup-v1.067.exe 91707238 bytes
+2026-10-31T23:32:39.2119150+07:00   update.log: 2026-10-31T23:32:20+07:00 UPDATE VERIFIED 1.067 sha256=bf807b97243c71b3e3b72239e6275afdd1aab9b63b07eb7c32b87f545d429364
+2026-10-31T23:32:39.2159158+07:00   update.log: 2026-10-31T23:32:20+07:00 UPDATE HANDOVER 1.067 C:\Users\drill\.happy-photo-organizer\updates\HappyPhotoOrganizerSetup-v1.067.exe --silent --upgrade
+2026-10-31T23:32:39.2211702+07:00   update.log: 2026-10-31T23:32:29+07:00 UPDATE STAGED 1.067 1898 files, 129621912 bytes in C:\Users\drill\AppData\Local\HappyPhotoOrganizer\.update\new
+2026-10-31T23:32:39.2249941+07:00   update.log: 2026-10-31T23:32:36+07:00 UPDATE SWAPPED 1.067 1898 files in C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer; pruned 0
+2026-10-31T23:32:39.2280154+07:00   update.log: 2026-10-31T23:32:38+07:00 STARTED 1.067 C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe
+2026-10-31T23:32:39.3096744+07:00   route evidence: [2026-10-31 23:32:19] _fetch_latest_release: GET http://127.0.0.1:47665/latest
+2026-10-31T23:32:39.3143599+07:00   route evidence: [2026-10-31 23:32:19] download_installer start: url=http://127.0.0.1:47665/asset/HappyPhotoOrganizerSetup.exe dest=C:\Users\drill\.happy-photo-organizer\updates\HappyPhotoOrganizerSetup-v1.067.exe expected_size=91707238
+2026-10-31T23:32:39.3191017+07:00   route evidence: [2026-10-31 23:32:20]   attempt 1: SUCCESS - 91,707,238 bytes
+2026-10-31T23:32:39.3295246+07:00 CHECK real_update_path PASS :: the harness started only the FROM v1.066 exe; its own updater fetched: [2026-10-31 23:32:19] _fetch_latest_release: GET http://127.0.0.1:47665/latest | [2026-10-31 23:32:19] download_installer start: url=http://127.0.0.1:47665/asset/HappyPhotoOrganizerSetup.exe dest=C:\Users\drill\.happy-photo-organizer\updates\HappyPhotoOrganizerSetup-v1.067.exe expected_size=91707238 | [2026-10-31 23:32:20]   attempt 1: SUCCESS - 91,707,238 bytes; then the TO installer: 2026-10-31T23:32:36+07:00 UPDATE SWAPPED 1.067 1898 files in C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer; pruned 0
+2026-10-31T23:32:39.3381287+07:00 CHECK new_version_running PASS :: 2026-10-31T23:32:38+07:00 STARTED 1.067 C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe
+2026-10-31T23:32:51.6200641+07:00 CHECK one_process PASS :: 1 process(es): 18584 C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe
+2026-10-31T23:32:51.6369782+07:00 CHECK relaunched_itself PASS :: the harness started nothing after FROM; '2026-10-31T23:32:38+07:00 STARTED 1.067 C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe' and pid 18584 runs C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe with its window (the installer's launch_app() after the swap)
+2026-10-31T23:32:51.7337508+07:00 CHECK one_install PASS :: install folders: C:\Users\drill\AppData\Local\HappyPhotoOrganizer; exe copies: C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe; .update left after cleanup: False (CLEANED line: 2026-10-31T23:32:51+07:00 UPDATE CLEANED 1.067 removed the rollback copy (1898 files) in C:\Users\drill\AppData\Local\HappyPhotoOrganizer\.update); Uninstall entry HKCU=True HKLM=False
+2026-10-31T23:33:03.1553961+07:00 fresh install of the candidate into C:\Users\Public\HPO-drill\out\fresh-1.067 exited 0
+Add-Content : Could not find a part of the path 'C:\Users\Public\HPO-drill\out\logs\1.067.log'.
+At C:\Users\Public\HPO-drill\kit\DrillKit.psm1:21 char:31
++ ... lLogPath) { Add-Content -LiteralPath $script:DrillLogPath -Value $lin ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\Public...\logs\1.067.log:String) [Add-Content], DirectoryNotFo 
+   undException
+    + FullyQualifiedErrorId : GetContentWriterDirectoryNotFoundError,Microsoft.PowerShell.Commands.AddContentCommand
+ 
+2026-10-31T23:33:14.0205892+07:00 CHECK tree_matches_fresh_install PASS :: updated 1900 files vs a fresh install of v1.067 1900 files, allowlist [uninstall.bat, HappyPhotoOrganizer/_internal/data/job_catalog.json]: identical
+Add-Content : Could not find a part of the path 'C:\Users\Public\HPO-drill\out\logs\1.067.log'.
+At C:\Users\Public\HPO-drill\kit\DrillKit.psm1:21 char:31
++ ... lLogPath) { Add-Content -LiteralPath $script:DrillLogPath -Value $lin ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\Public...\logs\1.067.log:String) [Add-Content], DirectoryNotFo 
+   undException
+    + FullyQualifiedErrorId : GetContentWriterDirectoryNotFoundError,Microsoft.PowerShell.Commands.AddContentCommand
+ 
+2026-10-31T23:33:14.1246521+07:00 CHECK shortcuts_open_new PASS :: C:\Users\drill\Desktop\Happy Photo Organizer.lnk -> C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe (the updated exe); C:\Users\drill\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Happy Photo Organizer.lnk -> C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe (the updated exe); C:\Users\drill\AppData\Roaming\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\Happy Photo Organizer.lnk -> C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe (the updated exe); that exe sha256 8f8fe4bdea4e176b7bd1c647db62a510321d138ae75dc790222256aa6d46876d = fresh v1.067 exe: True; it ran as: 2026-10-31T23:32:38+07:00 STARTED 1.067 C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe
+Add-Content : Could not find a part of the path 'C:\Users\Public\HPO-drill\out\logs\1.067.log'.
+At C:\Users\Public\HPO-drill\kit\DrillKit.psm1:21 char:31
++ ... lLogPath) { Add-Content -LiteralPath $script:DrillLogPath -Value $lin ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\Public...\logs\1.067.log:String) [Add-Content], DirectoryNotFo 
+   undException
+    + FullyQualifiedErrorId : GetContentWriterDirectoryNotFoundError,Microsoft.PowerShell.Commands.AddContentCommand
+ 
+2026-10-31T23:33:14.2450550+07:00 CHECK user_data_intact PASS :: jobshot_filed.json byte-identical; auth.api_key before=sha256:34a706916020 after=sha256:34a706916020; auth.model before=gemini-3.5-flash-lite after=gemini-3.5-flash-lite; auth.auto_check_updates before=True after=True; auth.jobshot_token before=sha256:bdf0fe5c9a09 after=sha256:bdf0fe5c9a09; auth.last_dest_root before=C:\Users\drill\Documents\Drill archive after=C:\Users\drill\Documents\Drill archive; catalog.user_job before=1 after=1
+Add-Content : Could not find a part of the path 'C:\Users\Public\HPO-drill\out\logs\1.067.log'.
+At C:\Users\Public\HPO-drill\kit\DrillKit.psm1:21 char:31
++ ... lLogPath) { Add-Content -LiteralPath $script:DrillLogPath -Value $lin ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\Public...\logs\1.067.log:String) [Add-Content], DirectoryNotFo 
+   undException
+    + FullyQualifiedErrorId : GetContentWriterDirectoryNotFoundError,Microsoft.PowerShell.Commands.AddContentCommand
+ 
+2026-10-31T23:33:14.3570993+07:00 CHECK no_update_loop PASS :: fed v1.067 itself: 2026-10-31T23:32:40+07:00 UPDATE CHECK 1.067 nothing newer: latest is v1.067 (feed http://127.0.0.1:47665/latest); FOUND/DOWNLOADED/HANDOVER since: 0; asset requests at the feed since v1.067 started: 0
+Add-Content : Could not find a part of the path 'C:\Users\Public\HPO-drill\out\logs\1.067.log'.
+At C:\Users\Public\HPO-drill\kit\DrillKit.psm1:21 char:31
++ ... lLogPath) { Add-Content -LiteralPath $script:DrillLogPath -Value $lin ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\Public...\logs\1.067.log:String) [Add-Content], DirectoryNotFo 
+   undException
+    + FullyQualifiedErrorId : GetContentWriterDirectoryNotFoundError,Microsoft.PowerShell.Commands.AddContentCommand
+ 
+2026-10-31T23:33:18.2158574+07:00 CHECK embedded_key_works PASS :: exit 0; status 200; model gemini-3.5-flash-lite; key fp sha256:e656add8f927
+Add-Content : Could not find a part of the path 'C:\Users\Public\HPO-drill\out\logs\1.067.log'.
+At C:\Users\Public\HPO-drill\kit\DrillKit.psm1:21 char:31
++ ... lLogPath) { Add-Content -LiteralPath $script:DrillLogPath -Value $lin ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\Public...\logs\1.067.log:String) [Add-Content], DirectoryNotFo 
+   undException
+    + FullyQualifiedErrorId : GetContentWriterDirectoryNotFoundError,Microsoft.PowerShell.Commands.AddContentCommand
+ 
+2026-10-31T23:33:36.8409185+07:00 CHECK unknown_is_not_no PASS :: feed 500 -> 2026-10-31T23:33:22+07:00 UPDATE CHECK 1.067 could not check: GitHub answered HTTP 500 (feed http://127.0.0.1:47665/latest); feed 403 -> 2026-10-31T23:33:29+07:00 UPDATE CHECK 1.067 could not check: could not reach GitHub: <urlopen error [WinError 10061] No connection could be made because the target machine actively refused it> (feed http://127.0.0.1:47665/latest); feed drop -> 2026-10-31T23:33:36+07:00 UPDATE CHECK 1.067 could not check: could not reach GitHub: <urlopen error [WinError 10061] No connection could be made because the target machine actively refused it> (feed http://127.0.0.1:47665/latest)
+Add-Content : Could not find a part of the path 'C:\Users\Public\HPO-drill\out\logs\1.067.log'.
+At C:\Users\Public\HPO-drill\kit\DrillKit.psm1:21 char:31
++ ... lLogPath) { Add-Content -LiteralPath $script:DrillLogPath -Value $lin ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\Public...\logs\1.067.log:String) [Add-Content], DirectoryNotFo 
+   undException
+    + FullyQualifiedErrorId : GetContentWriterDirectoryNotFoundError,Microsoft.PowerShell.Commands.AddContentCommand
+ 
+2026-10-31T23:51:23.6350949+07:00 drill lock released: C:\Users\Public\drill-busy.txt
+Terminate batch job (Y/N)? 

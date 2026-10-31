@@ -364,6 +364,7 @@ try {
   Write-DrillLog "DRILL STOPPED: $($_.Exception.Message)"
   $extra['stopped'] = $_.Exception.Message
 } finally {
+  Set-DrillStopFile ''   # cleanup must not be cut short by the STOP that ended the run: its waits run their own time now
   try { Stop-AppProcesses $exeName } catch {}
   if ($feedProc) { Stop-FakeFeed $feedProc $feedState }
   Exit-DrillLock $lock
