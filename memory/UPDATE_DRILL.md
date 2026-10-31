@@ -397,7 +397,12 @@ a `drill_repo` whose name lacks "drill" or that equals the real repo.
     `adb … install` in a table. A body fed to a shell or to `iex` is still read as commands.
 - **Waiver: Nick's one-shot note.** `~/.claude/release-approval.json` holds `{"tag":"vX","reason":"…","expiresEpochMs":…}`
   and is consumed on use. Claude writes it only on Nick's explicit words for that tag. The hook reads it when the tag
-  appears in the command. A publish script reads it through `--check --tag <tag> <assets>`.
+  appears in the command. A publish script reads it through `--check --tag <tag> <assets>`. **The reason is ASCII
+  English** (quote Nick's words paraphrased, never the Thai): the gate prints the reason when it consumes the note,
+  and a publish script that re-prints it on the cp1252 console crashes there, after the consume and before any
+  upload (EMR v0.5.4, 2026-10-31: nothing released, note gone, Nick asked again). **In a publish script, nothing
+  that can raise may sit between `--check` and the first upload call**: print outside text with
+  `errors="replace"`, and do the file checks before `--check`, not after.
 - **What it cannot catch, stated rather than implied.** A receipt written by hand to get past it, which the rule
   forbids. And a release made outside Claude Code: GitHub's website, or a terminal Nick runs himself. The lock catches
   forgetting, not fraud. Like the agent-cap hook, it **fails open** if `node` cannot run. A debug `flutter run` or
