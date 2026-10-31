@@ -264,7 +264,7 @@ function hitsIn(buf, where, out) {
     const lines = buf.toString('utf8').split('\n')
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i]
-      if (PRIVATE_BLOCK.test(line)) out.push(`${where}:${i + 1} holds a private key block: never committed`)
+      if (PRIVATE_BLOCK.test(line) && !NOT_A_KEY.test(line)) out.push(`${where}:${i + 1} holds a private key block: never committed`)
       for (const k of keysInText(line)) {
         if (NOT_A_KEY.test(line) && !isRegistered(k)) continue     // a fixture may say so; a real key may not
         out.push(`${where}:${i + 1} holds ${describeKey(k)}: a key is never committed — take the line out (git reset the file, edit, add again; a fixture may say not-a-key)`)
@@ -279,10 +279,10 @@ const u16 = (s) => [...s].map((c) => c.replace(/[.*+?^${}()|[\]\\\/-]/g, '\\$&')
 /** Keys and secret-named files in what git is about to publish. Sentences; empty = clean.
  *  staged: the index (+ the worktree with `all`, + untracked files with `untracked` = true or a path list), scoped to
  *  `paths` as git resolves them from `cwd`. Otherwise: the trees of `refs` (a push, a release), default HEAD. */
-export function secretProblems(root, { staged = false, all = false, untracked = false, paths = [], cwd = root, refs = ['HEAD'], message = '' } = {}) {
+export function secretProblems(root, { staged = false, all = false, untracked = false, paths = [], cwd = root, refs = ['HEAD'], message = '', exclude = [] } = {}) {
   const out = []; const dir = cwd || root
   const probe = gitAt(dir, ['rev-parse', '--show-toplevel'])
-  if (probe.error) return [`could not run git (${probe.error.message}), so nothing here can be judged: a commit or a publish waits until git runs`]
+  if (probe.error) return [fs.existsSync(dir) ? `could not run git (${probe.error.message}), so nothing here can be judged: a commit or a publish waits until git runs` : `the folder ${dir} does not exist, so nothing there can be judged`]
   if (probe.status !== 0) return []                       // not a repository: git refuses the command by itself
   const top = String(probe.stdout).trim(); const sp = paths.length ? ['--', ...paths] : []
   if (message) for (const k of keysInText(message)) out.push(`the commit message holds ${describeKey(k)}: a key is never committed, not even in a message`)
@@ -317,7 +317,8 @@ export function secretProblems(root, { staged = false, all = false, untracked = 
       const tree = gitAt(top, ['ls-tree', '-r', '--name-only', '-z', ref])
       if (tree.status !== 0) continue                     // an unborn HEAD, a ref that does not exist yet
       const label = ref === 'HEAD' ? '' : `${ref}:`
-      for (const q of zlist(tree)) if (SECRET_PATH.test(q)) out.push(`${label}${q} is a secret by its name and is tracked: git rm --cached it and list it in .gitignore`)
+      const skip = new Set(exclude)                        // paths a commit on the same line replaces: judged from the worktree instead
+      for (const q of zlist(tree)) if (SECRET_PATH.test(q) && !skip.has(q)) out.push(`${label}${q} is a secret by its name and is tracked: git rm --cached it and list it in .gitignore`)
       const lines = [
         ...String(gitAt(top, ['grep', '--text', '-n', '-E', E, ref, '--', '.']).stdout || '').split('\n'),
         ...(texts.length ? String(gitAt(top, ['grep', '--text', '-n', '-F', '-f', f1, ref, '--', '.']).stdout || '').split('\n') : []),
@@ -325,9 +326,9 @@ export function secretProblems(root, { staged = false, all = false, untracked = 
       ]
       for (const raw of lines) {
         if (!raw.startsWith(ref + ':')) continue
-        const m = /^([^\n]+?):(\d+):([\s\S]*)$/.exec(raw.slice(ref.length + 1)); if (!m) continue
+        const m = /^([^\n]+?):(\d+):([\s\S]*)$/.exec(raw.slice(ref.length + 1)); if (!m || skip.has(m[1])) continue
         const text = m[3].replace(/\0/g, '')
-        if (PRIVATE_BLOCK.test(text)) out.push(`${label}${m[1]}:${m[2]} holds a private key block: never committed`)
+        if (PRIVATE_BLOCK.test(text) && !NOT_A_KEY.test(text)) out.push(`${label}${m[1]}:${m[2]} holds a private key block: never committed`)
         for (const k of keysInText(text)) {
           if (NOT_A_KEY.test(text) && !isRegistered(k)) continue
           out.push(`${label}${m[1]}:${m[2]} holds ${describeKey(k)}: a key is never committed — take it out of the history that is pushed`)
@@ -370,6 +371,9 @@ export function embeddedKeyProblems(root, file, r, { strict = true, notes = [] }
 
 // ── reading the git command ───────────────────────────────────────────────────────────────────────
 const CD = /^(cd|chdir|pushd|set-location|sl|push-location)$/i
+// Git Bash writes C:\Users as /c/Users; path.resolve on Windows would read that as C:\c\Users (the Director's own
+// commit was refused with "could not run git" the minute the gate shipped, 2026-10-31)
+const msysPath = (d) => process.platform === 'win32' && /^\/[a-zA-Z](\/|$)/.test(d) ? `${d[1].toUpperCase()}:${d.slice(2) || '/'}` : d
 const STAGES = /^(add|rm|mv|stash|apply|am|cherry-pick|merge|rebase|revert|restore|checkout|switch)$/
 /** The command inside a shell construct: `if (...) { git push }`, `do git commit …`, `{ … }`, `sudo env git …`. */
 function unwrap(seg) {
@@ -402,7 +406,7 @@ export function gitWriteIntents(cmd, cwd = '.') {
       const exe = path.basename(w[0]).toLowerCase().replace(/\.exe$/, '')
       if (CD.test(exe)) {
         const d = w.slice(1).find((x) => !x.startsWith('-'))
-        if (!d || isVar(d) || d === '-' || d === '~') { unknown = true; cur = null } else { cur = path.resolve(cwd, cur || '.', d); unknown = false }
+        if (!d || isVar(d) || d === '-' || d.startsWith('~')) { unknown = true; cur = null } else { cur = path.resolve(cwd, cur || '.', msysPath(d)); unknown = false }
         continue
       }
       if (/^(popd|pop-location)$/i.test(exe)) { cur = null; unknown = false; continue }
@@ -416,7 +420,7 @@ export function gitWriteIntents(cmd, cwd = '.') {
         else if (w[i] === '-c' || w[i] === '--git-dir' || w[i] === '--work-tree') i++
       }
       const verb = w[i]; const rest = w.slice(i + 1)
-      const base = { seg, gitExe, dir: dirVar ? null : (dir ? path.resolve(cwd, cur || '.', dir) : cur), unknownDir: dirVar || (unknown && !dir) }
+      const base = { seg, gitExe, dir: dirVar ? null : (dir ? path.resolve(cwd, cur || '.', msysPath(dir)) : cur), unknownDir: dirVar || (unknown && !dir) }
       if (STAGES.test(verb)) {
         const all = verb !== 'add' || rest.some((x) => /^(-A|--all|--no-ignore-removal|\.|\*)$/.test(x) || /^-[a-zA-Z]*A[a-zA-Z]*$/.test(x))
         found.push({ kind: 'stage', ...base, all, paths: verb === 'add' ? rest.filter((x) => !x.startsWith('-')) : [] })
@@ -466,7 +470,7 @@ export function gitWriteIntents(cmd, cwd = '.') {
   for (const it of found) {
     if (it.kind === 'stage') { if (it.all) stagedAll = true; stagedPaths.push(...it.paths); continue }
     if (it.kind === 'commit') { if (stagedAll || stagedPaths.length) { it.all = true; it.untracked = stagedAll ? true : [...stagedPaths] }; committed = true; continue }
-    if (it.kind === 'push' && (committed || stagedAll || stagedPaths.length)) it.worktree = true
+    if (it.kind === 'push' && (committed || stagedAll || stagedPaths.length)) { it.worktree = true; it.untracked = stagedAll ? true : stagedPaths.length ? [...stagedPaths] : false }
   }
   return found.filter((it) => it.kind !== 'stage')
 }
@@ -716,14 +720,17 @@ export function judge(cmd, cwd) {
     if (it.unknownDir) { hard.push(`${it.kind}: cannot read the folder "${it.seg}" runs in (a variable, or a cd the gate cannot follow); write it literally so the right repo is scanned`); continue }
     if (it.gitExe) GIT = it.gitExe
     const dir = it.dir || cwd || root; const r = repoRoot(dir)
+    if (!fs.existsSync(dir)) { hard.push(`${it.kind}: the folder "${it.seg}" runs in does not exist (${dir}); write the path the shell will really use`); continue }
     if (it.kind === 'commit') {
       let message = it.message || ''; const paths = [...it.paths]
       if (it.messageFile) { const m = it.messageFile === '-' ? '' : read(path.resolve(dir, it.messageFile)); if (!m) hard.push(`commit: cannot read the message in ${it.messageFile}; give it with -m`); else message += '\n' + m }
       if (it.pathsFile) { const m = it.pathsFile === '-' ? '' : read(path.resolve(dir, it.pathsFile)); if (!m) hard.push(`commit: cannot read --pathspec-from-file ${it.pathsFile}; name the paths on the line`); else paths.push(...m.split(/\r?\n/).filter(Boolean)) }
       hard.push(...secretProblems(r, { staged: true, all: it.all || paths.length > 0, untracked: it.untracked || false, paths, cwd: dir, message }).map((p) => `commit: ${p}`))
     } else {
-      hard.push(...secretProblems(r, { refs: it.all ? allHeads(r) : it.refs, cwd: r }).map((p) => `push: ${p}`))
-      if (it.worktree) hard.push(...secretProblems(r, { staged: true, all: true, untracked: true, cwd: r }).map((p) => `push (what the commit before it lands): ${p}`))
+      // a commit earlier on the line replaces files in HEAD: those are judged as they will land, not as HEAD has them now
+      const changed = it.worktree ? [...zlist(gitAt(r, ['diff', '--cached', '--name-only', '-z'])), ...zlist(gitAt(r, ['diff', '--name-only', '-z']))] : []
+      hard.push(...secretProblems(r, { refs: it.all ? allHeads(r) : it.refs, cwd: r, exclude: changed }).map((p) => `push: ${p}`))
+      if (it.worktree) hard.push(...secretProblems(r, { staged: true, all: true, untracked: it.untracked || false, cwd: r }).map((p) => `push (what the commit before it lands): ${p}`))
     }
   }
   const intents = publishIntents(cmd)
