@@ -13,8 +13,9 @@ import tkinterdnd2
 ctk_path = Path(customtkinter.__file__).parent
 tkdnd_path = Path(tkinterdnd2.__file__).parent
 
-# The built-in Gemini key (Nick 2026-10-31): read from the gitignored
-# secrets/gemini_key.txt, bundled masked as data/gemini.key (core/keymask.py).
+# The built-in Gemini key (Nick 2026-10-31, house rule KEY_EMBED): read from
+# %USERPROFILE%\.embed-keys\Happy-Photo-Organizer.json - OUTSIDE the repo, which
+# is public - and bundled masked as data/gemini.key (core/keymask.py).
 # A build without it would ship an app whose key screen is hidden and that has
 # no key, so it stops here instead. HPO_ALLOW_NO_KEY=1 builds one anyway (the
 # Settings key field then shows, as before v1.067).
@@ -22,17 +23,21 @@ import os
 sys.path.insert(0, SPECPATH)
 from core import keymask
 
-_key_src = Path(SPECPATH).joinpath(*keymask.SECRET_KEY_PATH)
-_key = _key_src.read_text(encoding='ascii').strip() if _key_src.exists() else ''
+_key_src = keymask.embed_key_file()
+_key = keymask.read_embed_key() or ''
 _key_datas = []
 if _key:
-    _key_dir = Path(SPECPATH) / 'build' / '_bundled_key'
-    _key_dir.mkdir(parents=True, exist_ok=True)
+    # The masked copy is staged in a temp folder OUTSIDE the repo and removed
+    # when the build ends: masked is still the key (the pad is public), and a
+    # file left under build/ is one `git add -f` from public (review 2026-10-31).
+    import atexit, shutil, tempfile
+    _key_dir = Path(tempfile.mkdtemp(prefix='hpo-key-'))
+    atexit.register(shutil.rmtree, str(_key_dir), True)
     (_key_dir / keymask.BUNDLED_KEY_NAME).write_bytes(keymask.mask(_key))
     _key_datas = [(str(_key_dir / keymask.BUNDLED_KEY_NAME), 'data')]
 elif os.environ.get('HPO_ALLOW_NO_KEY') != '1':
-    raise SystemExit(f'No built-in Gemini key: {_key_src} is missing or empty. '
-                     'Put the key there, or set HPO_ALLOW_NO_KEY=1.')
+    raise SystemExit(f'No built-in Gemini key: {_key_src} is missing, empty or not '
+                     '{"GEMINI_KEY": "<key>"}. Put the key there, or set HPO_ALLOW_NO_KEY=1.')
 
 
 a = Analysis(
@@ -65,6 +70,7 @@ a = Analysis(
         # core/ helpers — usually picked up by static analysis but kept here
         # in case any of them grow into dynamic-import users later.
         'core.keymask',
+        'core.key_check',
         'core.updater',
         'core.update_worker',
         'core.version',

@@ -13,23 +13,44 @@ deferred".
 
 ### Changed
 - **The app comes with a free Gemini key built in.** Nobody has to make a key
-  before the first scan. A key you saved yourself still wins (it has its own
-  quota). The built-in key is never in git: the build bundles it from a local,
-  gitignored file and refuses to build without one.
+  before the first scan. The built-in key is used even when an older key is
+  saved (house rule: a free key may be built in, a paid key never). The key is
+  never in the repo: the build reads it from a file outside it and refuses to
+  build without one.
 - **The key field is hidden.** The installer no longer asks for a key, and
-  Settings no longer shows the field. Ctrl+Shift+K in Settings brings it back,
-  for when the built-in key is out of quota. A build with no built-in key shows
-  the field as before.
+  Settings no longer shows the field. A build with no built-in key shows it as
+  before.
+- **Settings says plainly what the free key means:** Google may use the
+  photos you send to improve its services, and people at Google may look at
+  them. The installer's licence text says the same.
 - **Test** and **Refresh models** in Settings use the key the app actually uses.
 
 ### Fixed
-- **A run where the AI answered for no folder now says so.** A refused key, a
-  used-up quota or no network used to fail every folder quietly, row by row,
-  and the run still said "done". Now it is reported as a failure with one line
-  saying why, and the alert points to Ctrl+Shift+K. One failed folder among
-  good ones is still left to its row.
+- **When AI is unavailable, the app says so in one line and goes on without
+  it.** A withdrawn key, a used-up quota or no network used to fail every
+  folder quietly, row by row, and the run still said "done". Now:
+  - A key-level failure is named ("the key was withdrawn", "the free quota is
+    used up for today", "the free quota is busy right now"), even when other
+    folders got through.
+  - A permanent one stops the rest of the run from calling.
+  - The folders can still be named by hand.
+  - Key-shaped text is removed from every error message.
+  - A local file error is never blamed on the key, even when a folder or photo
+    name contains 401, 403 or 429.
+- **A tier or model saved for an old paid key no longer misfires on the free
+  one.** While the built-in key is in use, a "Paid" or fast custom tier is held
+  to the free limits (AI Health says so). A model the free tier does not serve
+  is reported as "choose another model in Settings".
 - The installer no longer shows "Saving API key..." on every install, and the
   uninstaller asks "Also remove your settings?" instead of mentioning a key.
+
+### For the update drill (#28)
+- `--check-embedded-key` (drill mode only) makes one real call with the
+  built-in key and writes the status, the model and the key's fingerprint
+  (never the key) for the drill's `embedded_key_works` check.
+- A `drill-open-settings` marker makes the next start in drill mode open
+  Settings once, which is how the drill makes the app busy now that a built-in
+  key means Settings never opens by itself.
 
 ## [1.066] — 2026-10-31 — The bridge: an update you can prove (released after its drill passed, #28)
 

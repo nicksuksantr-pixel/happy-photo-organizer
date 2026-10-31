@@ -688,7 +688,11 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
     # ─── Settings / auth ─────────────────────────
 
     def _check_auth_on_start(self):
-        if not auth.get_api_key():
+        # The drill's busy marker is taken first, so it is consumed even when
+        # Settings would open anyway (no key at all).
+        from core import updater
+        drill_busy = updater.take_drill_busy_marker()
+        if drill_busy or not auth.get_api_key():
             self.after(300, self._open_settings)
         # Paired already? Then start listening without being asked — Nick's
         # flow is "open HPO, scan, send", and after the first scan the scan is
@@ -1850,15 +1854,16 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
                 # F7 (Tester 2026-06-04): AI couldn't run at all (e.g. bad/
                 # missing key). Surface it as an error + alert instead of the
                 # misleading "Phase 2 done" line — every row is an AI-error
-                # placeholder, not a real result.
+                # placeholder, not a real result. v1.067 (house rule
+                # KEY_EMBED): one line that AI is unavailable, and the app goes
+                # on without it - the rows can still be named by hand.
+                # plan.ai_error is that line, with any key-shaped text redacted.
                 err = plan.ai_error
-                self.after(0, lambda e=err: self._log(f"Phase 2 FAILED — AI did not run: {e}", "err"))
-                self.after(0, lambda e=err: messagebox.showerror(
-                    "AI tagging failed",
-                    f"The AI could not analyze your photos:\n\n{e}\n\n"
-                    "Check your internet connection, then try again.\n\n"
-                    "If the key is the problem (refused, or out of quota), "
-                    "open Settings and press Ctrl+Shift+K to enter your own key.",
+                self.after(0, lambda e=err: self._log(f"Phase 2: {e}", "err"))
+                self.after(0, lambda e=err: messagebox.showwarning(
+                    "AI unavailable",
+                    f"{e}\n\nThe app works on without AI: name the folders "
+                    "yourself in the list.",
                 ))
             else:
                 self.after(0, lambda: self._log("Phase 2 done — awaiting review", "ok"))
@@ -2294,6 +2299,14 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
 
 
 def main() -> int:
+    # KEY_EMBED §7: the drill's one real call with the built-in key, from the
+    # updated build. Before the single-instance gate: it opens no window and
+    # may run beside the app. Drill mode only.
+    if "--check-embedded-key" in sys.argv[1:]:
+        from core import key_check, updater
+        if not updater.drill_mode():
+            return 2
+        return 0 if key_check.run().get("status") == 200 else 1
     if not ensure_single_instance():
         return 0
     # UPDATE_DRILL §3.3: every start says which build and from where, before

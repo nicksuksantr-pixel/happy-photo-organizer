@@ -38,9 +38,13 @@ release-notes-*.md
 # Sensitive
 auth.json
 *.env
-# The built-in Gemini key: the build reads it from here. Never in git — the
-# repo is public (core/keymask.py).
+# The built-in Gemini key lives OUTSIDE the repo, in
+# %USERPROFILE%\.embed-keys\Happy-Photo-Organizer.json (house rule KEY_EMBED;
+# core/keymask.py). These stay ignored only as a backstop: secrets/ was the
+# retired first location, and gemini.key is the masked copy a build bundles.
+# tools/key_guard.py (pre-commit + commit-msg hooks) is the real guard.
 secrets/
+*.key
 
 # Claude Code session state
 .claude/scheduled_tasks.lock

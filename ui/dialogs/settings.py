@@ -1,6 +1,6 @@
 """
 settings.py — Settings dialog (model, UI scale, auto-update toggle; the API
-key field is hidden behind Ctrl+Shift+K since v1.067).
+key field is hidden since v1.067, when the app carries a built-in free key).
 """
 from __future__ import annotations
 
@@ -101,11 +101,27 @@ class SettingsDialog(ctk.CTkToplevel):
         body = ctk.CTkScrollableFrame(self, fg_color="transparent")
         body.pack(fill="both", expand=True, padx=0, pady=(8, 0))
 
-        # v1.067 (Nick 2026-10-31): the app carries a built-in free key, so
-        # the key field is hidden. It shows only when this build has no
-        # built-in key (nothing would work without one), or on Ctrl+Shift+K —
-        # the way back if the built-in key is ever revoked or out of quota.
-        self._key_shown = auth.get_bundled_key() is None
+        # v1.067 (Nick 2026-10-31, house rule KEY_EMBED): the app carries a
+        # built-in free key, which wins over a saved one, so the key field is
+        # hidden. It shows only when this build has no built-in key (nothing
+        # would work without one). Whether a visible "use my own key" field
+        # comes back is Nick's call: until then the code path stays
+        # (_reveal_key) with nothing on screen that reaches it.
+        builtin = auth.get_bundled_key() is not None
+        self._key_shown = not builtin
+        if builtin:
+            # Gemini API terms (unpaid tier, 2026-03-23), said plainly: what
+            # is sent is the user's own photos.
+            ctk.CTkLabel(
+                # Broken by hand into short lines: a wraplength is scaled with
+                # the UI (DPI x UI Scale) while the dialog is not, and both
+                # 640 and 460 cut the sentence off at some scale (seen).
+                body, anchor="w", justify="left",
+                text_color=COLOR_MUTED, font=("Segoe UI", 11),
+                text=("AI runs on a free Gemini key: Google may use the photos\n"
+                      "you send to improve its services, and people at Google\n"
+                      "may look at them."),
+            ).pack(fill="x", padx=20, pady=(12, 0))
         self._key_box = ctk.CTkFrame(body, fg_color="transparent")
         ctk.CTkLabel(self._key_box, text="Gemini API Key", anchor="w",
                      font=("Segoe UI", 13, "bold")).pack(fill="x", padx=20, pady=(12, 4))
@@ -140,9 +156,6 @@ class SettingsDialog(ctk.CTkToplevel):
         self.show_key.pack(anchor="w", padx=20)
         if self._key_shown:
             self._key_box.pack(fill="x")
-        # Matched on the K key's code, not its keysym: with Caps Lock on the
-        # keysym is "k", and a bound "<Control-Shift-K>" alone misses it.
-        self.bind("<Control-Shift-KeyPress>", self._on_ctrl_shift_key)
 
         self._model_label = ctk.CTkLabel(body, text="Model", anchor="w",
                                          font=("Segoe UI", 13, "bold"))
@@ -260,11 +273,11 @@ class SettingsDialog(ctk.CTkToplevel):
     def _toggle_show(self):
         self.key_entry.configure(show="" if self.show_key.get() else "*")
 
-    def _on_ctrl_shift_key(self, event):
-        if event.keysym in ("K", "k") or event.keycode == 0x4B:     # VK_K
-            self._reveal_key()
-
     def _reveal_key(self):
+        """Show the hidden key field. Nothing on screen calls this yet (see
+        __init__); kept so a "use my own key" option is one binding away. A key
+        saved from here is marked `use_own_key`, which is what lets it win over
+        the built-in key (auth.get_api_key)."""
         if self._key_shown:
             return
         self._key_shown = True
@@ -381,8 +394,10 @@ class SettingsDialog(ctk.CTkToplevel):
         if self._key_shown:
             if key:
                 updates["api_key"] = key
+                updates["use_own_key"] = True   # chosen here, so it outranks the built-in key
             elif auth.get_bundled_key():
                 updates["api_key"] = ""     # cleared on purpose: back to the built-in key
+                updates["use_own_key"] = False
             else:
                 self.status.configure(text="Enter a key first", text_color=COLOR_WARN)
                 return

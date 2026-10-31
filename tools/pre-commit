@@ -1,28 +1,28 @@
 #!/bin/sh
-# Git pre-commit hook — the invisible-byte guards, and the key guard.
+# Git pre-commit hook — the key guard, then the invisible-byte guards.
 #
 # NOT INSTALLED BY DEFAULT. To turn it on for this clone:
 #
 #     cp tools/pre-commit .git/hooks/pre-commit
+#     cp tools/commit-msg .git/hooks/commit-msg
 #
-# Why only these three checks, when the suite has 113?
+# THE KEY GUARD (v1.067, Nick 2026-10-31: "never let the key reach git"; house
+# rule KEY_EMBED). The app carries a built-in Gemini key and the repo is PUBLIC.
+# tools/key_guard.py reads the STAGED blobs — what the commit will hold, not the
+# working tree — for either key shape, the registered key itself, and that key
+# masked the way the build bundles it. It runs FIRST and on its own, and it
+# FAILS CLOSED: if it cannot run, the commit stops. (Until a review on
+# 2026-10-31 it ran inside the suite import below, which skips on any import
+# error — a broken import anywhere would have switched it off.)
 #
-# The full suite takes 82 seconds (measured 2026-09-26). A hook that costs 82
-# seconds on every commit is a hook that gets --no-verify'd within a week, and a
-# guard people bypass is worse than no guard: it retires the worry without doing
-# the work. These three take 0.3 seconds.
-#
-# The fourth (v1.067, Nick 2026-10-31: "never let the key reach git") is the
-# Google API key guard. The app carries a built-in key and the repo is PUBLIC;
-# a key pasted into any tracked file is refused here, at the last moment before
-# it would be in history. It reads the index, so it sees what is being
-# committed, and it costs a fraction of a second.
-#
-# They also happen to be the right ones for a hook. The failures they catch are
-# INVISIBLE — a BOM, a CR, a control character an octal escape wrote into a
-# markdown file — so they are the failures a human reviewing the diff cannot be
-# expected to catch. Everything else in the suite fails loudly on screen when
-# you run it, which is the other half of the rule below.
+# THE INVISIBLE-BYTE GUARDS. Why only these three, when the suite has 240?
+# The full suite takes over 80 seconds. A hook that costs that on every commit
+# gets --no-verify'd within a week, and a guard people bypass is worse than no
+# guard: it retires the worry without doing the work. These take 0.3 seconds,
+# and the failures they catch are INVISIBLE — a BOM, a CR, a control character
+# an escape wrote into a file — so a human reading the diff cannot be expected
+# to catch them. A broken suite must not block work, so these may skip; the
+# key guard may not.
 #
 # The rule this exists to enforce (EMR, 2026-09-26, after committing over a red
 # guard because the check and the commit were separate statements on one shell
@@ -34,6 +34,8 @@
 # Running the full suite before a commit is still the caller's job. This only
 # makes the silent class impossible to commit.
 
+python tools/key_guard.py --index || exit 1
+
 python - <<'PY'
 import sys
 from pathlib import Path
@@ -42,14 +44,13 @@ sys.path.insert(0, str(Path("tests").resolve()))
 try:
     import test_core
 except Exception as e:                      # a broken suite must not block work
-    print(f"pre-commit: could not load the guards ({e}) - skipping")
+    print(f"pre-commit: could not load the invisible-byte guards ({e}) - skipping them")
     sys.exit(0)
 
 failed = []
 for name in ("test_no_source_file_carries_a_bom_or_cr",
              "test_no_record_carries_an_invisible_control_character",
-             "test_version_file_has_no_bom_and_parses_to_the_right_tuple",
-             "test_no_tracked_file_carries_a_google_api_key"):
+             "test_version_file_has_no_bom_and_parses_to_the_right_tuple"):
     check = getattr(test_core, name, None)
     if check is None:
         continue
@@ -59,9 +60,9 @@ for name in ("test_no_source_file_carries_a_bom_or_cr",
         failed.append(f"{name}:\n{e}")
 
 if failed:
-    print("pre-commit REFUSED - invisible bytes or an API key in the tree:\n")
+    print("pre-commit REFUSED - invisible bytes in the tree:\n")
     for f in failed:
         print(f"  {f}\n")
-    print("Fix them rather than --no-verify. A key goes in secrets/ (gitignored).")
+    print("These do not show in a diff. Fix them rather than --no-verify.")
     sys.exit(1)
 PY

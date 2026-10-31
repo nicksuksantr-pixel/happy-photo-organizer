@@ -159,6 +159,28 @@ def drill_mode() -> bool:
     return os.environ.get(DRILL_ENV, "").strip() == "1"
 
 
+# UPDATE_DRILL §5 step 3 makes the app busy the way a user would: a dialog
+# open. Up to v1.066 the drill held the API key back, so the app opened
+# Settings by itself; from v1.067 a built-in key wins and it never does. So
+# the drill drops this marker in the user data dir instead, and the next start
+# in drill mode opens Settings once and deletes it — the relaunch after the
+# update is not busy.
+DRILL_BUSY_MARKER = "drill-open-settings"
+
+
+def take_drill_busy_marker(data_dir: Path | None = None) -> bool:
+    """True once, when a drill asked this start to come up busy. Outside a
+    drill the marker is ignored and left alone."""
+    if not drill_mode():
+        return False
+    marker = (data_dir or Path.home() / ".happy-photo-organizer") / DRILL_BUSY_MARKER
+    try:
+        marker.unlink()
+        return True
+    except OSError:
+        return False
+
+
 def _is_loopback_http(url: str) -> bool:
     """http:// to a literal loopback address. `localhost` is not accepted: a
     hosts file can point it anywhere, and the point is that it cannot leave

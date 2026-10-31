@@ -44,15 +44,14 @@ the keyboard. Every run is **Switch user**, done by Nick, never `runas` and neve
 
 ```powershell
 # 1. the candidate, built; the FROM, downloaded from the real release
-gh release download v1.065 --repo nicksuksantr-pixel/happy-photo-organizer -p HappyPhotoOrganizerSetup.exe -D "$env:TEMP\hpo-from"
-# 2. bridge only, and only on Nick's go-ahead (it publishes the candidate publicly):
-#    the candidate on the test repo, so v1.065's own updater can fetch it
-gh release create v1.066 --repo nicksuksantr-pixel/hpo-update-drill --title "drill v1.066" --notes "update drill candidate" dist\HappyPhotoOrganizerSetup.exe
+gh release download v1.066 --repo nicksuksantr-pixel/happy-photo-organizer -p HappyPhotoOrganizerSetup.exe -D "$env:TEMP\hpo-from"
+# 2. (the v1.066 bridge only: the candidate on the public test repo, because v1.065 had no
+#    drill feed. From FROM v1.066 on the kit's loopback feed serves it; nothing is published.)
 # 3. stage where the drill account can read it (no secrets are ever staged); also writes C:\Users\Public\Drills\HPO.cmd
-.\drills\kit\Stage-Drill.ps1 -Manifest .\drills\drill.json -FromSetup "$env:TEMP\hpo-from\HappyPhotoOrganizerSetup.exe" -ToSetup .\dist\HappyPhotoOrganizerSetup.exe -ToVersion 1.066
-# 4. tell Nick one line: "a drill is waiting in drill" (his part: step 2 above)
+.\drills\kit\Stage-Drill.ps1 -Manifest .\drills\drill.json -FromSetup "$env:TEMP\hpo-from\HappyPhotoOrganizerSetup.exe" -ToSetup .\dist\HappyPhotoOrganizerSetup.exe -ToVersion 1.067
+# 4. tell Nick one line: "a drill is waiting in drill" (his part: Switch user to drill, run "Run update drills")
 # 5. when results.txt has the HPO line: receipt + logs into drills\, validated, stage removed
-.\drills\kit\Collect-Drill.ps1 -Manifest .\drills\drill.json -ToVersion 1.066
+.\drills\kit\Collect-Drill.ps1 -Manifest .\drills\drill.json -ToVersion 1.067
 ```
 
 - **One drill at a time on this PC** (UPDATE_DRILL 5.2): the runner takes `C:\Users\Public\drill-busy.txt` before

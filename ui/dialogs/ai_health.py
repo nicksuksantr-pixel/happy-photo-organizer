@@ -182,6 +182,15 @@ class AIHealthDialog(ctk.CTkToplevel):
             tier_select, text="Change Tier", anchor="w",
             font=("Segoe UI", 13, "bold"), text_color=COLOR_TEXT,
         ).pack(fill="x", padx=12, pady=(10, 4))
+        if auth.using_bundled_key():
+            # v1.067: rate_limiter.update_tier_from_config enforces this; say
+            # so here, or a saved "Paid" choice would silently do nothing.
+            ctk.CTkLabel(
+                tier_select, anchor="w", justify="left",
+                text_color=COLOR_MUTED, font=("Segoe UI", 10),
+                text=("The built-in key is free and shared, so a paid or faster\n"
+                      "tier is held to the free limits."),
+            ).pack(fill="x", padx=12, pady=(0, 4))
 
         cfg = auth.load_config()
         current_tier_name = cfg.get("tier", DEFAULT_TIER)

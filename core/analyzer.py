@@ -12,6 +12,7 @@ from pathlib import Path
 
 from google.genai import types
 
+from . import keymask
 from .auth import create_client, get_model
 from .image_io import get_mime_type
 from .rate_limiter import QuotaExceededError, _CancelledError, get_rate_limiter
@@ -33,6 +34,39 @@ _TRANSIENT_TOKENS = (
     "connection reset", "connection aborted",
     "remote disconnected",
 )
+
+
+# Errors that say the KEY cannot be used, read from the full exception text
+# (the row's reasoning is cut at 200 characters, which loses the quota id).
+# House rule KEY_EMBED: on 400/401/403/429 the app says in one line that AI is
+# unavailable and goes on without it. "permanent" = every later call this run
+# would fail the same way, so the rest of the run stops calling.
+_KEY_WITHDRAWN = ("api key not valid", "api_key_invalid", "api key expired",
+                  "permission_denied", "unauthenticated")
+
+
+def ai_down_fields(text: str) -> dict:
+    """{"ai_down": why, "ai_down_permanent": bool} when `text` (an error) says
+    the key cannot be used, else {}.
+
+    The HTTP code counts only where google-genai puts it: first, followed by
+    its status word ("429 RESOURCE_EXHAUSTED. {...}"). A bare "403" anywhere
+    else - a job folder "WO-40317", a photo "20240429_101500.jpg" in a local
+    file error - is not a key failure (the BUG-N2 class above, for 4xx)."""
+    low = text.lower()
+    if "limit: 0" in low:
+        # 429 for a model the free tier does not serve at all: no wait fixes it.
+        return {"ai_down": "the chosen model has no free quota - choose another model in Settings",
+                "ai_down_permanent": True}
+    code = re.match(r"\s*(401|403|429)\s+[a-z_]+", low)
+    if code and code.group(1) in ("401", "403") or any(t in low for t in _KEY_WITHDRAWN):
+        return {"ai_down": "the key was withdrawn", "ai_down_permanent": True}
+    if low.startswith("quota exceeded:") or "perday" in low or "per day" in low:
+        return {"ai_down": "the free quota is used up for today", "ai_down_permanent": True}
+    if code or "resource_exhausted" in low:
+        return {"ai_down": "the free quota is busy right now (too many requests)",
+                "ai_down_permanent": False}
+    return {}
 
 
 def _is_transient_error(exc: Exception) -> bool:
@@ -255,13 +289,16 @@ def analyze_image(
             "suggested_name": None,
             "confidence": 0.0,
             "reasoning": f"quota exceeded: {qe}",
+            **ai_down_fields(f"quota exceeded: {qe}"),
         }
     except Exception as e:
         return {
             "matched_name": None,
             "suggested_name": None,
             "confidence": 0.0,
-            "reasoning": f"error: {str(e)[:200]}",
+            "reasoning": f"error: {keymask.redact(str(e))[:200]}",
+            # A local file or network error (OSError) is never the key's fault.
+            **({} if isinstance(e, OSError) else ai_down_fields(str(e))),
         }
 
 
@@ -355,6 +392,7 @@ def analyze_group(
             "suggested_name": None,
             "confidence": 0.0,
             "reasoning": f"quota exceeded: {qe}",
+            **ai_down_fields(f"quota exceeded: {qe}"),
             "sample_count": 0,
             "total_in_group": n,
         }
@@ -363,7 +401,9 @@ def analyze_group(
             "matched_name": None,
             "suggested_name": None,
             "confidence": 0.0,
-            "reasoning": f"error: {str(e)[:200]}",
+            "reasoning": f"error: {keymask.redact(str(e))[:200]}",
+            # A local file or network error (OSError) is never the key's fault.
+            **({} if isinstance(e, OSError) else ai_down_fields(str(e))),
             "sample_count": 0,
             "total_in_group": n,
         }

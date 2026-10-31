@@ -170,6 +170,9 @@ Thank you for choosing Happy Photo Organizer.
      responsibility.
    • This app does not collect or transmit your data,
      except as required to function (requests to Gemini API).
+   • The built-in key is on Gemini's free tier: Google may use
+     the photos you send to improve its services, and people at
+     Google may look at them.
 
 3. Warranty
    • Provided "as-is", no warranty.

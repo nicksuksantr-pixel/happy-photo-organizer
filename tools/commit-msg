@@ -1,0 +1,11 @@
+#!/bin/sh
+# Git commit-msg hook — no Gemini key in a commit message (Nick 2026-10-31,
+# house rule KEY_EMBED). The repo is PUBLIC and the house commits and pushes on
+# its own (#20), so a message that quotes the key would be published with no
+# one reading it first. pre-commit cannot see the message; this hook can.
+#
+#     cp tools/commit-msg .git/hooks/commit-msg
+#
+# Fails closed, like the pre-commit key guard (tools/key_guard.py).
+
+python tools/key_guard.py --message "$1" || exit 1

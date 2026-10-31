@@ -15,6 +15,7 @@ $script:HpoDrillToken = ('d1' * 16)               # the shape of a real token (3
 $script:HpoDrillDest = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'Drill archive'   # the drill account's own
 $script:HpoUserJob = 'DRILL USER JOB 0001'
 $script:HpoBreadcrumbs = 'happy-photo-organizer-updater.log'   # in %TEMP%, written by every version's updater
+$script:HpoBusyMarker = 'drill-open-settings'   # core/updater.DRILL_BUSY_MARKER (v1.067+)
 
 function Get-HpoDataDir($M) { return Expand-DrillPath $M.user_data_dir }
 function Get-HpoExe($M) { return Join-Path (Expand-DrillPath $M.app_dir) $M.exe_name }
@@ -131,23 +132,35 @@ function Invoke-FreshInstall([string]$Setup, [string]$Into, $M) {
 }
 
 function Get-FromDiagnostics($M) {
-  # v1.065's updater breadcrumbs: why it did or did not fetch, download, hand over.
+  # the FROM build's updater breadcrumbs: why it did or did not fetch, download, hand over.
   # Reset deletes them, and Nick's account cannot read %TEMP% here (run 1, R7).
   return @(Join-Path $env:TEMP $script:HpoBreadcrumbs)
 }
 
 function Get-FromRouteEvidence($M) {
-  # v1.065 writes no update.log; its updater leaves breadcrumbs in %TEMP%.
-  # Evidence only if it asked the test repo itself and THEN fetched from it,
-  # in that order; nothing earlier in the file (the real repo) counts.
+  # The FROM build's own updater breadcrumbs in %TEMP% (every version writes
+  # them). Evidence only if it asked the route itself and THEN fetched from
+  # it, in that order; nothing earlier in the file counts.
+  #   repo-env (FROM v1.065, no drill feed): the public test repo drill_repo.
+  #   feed (FROM v1.066+): the kit's loopback feed. In drill mode v1.066 reads
+  #     HAPPY_UPDATE_FEED for every check (core/updater.feed_url), so its
+  #     breadcrumbs name 127.0.0.1, never the test repo (review 2026-10-31:
+  #     with only the repo-env patterns, real_update_path would always fail).
   $f = Join-Path $env:TEMP $script:HpoBreadcrumbs
   if (-not (Test-Path -LiteralPath $f)) { return @() }
   $lines = @(Get-Content -LiteralPath $f -Encoding UTF8)
+  if ([string]$M.from_route.kind -eq 'repo-env') {
+    $askLike = '*/repos/' + $M.drill_repo + '/releases/latest*'
+    $getLike = '*download_installer start*' + $M.drill_repo + '/releases/download/*'
+  } else {
+    $askLike = '*_fetch_latest_release: GET http://127.0.0.1:*/latest*'
+    $getLike = '*download_installer start: url=http://127.0.0.1:*/asset/*'
+  }
   $ask = -1; $get = -1; $ok = -1
   for ($i = 0; $i -lt $lines.Count; $i++) {
     $l = $lines[$i]
-    if ($ask -lt 0 -and $l -like ('*/repos/' + $M.drill_repo + '/releases/latest*')) { $ask = $i }
-    elseif ($ask -ge 0 -and $get -lt 0 -and $l -like ('*download_installer start*' + $M.drill_repo + '/releases/download/*')) { $get = $i }
+    if ($ask -lt 0 -and $l -like $askLike) { $ask = $i }
+    elseif ($ask -ge 0 -and $get -lt 0 -and $l -like $getLike) { $get = $i }
     elseif ($get -ge 0 -and $ok -lt 0 -and $l -like '*: SUCCESS*') { $ok = $i }
   }
   if ($get -lt 0) { return @() }
@@ -155,16 +168,14 @@ function Get-FromRouteEvidence($M) {
 }
 
 function Set-AppBusy($M) {
-  # busy the way a user makes it busy: a dialog open. With no API key saved,
-  # HPO opens Settings at start - so the key is held back for this step only.
-  # The app is stopped first: it rewrites auth.json itself (window position).
+  # busy the way a user makes it busy: a dialog open. The kit calls this on the
+  # candidate (TO). Up to v1.066 the step held the API key back so the app
+  # opened Settings by itself; from v1.067 a built-in key wins and it never
+  # does. So the step drops the drill marker instead: the next start in drill
+  # mode opens Settings once and deletes it (core/updater.take_drill_busy_marker).
   Stop-AppProcesses $M.exe_name
-  $a = Get-HpoAuth $M
-  Copy-Item -LiteralPath $a -Destination "$a.drill-busy" -Force
-  $raw = Read-Utf8 $a
-  $new = [regex]::Replace($raw, '"api_key"\s*:\s*"[^"]*"', '"api_key": ""')
-  if ($new -eq $raw) { throw "could not hold the API key back: no api_key in $a" }
-  Write-Utf8NoBom $a $new
+  $marker = Join-Path (Get-HpoDataDir $M) $script:HpoBusyMarker
+  Write-Utf8NoBom $marker 'drill: open Settings once at the next start'
 }
 
 function Clear-AppBusy($M) {
@@ -176,8 +187,33 @@ function Clear-AppBusy($M) {
 
 function Restore-AfterBusy($M) {
   Stop-AppProcesses $M.exe_name
-  $a = Get-HpoAuth $M
-  if (Test-Path -LiteralPath "$a.drill-busy") { Move-Item -LiteralPath "$a.drill-busy" -Destination $a -Force }
+  $marker = Join-Path (Get-HpoDataDir $M) $script:HpoBusyMarker
+  if (Test-Path -LiteralPath $marker) { Remove-Item -LiteralPath $marker -Force }   # never consumed: leave nothing behind
+}
+
+function Get-EmbeddedKeyEvidence($M) {
+  # KEY_EMBED 7 (embedded_key_works): one real Gemini call from the UPDATED
+  # build with its built-in key. The app makes the call itself and writes the
+  # result - status, model, the key's sha256 fingerprint, never the key - then
+  # exits (--check-embedded-key, drill mode only, no window, beside the app).
+  # Returns: result ('pass'/'fail'), evidence (one line), fp, app, status, model.
+  $out = Join-Path (Get-HpoDataDir $M) 'logs\embedded-key-check.json'
+  if (Test-Path -LiteralPath $out) { Remove-Item -LiteralPath $out -Force }
+  $p = Start-Process -FilePath (Get-HpoExe $M) -ArgumentList '--check-embedded-key' -PassThru
+  if (-not $p.WaitForExit(120000)) {
+    try { $p.Kill() } catch {}
+    return [ordered]@{ result = 'fail'; evidence = 'no result within 120 s'; fp = ''; app = ''; status = ''; model = '' }
+  }
+  $r = $null
+  try { $r = (Read-Utf8 $out) | ConvertFrom-Json } catch {}
+  if (-not $r) {
+    return [ordered]@{ result = 'fail'; evidence = "exit $($p.ExitCode), no $out"; fp = ''; app = ''; status = ''; model = '' }
+  }
+  $ok = ($p.ExitCode -eq 0 -and [string]$r.status -eq '200' -and [string]$r.model -and [string]$r.fp)
+  $ev = "exit $($p.ExitCode); status $($r.status); model $($r.model); key fp sha256:$(([string]$r.fp).Substring(0, [Math]::Min(12, ([string]$r.fp).Length)))" +
+        $(if ($r.error) { "; error: $($r.error)" } else { '' })
+  return [ordered]@{ result = $(if ($ok) { 'pass' } else { 'fail' }); evidence = $ev; fp = [string]$r.fp
+                     app = [string]$r.app; status = [string]$r.status; model = [string]$r.model }
 }
 
 function Reset-DrillAccount($M) {

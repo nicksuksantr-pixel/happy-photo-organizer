@@ -1,8 +1,15 @@
 # TO_PROMOTE.md
 
-**Nothing is waiting.** When the next cross-project lesson turns up here: write it in this file, say so, and stop
-(#10.1). Write each one as **one line in the registry form** (`- **slug** (source, date) — fact… **Rule:** …`), so
-the Director can take it verbatim (Director, 2026-10-31).
+When the next cross-project lesson turns up here: write it in this file, say so, and stop (#10.1). Write each one as
+**one line in the registry form** (`- **slug** (source, date) — fact… **Rule:** …`), so the Director can take it
+verbatim (Director, 2026-10-31).
+
+## ⏳ WAITING — 2026-10-31 (handed to the Director)
+
+- **a-built-in-key-breaks-a-busy-step-that-held-the-key-back** (HPO v1.067, 2026-10-31) — The kit runs `Set-AppBusy` on the CANDIDATE. HPO's adapter made the app busy by blanking the saved key, so the app opened Settings at start. Once a build carries a built-in key that wins (KEY_EMBED 4), the app never opens a key screen. The candidate never gets busy, and the kit throws "could not make the app busy". Found by reading `Invoke-Drill.ps1` before the drill ran. Fixed in HPO with a drill-only, one-shot marker the app consumes at start (`drill-open-settings`). **Rule:** before an app's first drill with a built-in key, check how its adapter makes it busy. Anything that relied on "no key → a dialog opens" needs its own drill-only trigger in that same release, because a released build cannot be given one later.
+- **Kit change, master-first: `Stage-Drill.ps1` secret scan knows only `AIza`** (HPO review, 2026-10-31) — `drills/kit/Stage-Drill.ps1:40` `$secret` has no `AQ\.` term. An `AQ.` key, the shape AI Studio now issues, in a manifest or an adapter would be copied to `C:\Users\Public`. **Change:** add `|AQ\.[0-9A-Za-z_\-]{40,}` to `$secret` in the master `drill-kit/windows/Stage-Drill.ps1`. HPO did not edit its copy.
+- **Kit + gate, master-first: nothing calls the `embedded_key_works` evidence yet** (HPO, 2026-10-31) — HPO's adapter defines `Get-EmbeddedKeyEvidence -M`. It returns `result` ('pass'/'fail'), a one-line `evidence`, `fp` (sha256), `app`, `status` and `model`. It runs the UPDATED build's `--check-embedded-key` (drill mode only, no window, fine beside the app). The kit must call it after TO is up and put `embedded_key: {fp, app}` plus the check in the receipt. `release-gate.mjs` must require it when a key is built in. (The Director is writing both; this names HPO's side.)
+- **amend `a-control-character-from-an-escape`** (HPO, 2026-10-31) — It recurred in CODE. A Python patch run through a Bash-tool heredoc lost one level of backslashes, so `\\b` reached `core/analyzer.py` as two BACKSPACE bytes inside a regex, which then matched nothing. The tests stayed green on other words in the same messages; an independent review caught it by reading. HPO's source guard now refuses control bytes in `.py/.spec/.json/.mjs/.js`. **Rule:** the control-byte guard belongs on source as well as records, and an escape-bearing patch goes through the Edit tool, not a heredoc.
 
 ---
 

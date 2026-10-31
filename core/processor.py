@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Callable
 
 from . import grouper as _grouper
+from . import keymask
 from .analyzer import analyze_group
 from .auth import create_client
 from .catalog import JobCatalog
@@ -694,7 +695,7 @@ def phase2_ai_analyze(
     if err:
         # Wholesale AI failure — flag it on the plan so the caller logs an
         # error + alerts the user, rather than reporting "Phase 2 done".
-        plan.ai_error = err
+        plan.ai_error = f"AI is unavailable: {err}"
         for a in plan.assignments:
             a.reasoning = f"AI error: {err}"
             a.is_new_suggestion = True
@@ -715,16 +716,24 @@ def phase2_ai_analyze(
     completed = {"n": 0}
     completed_lock = threading.Lock()
     # A dead key or a used-up quota fails every folder the same way, and each
-    # row only says so in its own reasoning, so the run still looked "done".
-    # Since v1.067 the key field is hidden, so nobody would find out why: a
-    # run where nothing got through is flagged like a missing key.
+    # row only said so in its own reasoning, so the run still looked "done".
+    # Since v1.067 the key field is hidden, so nobody would find out why. House
+    # rule KEY_EMBED: say in one line that AI is unavailable and go on without
+    # it. A key-level failure (analyzer.ai_down_fields) is reported even when
+    # other folders got through; a PERMANENT one (key withdrawn, today's quota
+    # gone) also stops the remaining calls, which could only fail the same way.
     ran = failed = 0
     first_failure = ""
+    key_down = ""
+    stop = {"why": ""}
 
     def _worker(item: tuple[int, JobAssignment, list[Path]]) -> tuple[int, dict]:
         idx, _a, pool = item
         if cancel_event and cancel_event.is_set():
             return idx, {}
+        if stop["why"]:
+            return idx, {"matched_name": None, "suggested_name": None, "confidence": 0.0,
+                         "reasoning": f"skipped: AI unavailable - {stop['why']}"}
         # Pass cancel_event so analyze_group can short-circuit during throttle
         # sleep (free tier = 4 s/call → up to 4 s of quota burn per worker
         # without this).
@@ -732,6 +741,8 @@ def phase2_ai_analyze(
             pool, names, client=client, sample_size=sample_size,
             cancel_event=cancel_event,
         )
+        if result.get("ai_down_permanent") and not stop["why"]:
+            stop["why"] = result.get("ai_down") or "AI unavailable"
         return idx, result
 
     with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="phase2") as ex:
@@ -757,7 +768,8 @@ def phase2_ai_analyze(
                         pass
                 result = {
                     "matched_name": None, "suggested_name": None,
-                    "confidence": 0.0, "reasoning": f"worker error: {str(e)[:200]}",
+                    "confidence": 0.0,
+                    "reasoning": f"worker error: {keymask.redact(str(e))[:200]}",
                 }
 
             if result:
@@ -767,6 +779,7 @@ def phase2_ai_analyze(
                 if reason.startswith(_AI_FAILURE_PREFIXES):
                     failed += 1
                     first_failure = first_failure or reason
+                key_down = key_down or str(result.get("ai_down") or "")
 
             with completed_lock:
                 completed["n"] += 1
@@ -776,24 +789,22 @@ def phase2_ai_analyze(
                 photos_n = len(src_item[2])
                 progress_cb(done, len(work_items), f"Analyzed folder {done}/{len(work_items)} ({photos_n} photos)")
 
-    if ran and failed == ran and not (cancel_event and cancel_event.is_set()):
-        plan.ai_error = _summarize_ai_failure(first_failure)
+    if not (cancel_event and cancel_event.is_set()):
+        # The permanent reason wins: results arrive in completion order, and a
+        # "busy right now" seen first must not hide "used up for today", which
+        # is what stopped the run (review, 2026-10-31).
+        why = stop["why"] or key_down
+        if why:
+            plan.ai_error = (f"AI is unavailable: {why}. "
+                             f"{failed} of {ran} folders were not analyzed.")
+        elif ran and failed == ran:
+            plan.ai_error = f"AI is unavailable: {keymask.redact(first_failure)[:160]}"
     return plan
 
 
 # What analyze_group / the worker put in "reasoning" when the AI never
 # answered. "parse error" is not here: the AI ran and replied badly.
-_AI_FAILURE_PREFIXES = ("error:", "quota exceeded:", "worker error:")
-
-
-def _summarize_ai_failure(reason: str) -> str:
-    """One line a person can act on, instead of a 200-character API dump."""
-    low = reason.lower()
-    if "api key not valid" in low or "api_key_invalid" in low:
-        return "the API key was refused (not valid or revoked)"
-    if reason.startswith("quota exceeded:") or "resource_exhausted" in low or " 429" in low:
-        return "the Gemini quota is used up for now"
-    return reason[:200]
+_AI_FAILURE_PREFIXES = ("error:", "quota exceeded:", "worker error:", "skipped:")
 
 
 # ─── PHASE 4: Rename temp folders → final folder names ───

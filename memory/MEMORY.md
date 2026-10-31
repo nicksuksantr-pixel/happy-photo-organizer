@@ -150,11 +150,32 @@ session รีสตาร์ท และชื่อ "Coddy" ไม่โผ�
   - 🚨 **RISK (D1, first drill run 2026-10-31): an app that hands over never exits.** pystray's `run_detached()` thread is NON-daemon (`pystray/_win32.py:131`), so `sys.exit(0)` with the tray running hangs forever in `threading._shutdown`. Every installer up to v1.065 hid this with `taskkill /F`; v1.066's waits and gives up ("still open after 60 s"). Any exit path that skips `tray.stop()` hangs. The bridge needs the v1.066 installer to end the stuck v1.065 that launched it. Reproduced in 15 lines (`bug/bug_v1.066.md` D1). Lesson: **removing a kill can unmask the hang the kill was hiding — drill the handover, not just the swap.**
   - **A failed install must never loop (S1, 2026-10-31).** `logs/update-attempt.json` is written at HANDOVER and settled at the next start: the version asked for not running = failed, and that version then waits for `Retry vX`. Keep "failure until success is seen": an installer that never ran writes nothing. A pre-v1.066 app cannot read it, so the installer relaunches one with `HAPPY_UPDATE_REPO` = `update_log.PAUSED_REPO` for that session. The drill covers only the success path.
   - ⚠ **Harness traps (PowerShell 5.1), each caught by its own test:** `return ,$x` pipes an array as ONE object (`| Where-Object` never matches) · variable names are case-insensitive (`$m` clobbers `$M`) · `ConvertTo-Json` can turn an array into `{"value":…,"Count":…}` — edit the app's JSON as text · `auth.json` is rewritten by the app on every start (window position), so never use it as a byte-identical sentinel · test the harness with the app's own readers, on scratch folders, never in `C:\Users\Public` or Nick's data.
-  - 🔑 **RISK: the app carries a built-in Gemini key, and the repo is PUBLIC (Nick 2026-10-31, from v1.067).**
-    - The key lives ONLY in `secrets/gemini_key.txt` on Nick's PC (gitignored). The spec bundles it masked as `data/gemini.key`; a build without it stops (`HPO_ALLOW_NO_KEY=1` overrides). A cloud instance or a fresh clone cannot build a release.
-    - Never write the key into any tracked file, record, log or commit message. `test_no_tracked_file_carries_a_google_api_key` guards the index; it was driven both ways.
-    - The mask only beats string scanners. Anyone with the public installer can recover the key, and every install shares its free quota (RPD 500).
-    - Revoked or exhausted key: put a new one in `secrets/`, then ship a drilled release. Until then a user can press Ctrl+Shift+K in Settings to enter their own key. A saved key always wins over the built-in one.
+  - 🔑 **RISK: the app carries a built-in Gemini key, and the repo is PUBLIC (Nick 2026-10-31, from v1.067; house rule KEY_EMBED: a free key may be built in, a paid key never).**
+    - The key lives ONLY in `%USERPROFILE%\.embed-keys\Happy-Photo-Organizer.json` as `{"GEMINI_KEY": "<key>"}`, OUTSIDE the repo. The first version used a gitignored `secrets/` folder; it was moved out on the house rule, because an ignore rule is one `add -f` away from public.
+    - The spec bundles the key masked as `data/gemini.key`, and a build without it stops (`HPO_ALLOW_NO_KEY=1` overrides). A cloud instance or a fresh clone cannot build a release.
+    - Never write the key into any tracked file, record, log or commit message.
+      - `tools/key_guard.py` reads the STAGED blobs, not the working tree. It looks for both shapes (`AIza`+35, `AQ.`+40 or more), the registered key itself, and that key masked the way the build bundles it. It also reads commit messages, and it FAILS CLOSED.
+      - The `pre-commit` hook runs it first, on its own (not inside the suite import, which skips on an import error). The `commit-msg` hook runs it on the message. Both are installed in `.git/hooks`; copy them from `tools/` on a new clone.
+      - Each guard was driven red and green, on the real index too. A review found the first version read the working tree: a staged key deleted from disk went through.
+    - **The built-in key WINS over a saved one.** A saved key may be an old paid one. The key field is hidden, with no shortcut: `_reveal_key` is kept, unbound, until Nick decides on a "use my own key" option.
+    - The mask only beats string scanners. Anyone with the public installer can recover the key, and every install shares one free quota (RPM 15 / RPD 500 per model).
+    - **Dead or exhausted key:**
+      - The app says "AI is unavailable: …" in one line, stops calling on a permanent failure (key withdrawn, or today's quota gone), and goes on without AI.
+      - The fix: delete the key in Google's console, put the next one in the embed file, and ship a drilled release.
+      - Each key's sha256 goes in `~/.embed-keys/registry.json`, through the Director's tool. Nick said on 2026-10-31: register it the way the Director says.
+      - The Director's gate change will refuse an unregistered key. **It is not in this repo's `tools/release-gate.mjs` yet**, so until it lands nothing stops one.
+      - Nick confirmed on 2026-10-31 that the key is a free key with no billing account, from a Google project for HPO alone.
+    - **A saved tier or model can outlive the key it was chosen for.**
+      - While the built-in key is in use, `update_tier_from_config` holds any tier to the free limits: "paid", or a custom one above them.
+      - A model the free tier does not serve (429 `limit: 0`) is reported as "choose another model in Settings".
+    - **The kept own-key path works:** a key saved from the (hidden) field sets `use_own_key`, which is what lets it outrank the built-in key.
+    - ⚠ **Harness trap (2026-10-31): in a Bash-tool heredoc, `\\` arrives as `\`.**
+      - A Python patch script's `\\b` reached `core/analyzer.py` as two BACKSPACE bytes.
+      - The tests passed on other words in the same messages; a review found it by reading.
+      - Patch escapes with the Edit tool. The BOM/CR source guard now also refuses control bytes.
+    - **Drill from v1.067 on:**
+      - `Set-AppBusy` drops a `drill-open-settings` marker. Holding the key back no longer opens Settings, because the built-in key wins.
+      - `Get-EmbeddedKeyEvidence` runs `--check-embedded-key` (drill mode only), which writes status, model and fingerprint, never the key.
   - ⚠ **RISK: Windows Defender scans the first open of a freshly written file, and our drill cannot see it (measured 2026-10-31).**
     - A fresh copy of the 91 MB installer took 3.88 s on first open, then 0.16 s. Every later fresh copy of the same bytes (and one with a byte flipped) took 0.24 s, so the build machine's drill meets the warm number.
     - Today the cold open lands on the post-download hash, on the download thread, where no limit sits (`core/update_worker.py:354`). The pre-handover re-hash (`:471`) is warm. The installer hashes nothing.

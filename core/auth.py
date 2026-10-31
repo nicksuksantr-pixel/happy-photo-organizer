@@ -18,8 +18,6 @@ from google import genai
 
 from . import keymask
 
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent
-
 CONFIG_DIR = Path.home() / ".happy-photo-organizer"
 CONFIG_FILE = CONFIG_DIR / "auth.json"
 
@@ -202,15 +200,16 @@ def update_config(updates: dict) -> bool:
             return False
 
 
-def _bundled_key_files() -> list[tuple[Path, bool]]:
-    """(path, masked) places the built-in key can come from, first wins.
-    Frozen: the masked copy the build put in the bundle. From source: the
-    plain gitignored file the build reads."""
-    files: list[tuple[Path, bool]] = []
+def _bundled_key_files() -> list[tuple[Path, str]]:
+    """(path, kind) places the built-in key can come from, first wins.
+    Frozen ("masked"): the copy the build put in the bundle. From source
+    ("embed"): the embed-key file outside the repo, which the build reads."""
+    files: list[tuple[Path, str]] = []
     meipass = getattr(sys, "_MEIPASS", None)
     if meipass:
-        files.append((Path(meipass) / "data" / keymask.BUNDLED_KEY_NAME, True))
-    files.append((_PROJECT_ROOT.joinpath(*keymask.SECRET_KEY_PATH), False))
+        files.append((Path(meipass) / "data" / keymask.BUNDLED_KEY_NAME, "masked"))
+    else:
+        files.append((keymask.embed_key_file(), "embed"))
     return files
 
 
@@ -220,15 +219,14 @@ BUNDLED_KEY_FILES = _bundled_key_files()
 
 def get_bundled_key() -> str | None:
     """The free key built into the app (Nick, 2026-10-31), or None."""
-    for path, masked in BUNDLED_KEY_FILES:
-        try:
-            raw = path.read_bytes()
-        except OSError:
-            continue
-        if masked:
-            key = keymask.unmask(raw)
+    for path, kind in BUNDLED_KEY_FILES:
+        if kind == "embed":
+            key = keymask.read_embed_key(path)
         else:
-            key = raw.decode("ascii", errors="ignore").strip() or None
+            try:
+                key = keymask.unmask(path.read_bytes())
+            except OSError:
+                key = None
         if key:
             return key
     return None
@@ -242,9 +240,24 @@ def get_saved_api_key() -> str | None:
 
 
 def get_api_key() -> str | None:
-    """The key to use: the user's own if they saved one (it carries their own
-    quota), else the built-in one, so nobody has to make a key."""
-    return get_saved_api_key() or get_bundled_key()
+    """The key to use: the built-in free one wins (house rule KEY_EMBED — a
+    saved key may be an old paid one, and a paid key must never be what the
+    app spends behind the user's back). A saved key is used when the build has
+    no built-in key, or when the user CHOSE it in the "use my own key" field,
+    which is what sets `use_own_key` — an old key that merely sits in
+    auth.json never does."""
+    cfg = load_config()
+    saved = (cfg.get("api_key") or "").strip() or None
+    if saved and cfg.get("use_own_key") is True:
+        return saved
+    return get_bundled_key() or saved
+
+
+def using_bundled_key() -> bool:
+    """True when the key in use is the built-in free one (shared by every
+    install, so it must be throttled as free whatever tier was saved)."""
+    bundled = get_bundled_key()
+    return bundled is not None and get_api_key() == bundled
 
 
 def get_model() -> str:

@@ -40,7 +40,7 @@
   ],
   "_tree_allowlist_note": "uninstall.bat names its own folder; the catalog carries the job the user taught the app (until a later release moves it out of the install tree - bug U8).",
   "relaunch": "the installer's launch_app() after the swap",
-  "busy_description": "Settings dialog open - no API key saved, so the app opens Settings at start",
+  "busy_description": "Settings dialog open - the drill marker drill-open-settings in the user data dir makes the app open Settings once at its next start (v1.067+, drill mode only; up to v1.066 the step held the API key back, which a built-in key now outranks)",
   "busy_window_prefix": "Settings",
   "drill_user_like": "drill*",
   "not_covered": [
@@ -55,13 +55,12 @@
     "feed_env": "HAPPY_UPDATE_FEED"
   },
   "from_route": {
-    "kind": "repo-env",
-    "env": "HAPPY_UPDATE_REPO"
+    "kind": "feed"
   },
-  "_from_route_note": "v1.065 has no drill feed; it does honour HAPPY_UPDATE_REPO, so its own updater fetches the candidate from the public test repo drill_repo. From v1.066 on, kind 'feed' (the loopback feed) is enough.",
+  "_from_route_note": "From v1.066 on, kind 'feed': in drill mode the FROM's own updater reads HAPPY_UPDATE_FEED (the kit's loopback feed) for every check, and hpo.ps1 Get-FromRouteEvidence reads its 127.0.0.1 breadcrumbs. The v1.065 bridge used kind 'repo-env' (HAPPY_UPDATE_REPO -> the public test repo drill_repo), because v1.065 had no drill feed.",
   "from": {
-    "version": "1.065",
-    "sha256": "46902c7913499f5dd303825593d2e10781abe237e1d5b6101c5f1fe861bccb88"
+    "version": "1.066",
+    "sha256": "93c4d69c9c2346882d8c38eb27051a269be23e1b4f2d387a68a5636328b0579b"
   },
   "timeouts": {
     "update_s": 1800,

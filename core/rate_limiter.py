@@ -314,6 +314,14 @@ def get_rate_limiter() -> RateLimiter:
     return _default_limiter
 
 
+def _builtin_key_in_use() -> bool:
+    try:
+        from . import auth                     # lazy: auth pulls in google.genai
+        return auth.using_bundled_key()
+    except Exception:
+        return False
+
+
 def update_tier_from_config(cfg: dict) -> RateLimiter:
     """โหลด tier จาก auth.json config → return limiter ที่ตั้งค่าใหม่"""
     tier_name = cfg.get("tier", DEFAULT_TIER)
@@ -325,6 +333,18 @@ def update_tier_from_config(cfg: dict) -> RateLimiter:
         )
     else:
         tier = TierConfig.from_preset(tier_name)
+    # v1.067 (KEY_EMBED): the built-in key is a FREE key shared by every
+    # install. A tier saved for an old paid key - "paid" (no throttle) or a
+    # custom one above the free limits - would fire it unthrottled into
+    # per-minute 429s on every run (review, 2026-10-31). While the built-in
+    # key is the one in use, the free limits are the ceiling.
+    if _builtin_key_in_use():
+        free = TierConfig.from_preset(DEFAULT_TIER)
+        if tier_name == "custom":
+            if not tier.throttle or tier.rpm <= 0 or tier.rpm > free.rpm or tier.rpd <= 0:
+                tier = free
+        elif not TIER_PRESETS.get(tier_name, {}).get("throttle", False):
+            tier = free
     limiter = get_rate_limiter()
     limiter.update_tier(tier)
     return limiter
