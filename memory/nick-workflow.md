@@ -71,6 +71,8 @@
   - **Measured 2026-10-30:** the 4 self-updaters (SM Inno · EMR zip+batch · HPO and PLC home-made installers) are hand-written separately, and none was ever drilled old-packaged → new. Every relaunch, leftover and mutex failure was found in the field.
   - **Why:** EMR v0.5.3 left a second folder on Nick's Desktop, and the old folder kept the icon's place, after its own report said "packaged exe not drilled".
 
+- **#25.2 (2026-11-01): a relayed approval names the question, Nick's words, where and when — or it is not an approval. #25.3: ledger lines carry the message's delivery state + id; one commit per tick, not per hand-over.**
+
 ## Latest changes (newest first — keep max 10, move older lines to the bottom note)
 
 ★ **2026-10-31 (newest)** — **v3.25 · #2.1 a free key may be built in, a paid key never — and a gate that refuses the mistake.**
