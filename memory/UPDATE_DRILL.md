@@ -264,7 +264,11 @@ and for checks before a real release, at the session's judgment. ScanDocs still 
 **Measured on Nick's PC (JS, 2026-10-30):**
 - **Acceleration:** `emulator -accel-check` reports WHPX installed and usable, so nothing has to be switched on.
 - **Image:** android-35 `google_apis` x86_64. It runs an arm64-only APK through ARM translation (`abilist=x86_64,arm64-v8a`).
-- **Boot:** headless with `-no-snapshot -gpu swiftshader_indirect`; `boot_completed` took about 3 minutes.
+- **Boot:** headless with `-no-snapshot`; `boot_completed` took about 3 minutes. **GPU: `-gpu host` unless measured
+  otherwise.** JobShot ran fine under `-gpu swiftshader_indirect`, but NotiWallet's screens took 1 to 6 s a frame
+  there and the emulator died at the same page transition three times with nothing in any log; `-gpu host` fixed
+  both (NTWL, 2026-10-31). An emulator that vanishes at a screen change with no crash report is the GPU mode
+  before it is the app.
 - **Under translation the app is slow.** `am start -W` times out at about 13 s, and plugins attach about 30 s
   after the engine starts. Poll the screen for up to about 90 s instead of trusting `-W`.
 - **`adb root` works on a `google_apis` image,** so `user_data_intact` can hash `/data/data/<package>/`.
