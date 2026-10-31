@@ -12,10 +12,10 @@
 
 | File | State |
 |---|---|
-| command_pattern.md | **v3.23** · 2026-10-30 · English · **28 rules** (+ §16.1) |
+| command_pattern.md | **v3.24** · 2026-10-30 · English · **28 rules** (+ §16.1, §20.0) |
 | MASTER.md | 2026-06-11 · English · Section 0 Fast Path |
 | SHARED.md | 2026-06-11 · English (tool data as of 2026-06-09) |
-| Note Master.txt | Nick's handwritten (Thai) — versioning line (3-digit `v0.0.0`) again matches #14.7 since 2026-06-12 |
+| Note Master.txt | Nick's handwritten (Thai) — ⚠ **0 bytes since at least 2026-08-16** (content lost; ask Nick before relying on anything said to be in it) · versioning is #14.7 `vX.NNN` |
 
 ## Workflow essence
 

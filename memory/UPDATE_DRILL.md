@@ -194,7 +194,9 @@ Add a check when a new failure class appears. That means adding it here **and** 
        0, so the runner would have shown a failed drill as PASS.) Several drills in one launcher fail if any fails;
      - run **unattended**: drive the app itself (the §3 contract; for a FROM that predates it, a WebView2 control
        channel on 127.0.0.1, or window messages), and prove it passes with Nick switched back: `drill`'s session
-       is then disconnected, where simulated mouse and keyboard input does not work. A bootstrap case that truly
+       is then disconnected, where simulated mouse and keyboard input does not work. Rehearse a GUI kit while
+       Nick is away from the PC: in his live session his mouse and focus stole a click and a window twice
+       (EMR, 2026-10-31); the retries that absorb it are not the proof. A bootstrap case that truly
        needs a person carries `rem DRILL-NEEDS-NICK: <what to press>`; the runner runs it first and tells Nick to
        stay. Tell Nick before staging it, with the number of presses. `rem DRILL-TIMEOUT-MIN: <n>` sets a longer
        deadline than the default 120 minutes. Every wait inside the harness has its own limit;
@@ -210,7 +212,11 @@ Add a check when a new failure class appears. That means adding it here **and** 
      another drill is running, so wait. The pid is what tells a left-over lock from a running drill. The runner
      clears a lock whose pid is no longer running (it sees other accounts' processes), and one its own launcher
      left behind. A lock with no pid can only be waited out, for 3 hours (2026-10-31: a lock claimed by hand from a
-     session, with no pid, held EMR's drill back for 45 minutes after SM's run had ended).
+     session, with no pid, held EMR's drill back for 45 minutes after SM's run had ended). A harness killed
+     from outside on Windows (no Ctrl-C, no SIGINT) leaves its lock, so a drill that runs in the background
+     polls a stop file and leaves through its own `finally` (JS, 2026-10-31). **The owner may clear a lock that
+     names its OWN pid when that pid is dead:** that is a leftover, not another app's lock. Nobody clears a lock
+     that names a live pid, and nobody clears another app's lock by hand.
    - For a per-machine app, or a release that changes the install mode, use a VirtualBox VM with a snapshot.
 
    ⚠ **Run the harness OUTSIDE the Claude desktop app.** Claude's shell runs inside an MSIX container that
