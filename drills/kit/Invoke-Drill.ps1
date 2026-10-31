@@ -249,10 +249,15 @@ try {
   $sinceStart = @(Read-UpdateLog $ulog | Where-Object { $_.N -gt $started.N })
   $noNewer = @($sinceStart | Where-Object { $_.Stage -eq 'CHECK' -and $_.Version -eq $ToVersion -and $_.Detail -like 'nothing newer*' })
   $offered = @($sinceStart | Where-Object { $_.Stage -in @('FOUND', 'DOWNLOADED', 'HANDOVER') })
-  $fetched = @(Read-AccessLog $feedAccess | Where-Object { ($_.PSObject.Properties.Name -contains 'path') -and $_.path -like '/asset/*' })
+  # only requests AFTER TO started count: FROM's own legitimate download of TO goes through the same feed when the
+  # route is "feed" (HPO's v1.066 -> v1.067 drill false-FAILed here, 2026-10-31; a repo-env FROM fetched from GitHub, so it never showed)
+  $toAt = [DateTimeOffset]::Parse([string]$started.Time)
+  $fetched = @(Read-AccessLog $feedAccess | Where-Object {
+    ($_.PSObject.Properties.Name -contains 'path') -and $_.path -like '/asset/*' -and
+    ($_.PSObject.Properties.Name -contains 't') -and ([DateTimeOffset]::Parse([string]$_.t) -gt $toAt) })
   Check 'no_update_loop' ($noNewer.Count -ge 1 -and $offered.Count -eq 0 -and $fetched.Count -eq 0) (
     "fed v$ToVersion itself: " + $(if ($noNewer.Count) { $noNewer[0].Line } else { 'no CHECK line' }) +
-    "; FOUND/DOWNLOADED/HANDOVER since: $($offered.Count); asset requests at the feed: $($fetched.Count)")
+    "; FOUND/DOWNLOADED/HANDOVER since: $($offered.Count); asset requests at the feed since v$ToVersion started: $($fetched.Count)")
 
   # ---- KEY_EMBED 6: the built-in key works from the UPDATED build -----------
   # TO is up and the drill environment is set; the adapter runs the installed exe's own self-check and returns
