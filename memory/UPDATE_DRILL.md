@@ -283,6 +283,11 @@ and for checks before a real release, at the session's judgment. ScanDocs still 
   after the engine starts. Poll the screen for up to about 90 s instead of trusting `-W`.
 - **`adb root` works on a `google_apis` image,** so `user_data_intact` can hash `/data/data/<package>/`.
   Android itself rewrites `cache/`, `code_cache/` and `files/profileinstaller*` on an update, so leave those out.
+  **`am force-stop` does not make an app quiet** if it has a bound NotificationListener, accessibility service
+  or WorkManager: the system rebinds the listener about a second later, the process comes back, and WorkManager
+  (started by androidx.startup even when the app enqueues nothing) rewrites `no_backup/androidx.work.workdb*`
+  between the "before" hash and the install (NTWL run 8, 2026-10-31: a 6/7 that was the kit's own false alarm).
+  Leave the framework's own state out of the user-data hash and report its changes in the notes instead.
 - **One drill AVD per app,** named `drill_<app>`, wiped (`-wipe-data`) at the start of every drill, so the FROM
   install is clean and two apps never share a device. It holds nothing but drill data, so the wipe is part of the
   drill. Never use or wipe an AVD that is not your own `drill_<app>`. (Nick's old `Pixel6_API35` was deleted on his
@@ -297,7 +302,9 @@ and for checks before a real release, at the session's judgment. ScanDocs still 
   were the GPU mode (runs 3-4 vanished with 5 GB free, `-gpu host` cured them), NOT RAM, although the first
   one coincided with 1.8 GB free. A first version of this bullet wrote both causes as "measured"; when two
   causes overlap in one failure, write neither as measured until one is isolated. Start from a 2 GB floor on
-  Nick's word ("run now, close nothing", 2026-10-31) and raise it only on a failure measured as RAM. Wait for
+  Nick's word ("run now, close nothing", 2026-10-31) and raise it only on a failure measured as RAM. First data
+  point: NTWL run 8 ran a whole drill (boot, onboarding, 3 transactions, install -r, TO) with a 4 GB AVD and
+  `-gpu host` at 2.4 to 2.7 GB free, no vanish. Wait for
   the floor FIRST, and only THEN take `C:\Users\Public\drill-busy.txt` (waiting with a limit) and boot.
   **Every wait comes before the claim.** The lock is for a drill that is running, never for a wait: JobShot
   claimed first and then waited for RAM with no emulator up, while EMR's time-boxed bridge drill sat behind it.
