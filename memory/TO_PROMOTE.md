@@ -4,17 +4,18 @@ When the next cross-project lesson turns up here: write it in this file, say so,
 **one line in the registry form** (`- **slug** (source, date) — fact… **Rule:** …`), so the Director can take it
 verbatim (Director, 2026-10-31).
 
-## ⏳ WAITING — 2026-11-01 (handed to the Director)
+## ⏳ WAITING
 
-- **a-patch-script-loses-a-backslash-and-writes-a-control-byte** (HPO, 2026-09-26 and 2026-10-31) — twice, a patch script lost one level of backslashes on its way through a shell, and a Python escape wrote an invisible control byte where text belonged. 2026-09-26 (`a52a600`): a Windows path `\emr_sample\25-09-26` in a records patch reached Python as `\25`, an OCTAL escape, so byte 0x15 replaced "25" in the markdown, invisible in the page and in the diff. 2026-10-31 (v1.067 K6): a Python patch run through a Bash-tool heredoc turned `\\b` into `\b`, so two BACKSPACE bytes sat inside `core/analyzer.py`'s HTTP-code regex and it matched nothing; the tests stayed green on other words in the same messages, and an independent review caught it by reading. **Rule:** an escape-bearing patch goes through the Edit tool (or an asserting splice), never a heredoc or an unquoted string; and a control-byte guard runs on SOURCE files as well as records, before the commit (HPO: `tools/pre-commit` and the suite refuse control bytes in `.py/.spec/.json/.mjs/.js/.md`).
+Nothing is waiting.
 
 ---
 
 ## ✅ CONSUMED — 2026-11-01
 
-Promoted by the Director and read back in the mirror (`memory/SHARED_LESSONS.md`, sync `35c6344`), so cleared here (#10.1):
-`counts-must-start-when-the-judged-thing-starts`, `a-built-in-key-breaks-a-busy-step-that-held-the-key-back`,
-`a-guard-must-read-the-lock-the-house-writes`. The "amend `a-control-character-from-an-escape`" row named a slug that
+Promoted by the Director and read back in the mirror (`memory/SHARED_LESSONS.md`), so cleared here (#10.1):
+- at sync `35c6344`: `counts-must-start-when-the-judged-thing-starts`,
+  `a-built-in-key-breaks-a-busy-step-that-held-the-key-back` and `a-guard-must-read-the-lock-the-house-writes`;
+- at sync `ae5275e`: `a-patch-script-loses-a-backslash-and-writes-a-control-byte`, at mirror line 226. The "amend `a-control-character-from-an-escape`" row named a slug that
 exists nowhere (master, mirrors, other projects: grep, 2026-11-01). The lesson was never promoted under any name, so it
 is rewritten above as one whole row with both events.
 
