@@ -42,7 +42,7 @@
   ],
   "_tree_allowlist_note": "uninstall.bat names its own folder; the catalog carries the job the user taught the app (until a later release moves it out of the install tree - bug U8).",
   "relaunch": "the installer's launch_app() after the swap",
-  "busy_description": "Settings dialog open - the drill marker drill-open-settings in the user data dir makes the app open Settings once at its next start (v1.067+, drill mode only; up to v1.066 the step held the API key back; from v1.067 a built-in key backs up a blank one, so Settings never opens by itself)",
+  "busy_description": "Settings dialog open - the drill marker drill-open-settings in the user data dir makes the app open Settings once at its next start (v1.067+, drill mode only; up to v1.066 the step held the API key back; from v1.067 the built-in key is the only key and no saved key is read, so Settings never opens by itself)",
   "busy_window_prefix": "Settings",
   "drill_user_like": "drill*",
   "not_covered": [

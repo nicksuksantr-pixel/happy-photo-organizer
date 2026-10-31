@@ -13,28 +13,26 @@ deferred".
 
 ### Changed
 - **The app comes with a free Gemini key built in.** Nobody has to make a key
-  before the first scan. A key you saved yourself still wins (your own quota);
-  the built-in key is the fallback (house rule: a free key may be built in, a
-  paid key never). The key is never in the repo: the build reads it from a
-  file outside it and refuses to build without one.
-- **The key field is hidden.** The installer no longer asks for a key, and
-  Settings no longer shows the field or says how to reach it (a hidden
-  Ctrl+Shift+K remains while Nick decides whether any own-key path stays). A
-  build with no built-in key shows it as before.
+  before the first scan. **It is the only key** (house rule: a free key may be
+  built in, a paid key never; Nick: "no place to enter a key at all"). A key
+  an older version saved is no longer used. The key is never in the repo: the
+  build reads it from a file outside it and refuses to build without one.
+- **There is no key field anywhere.** The installer no longer asks for a key;
+  Settings has no key field, no Test button and no shortcut to one; nothing
+  points to Settings for a key. If the shared key is ever withdrawn, the next
+  release brings a new one.
 - **Settings says plainly what the free key means:** it is shared by all
   installs, Google may use the photos you send to improve its products, and
   people at Google may look at them. The installer's licence text says the same.
-- **Test** and **Refresh models** in Settings use the key the app actually uses.
 
 ### Fixed
 - **When AI is unavailable, the app says so in one line and goes on without
   it.** A withdrawn key, a used-up quota or no network used to fail every
   folder quietly, row by row, and the run still said "done". Now:
-  - A key-level failure is named, and the line says whose key it is: the
-    built-in key withdrawn ("update when a new version is out"), your own key
-    refused ("press Ctrl+Shift+K in Settings"), today's quota used up, busy
-    right now, or a model with no free quota. It is named even when other
-    folders got through. No internet is said as such.
+  - A key-level failure is named: the built-in key withdrawn ("update when a
+    new version is out"), today's shared quota used up, busy right now, or a
+    model with no free quota. It is named even when other folders got
+    through. No internet is said as such.
   - A permanent one stops the rest of the run from calling.
   - The folders can still be named by hand.
   - Key-shaped text is removed from every error message.

@@ -41,3 +41,21 @@ written standard:
   - no internet: said as such.
 - **`drills/drill.json` sets `"embeds_key": true`**, so the gate refuses a receipt that does not prove the key.
 - **The key is registered** (`tools/register-key.mjs free`, project `Happy-Photo-Organizer`, `--no-billing`).
+
+## The house answer: the built-in key is the ONLY key (KEY_EMBED §4, Nick 2026-10-31)
+
+Nick told the Director: no own-key field in any app. The built-in key is the only key, and every path that reads a
+pasted or stored key goes. Asked in HPO's chat, he said not to use the key saved in the system at all, and to follow
+the rule fully (it is the same account anyway). Removed:
+- `auth.get_api_key()` returns the built-in key only. `get_saved_api_key`, the own-key fallback and the unused
+  `save_config(api_key, …)` are gone.
+- Settings has no key field, Paste/Show, Test button, Ctrl+Shift+K or "Enter a key first".
+- `main` no longer opens Settings when no key is set (only for the drill's marker), and no longer blocks a run with
+  "Open Settings to enter your key". A keyless test build sorts the photos, and Phase 2 says in one line that AI is
+  unavailable.
+- The phase-2 lines name only the shared built-in key. The own-key lines that pointed to Ctrl+Shift+K are gone.
+- The installer's dead key-save block and its `api_key` attribute are gone.
+- A guard, `test_no_key_entry_path_is_left_in_the_app`, was driven red on the previous settings.py.
+
+Why it mattered for v1.067 itself: Nick's PC and the ship PC have an old `api_key` in auth.json from the old key page.
+With own-key-first they would have kept spending that key, not the built-in one.

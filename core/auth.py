@@ -137,24 +137,6 @@ def cleanup_stale_quarantines(max_age_days: int = 30) -> int:
     return removed
 
 
-def save_config(api_key: str, model: str = DEFAULT_MODEL, ui_scale: float = 1.0) -> tuple[bool, str]:
-    """Save API key + model + ui scale preference"""
-    with _IO_LOCK:
-        try:
-            existing = _load_config_unlocked()
-            existing.update({
-                "api_key": api_key.strip(),
-                "model": model.strip() or DEFAULT_MODEL,
-                "ui_scale": float(ui_scale),
-            })
-            ok = atomic_write_json(CONFIG_FILE, existing)
-            if not ok:
-                return False, "Save failed (atomic write error)"
-            return True, "Settings saved"
-        except Exception as e:
-            return False, f"Save failed: {str(e)[:200]}"
-
-
 def _load_config_unlocked() -> dict:
     """Internal — caller must hold _IO_LOCK. Quarantines corrupt files."""
     if not CONFIG_FILE.exists():
@@ -229,25 +211,19 @@ def get_bundled_key() -> str | None:
     return None
 
 
-def get_saved_api_key() -> str | None:
-    """The user's own key from auth.json, or None."""
-    # `(... or "")` guards a JSON `"api_key": null` (key present, value None):
-    # dict.get returns None there, and None.strip() would crash.
-    return (load_config().get("api_key") or "").strip() or None
-
-
 def get_api_key() -> str | None:
-    """The key to use (house standard KEY_EMBED §4): the user's own saved key
-    wins — their own quota and, on a billed project, the paid-tier privacy
-    promise — and the built-in free key is the fallback. An empty, blank or
-    removed saved key falls back."""
-    return get_saved_api_key() or get_bundled_key()
+    """The key to use: the built-in free key, and nothing else (house standard
+    KEY_EMBED §4, Nick 2026-10-31: "no place to enter a key at all"). An
+    `api_key` an older version saved in auth.json is never read - it may be a
+    paid key, and the app has no stored-key path any more. The file keeps it
+    untouched (user data the update drill proves intact)."""
+    return get_bundled_key()
 
 
 def using_bundled_key() -> bool:
-    """True when the key in use is the built-in free one (shared by every
-    install, so it must be throttled as free whatever tier was saved)."""
-    return get_saved_api_key() is None and get_bundled_key() is not None
+    """True when the app has its built-in free key (shared by every install,
+    so it must be throttled as free whatever tier was saved)."""
+    return get_bundled_key() is not None
 
 
 def get_model() -> str:
@@ -257,10 +233,10 @@ def get_model() -> str:
 
 
 def create_client(api_key: str | None = None) -> tuple[object | None, str | None]:
-    """สร้าง Gemini client — ใช้ key จาก param หรือจาก config"""
+    """สร้าง Gemini client — the built-in key, or one passed in (key_check)."""
     key = (api_key or get_api_key() or "").strip()
     if not key:
-        return None, "API key not set"
+        return None, "this build has no built-in key"
     try:
         return genai.Client(api_key=key), None
     except Exception as e:

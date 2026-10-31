@@ -409,12 +409,13 @@ def test_embed_key_file_is_read_as_the_house_format():
         assert keymask.read_embed_key(Path(td) / "missing.json") is None
 
 
-def test_api_key_is_the_saved_one_then_the_built_in_one():
-    """KEY_EMBED §4 (the house order): the user's own saved key wins - their
-    own quota and, on a billed project, the paid-tier privacy promise - and the
-    built-in free key is the fallback. An empty, blank or removed saved key
-    falls back. A damaged or missing bundle file falls through instead of
-    crashing or returning junk."""
+def test_the_built_in_key_is_the_only_key():
+    """KEY_EMBED §4, the house answer (Nick 2026-10-31: "no place to enter a
+    key at all"): the built-in free key is the only key. An `api_key` an older
+    version saved in auth.json is never read - not as a winner, not as a
+    fallback - so an old (perhaps paid) key on Nick's PC or the ship PC is not
+    what the app spends. A damaged or missing bundle file falls through
+    instead of crashing or returning junk."""
     from core import keymask
     orig_load, orig_files = auth.load_config, auth.BUNDLED_KEY_FILES
     with tempfile.TemporaryDirectory() as td:
@@ -426,32 +427,58 @@ def test_api_key_is_the_saved_one_then_the_built_in_one():
         embed.write_text(json.dumps({"GEMINI_KEY": _FAKE_AQ_KEY}), encoding="utf-8")
         try:
             auth.BUNDLED_KEY_FILES = [(bundled, "bundled")]
-            auth.load_config = lambda: {"api_key": "my-own-key"}
-            assert auth.get_api_key() == "my-own-key", "the built-in key outranked the user's own"
-            assert not auth.using_bundled_key()
-            for empty in ({}, {"api_key": ""}, {"api_key": "   "}, {"api_key": None}):
-                auth.load_config = lambda e=empty: e
-                assert auth.get_api_key() == _FAKE_KEY, f"no fallback to the built-in key for {empty}"
+            for saved in ({"api_key": "an-old-saved-key"}, {}, {"api_key": ""}, {"api_key": None}):
+                auth.load_config = lambda s=saved: s
+                assert auth.get_api_key() == _FAKE_KEY, f"a stored key path is back: {saved}"
                 assert auth.using_bundled_key()
 
-            auth.load_config = lambda: {}
             auth.BUNDLED_KEY_FILES = [(Path(td) / "missing.key", "bundled"),
                                       (damaged, "bundled"), (embed, "embed")]
             assert auth.get_bundled_key() == _FAKE_AQ_KEY
             auth.BUNDLED_KEY_FILES = [(damaged, "bundled")]
-            assert auth.get_api_key() is None and not auth.using_bundled_key()
+            auth.load_config = lambda: {"api_key": "an-old-saved-key"}
+            assert auth.get_api_key() is None, "no built-in key: a saved key must still not be used"
+            assert not auth.using_bundled_key()
             auth.BUNDLED_KEY_FILES = []
             assert auth.get_api_key() is None
+            client, err = auth.create_client()
+            assert client is None and "no built-in key" in err, err
         finally:
             auth.load_config, auth.BUNDLED_KEY_FILES = orig_load, orig_files
+
+
+def test_no_key_entry_path_is_left_in_the_app():
+    """The house answer removes every path that reads or writes a pasted or
+    stored key: the field, Paste/Show/Test, the stored key, messages that
+    point to Settings for a key, hidden shortcuts (KEY_EMBED §4). The tests
+    above prove what auth does; this guards the rest of the app from the path
+    coming back in a later edit. Comments and docstrings may still name what
+    was removed."""
+    import ast
+    files = [ROOT / "main.py", *(ROOT / "core").glob("*.py"), *(ROOT / "ui").rglob("*.py"),
+             ROOT / "installer" / "installer.py"]
+    offenders = []
+    for f in files:
+        tree = ast.parse(f.read_text(encoding="utf-8"))
+        doc_nodes = {id(n.body[0].value) for n in ast.walk(tree)
+                     if isinstance(n, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+                     and n.body and isinstance(n.body[0], ast.Expr)
+                     and isinstance(n.body[0].value, ast.Constant)}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in doc_nodes:
+                low = node.value.lower()
+                if (node.value == "api_key" or "ctrl+shift+k" in low or "paste your gemini key" in low
+                        or "enter your key" in low or "enter a key" in low or "show key" in low):
+                    offenders.append(f"{f.relative_to(ROOT)}:{node.lineno}: {node.value[:50]!r}")
+    assert not offenders, "a key entry/stored-key path is back:\n  " + "\n  ".join(offenders)
 
 
 def test_the_built_in_key_is_throttled_as_free_whatever_tier_was_saved():
     """The built-in key is FREE and shared by every install. A tier saved for
     an old paid key ("paid": no throttle, or a fast custom one) would fire it
     into per-minute 429s on every run (review 2026-10-31). While the built-in
-    key is in use, the free limits are the ceiling; with the user's own key
-    the saved tier stands."""
+    key is in use, the free limits are the ceiling, whatever auth.json holds;
+    only a build with no built-in key keeps a saved paid tier."""
     from core import keymask, rate_limiter
     limiter = rate_limiter.get_rate_limiter()
     orig_tier, orig_load, orig_files = limiter.tier, auth.load_config, auth.BUNDLED_KEY_FILES
@@ -471,11 +498,10 @@ def test_the_built_in_key_is_throttled_as_free_whatever_tier_was_saved():
                 {"tier": "custom", "custom_rpm": 5, "custom_rpd": 100}).tier
             assert (t.rpm, t.rpd) == (5, 100), "a slower custom tier was replaced"
 
-            auth.load_config = lambda: {"api_key": "mine"}
-            assert rate_limiter.update_tier_from_config({"tier": "paid"}).tier.throttle is False, \
-                "the user's own key lost its paid tier"
+            auth.load_config = lambda: {"api_key": "an-old-paid-key"}     # never read
+            assert rate_limiter.update_tier_from_config({"tier": "paid"}).tier.throttle, \
+                "a stored key let the shared free key run unthrottled"
             auth.BUNDLED_KEY_FILES = []
-            auth.load_config = lambda: {"api_key": "mine"}
             assert rate_limiter.update_tier_from_config({"tier": "paid"}).tier.throttle is False
         finally:
             auth.load_config, auth.BUNDLED_KEY_FILES = orig_load, orig_files
@@ -546,10 +572,9 @@ def test_phase2_says_when_ai_is_unavailable_and_stops_calling_a_dead_key():
     good = row("a pump", matched="Job A", confidence=0.9)
 
     orig_client, orig_group = processor.create_client, processor.analyze_group
-    orig_builtin = processor.using_bundled_key
     calls = {"n": 0}
 
-    def run(results, folders=None, builtin=True):
+    def run(results, folders=None):
         it, lock = iter(results), threading.Lock()
         calls["n"] = 0
 
@@ -559,7 +584,6 @@ def test_phase2_says_when_ai_is_unavailable_and_stops_calling_a_dead_key():
                 return dict(next(it))
         processor.create_client = lambda: (object(), None)
         processor.analyze_group = fake_group
-        processor.using_bundled_key = lambda: builtin
         plan = processor.Plan(assignments=[
             processor.JobAssignment(folder_date=datetime(2026, 10, 31, 10),
                                     images=[Path(f"{i}.jpg")])
@@ -574,9 +598,7 @@ def test_phase2_says_when_ai_is_unavailable_and_stops_calling_a_dead_key():
         assert calls["n"] == 1, f"a withdrawn key was called {calls['n']} times"
         assert all(a.reasoning for a in plan.assignments), "a skipped folder has no reason"
 
-        # the user's own key: theirs to change, not an update's
-        err, _ = run([bad_key], folders=2, builtin=False)
-        assert "your own key was refused" in err and "Ctrl+Shift+K" in err, err
+        assert "Settings" not in err, "the way out of a withdrawn key is the next release, not Settings"
 
         err, _ = run([good, day], folders=4)
         assert "shared free quota is used up" in err and "3 of 4" in err, err
@@ -603,7 +625,6 @@ def test_phase2_says_when_ai_is_unavailable_and_stops_calling_a_dead_key():
         assert err.startswith("AI is unavailable: error: 500") and _FAKE_KEY not in err, err
     finally:
         processor.create_client, processor.analyze_group = orig_client, orig_group
-        processor.using_bundled_key = orig_builtin
 
 
 def test_drill_busy_marker_opens_settings_once_and_only_in_a_drill():

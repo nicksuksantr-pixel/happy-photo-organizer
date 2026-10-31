@@ -158,9 +158,12 @@ session รีสตาร์ท และชื่อ "Coddy" ไม่โผ�
       - `tools/key_guard.py` reads the STAGED blobs, not the working tree. It looks for both shapes (`AIza`+35, `AQ.`+30 or more, as the gate matches them) and the registered key itself. It also reads commit messages, and it FAILS CLOSED. It is a second net: the house gate `tools/release-gate.mjs` (synced in d790295) is the first.
       - The `pre-commit` hook runs it first, on its own (not inside the suite import, which skips on an import error). The `commit-msg` hook runs it on the message. Both are installed in `.git/hooks`; copy them from `tools/` on a new clone.
       - Each guard was driven red and green, on the real index too. A review found the first version read the working tree: a staged key deleted from disk went through.
-    - **The user's own saved key WINS; the built-in key is the fallback** (KEY_EMBED §4 as written). The Director's first note said the opposite, and v1.067 was briefly built that way; the written standard is the rule.
-      - An empty or blank saved key falls back to the built-in one.
-      - The key field is hidden. Ctrl+Shift+K in Settings brings it back, matched on VK_K so Caps Lock does not break it, and proven with a real key press. Nick decides whether it stays.
+    - **The built-in key is the ONLY key** (KEY_EMBED §4, Nick's house answer 2026-10-31: "no place to enter a key at all").
+      - No field, no Paste/Show/Test, no Ctrl+Shift+K, no message that points to Settings for a key.
+      - The installer's key-save code is gone too.
+      - An `api_key` that an older version saved in auth.json is never read. The file keeps it untouched, because the drill checks that user data is intact.
+      - `test_no_key_entry_path_is_left_in_the_app` (an AST scan of string literals) keeps the path from coming back. It was driven red on the previous settings.py.
+      - History, in case the rule moves again: own-key-first and Ctrl+Shift+K were built and proven (VK_K, a real key press), then removed on this answer.
     - Anyone with the public installer can read the key, and every install shares one free quota (RPM 15 / RPD 500 per model).
     - **Dead or exhausted key:**
       - The app says "AI is unavailable: …" in one line, stops calling on a permanent failure (key withdrawn, or today's quota gone), and goes on without AI.

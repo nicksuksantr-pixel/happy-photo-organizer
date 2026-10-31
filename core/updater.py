@@ -161,8 +161,8 @@ def drill_mode() -> bool:
 
 # UPDATE_DRILL §5 step 3 makes the app busy the way a user would: a dialog
 # open. Up to v1.066 the drill held the API key back, so the app opened
-# Settings by itself; from v1.067 a built-in key backs up a blank one and it
-# never does. So
+# Settings by itself; from v1.067 the built-in key is the only key, no saved
+# key is read, and it never does. So
 # the drill drops this marker in the user data dir instead, and the next start
 # in drill mode opens Settings once and deletes it — the relaunch after the
 # update is not busy.

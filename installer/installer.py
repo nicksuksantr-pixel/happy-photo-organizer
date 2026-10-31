@@ -349,7 +349,6 @@ class Installer:
 
     def __init__(self):
         self.install_dir: Path | None = None
-        self.api_key: str = ""
         self.create_desktop_shortcut = True
         self.create_start_menu = True
         self.launch_after = True
@@ -408,43 +407,6 @@ class Installer:
             kept = self._merge_catalog(previous_catalog)
             if progress_cb and kept:
                 progress_cb(86, f"Kept {kept} job name(s) you had added")
-
-            # Since v1.067 nothing sets api_key (the app has a built-in key),
-            # so this runs only for a caller that passes one explicitly.
-            if self.api_key:
-                if progress_cb:
-                    progress_cb(86, "Saving API key...")
-                cfg_dir = Path.home() / ".happy-photo-organizer"
-                cfg_dir.mkdir(parents=True, exist_ok=True)
-                cfg_file = cfg_dir / "auth.json"
-                existing = {}
-                if cfg_file.exists():
-                    try:
-                        existing = json.loads(cfg_file.read_text(encoding="utf-8"))
-                    except Exception:
-                        pass
-                existing.update({"api_key": self.api_key.strip()})
-                if "model" not in existing:
-                    existing["model"] = "gemini-3.5-flash-lite"
-                # Atomic write + perm-lock (mirrors core.auth.atomic_write_json):
-                # a crash mid-install must not truncate a prior config, and the
-                # key file shouldn't be left world-readable. (Tester 2026-06-04
-                # C15/E3 — the old plain write_text had neither guarantee.)
-                _tmp = cfg_file.with_suffix(".json.tmp")
-                try:
-                    _tmp.write_text(json.dumps(existing, indent=2), encoding="utf-8")
-                    os.replace(str(_tmp), str(cfg_file))
-                    try:
-                        import stat as _stat
-                        os.chmod(cfg_file, _stat.S_IRUSR | _stat.S_IWUSR)
-                    except Exception:
-                        pass
-                except Exception:
-                    try:
-                        _tmp.unlink()
-                    except Exception:
-                        pass
-                    cfg_file.write_text(json.dumps(existing, indent=2), encoding="utf-8")
 
             # Shortcuts
             exe_path = self._find_exe()
@@ -1041,7 +1003,6 @@ def _run_silent_upgrade() -> int:
     existing = _detect_existing_install_dir()
     installer = Installer()
     installer.install_dir = existing or DEFAULT_INSTALL_DIR
-    installer.api_key = ""  # preserved from prior config — installer.install() merges
     desk, start = desktop_shortcut_path(), start_menu_shortcut_path()
     if existing is None:            # nothing installed yet: a fresh silent install
         installer.create_desktop_shortcut = installer.create_start_menu = True

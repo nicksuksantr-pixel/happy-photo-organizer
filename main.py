@@ -688,11 +688,11 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
     # ─── Settings / auth ─────────────────────────
 
     def _check_auth_on_start(self):
-        # The drill's busy marker is taken first, so it is consumed even when
-        # Settings would open anyway (no key at all).
+        # Since v1.067 there is no key to ask for (KEY_EMBED §4: the built-in
+        # key is the only key), so Settings never opens by itself - except for
+        # the update drill's one-shot busy marker (drill mode only).
         from core import updater
-        drill_busy = updater.take_drill_busy_marker()
-        if drill_busy or not auth.get_api_key():
+        if updater.take_drill_busy_marker():
             self.after(300, self._open_settings)
         # Paired already? Then start listening without being asked — Nick's
         # flow is "open HPO, scan, send", and after the first scan the scan is
@@ -1723,10 +1723,9 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
         if not self.dest_root:
             messagebox.showwarning("No destination", "Choose a destination folder first")
             return
-        if not auth.get_api_key():
-            messagebox.showwarning("API key missing", "Open Settings to enter your key")
-            self._open_settings()
-            return
+        # No key check here since v1.067: there is no key to enter, and a build
+        # without one still sorts the photos - Phase 2 says in one line that AI
+        # is unavailable and the folders are named by hand (KEY_EMBED §4).
 
         # Pre-flight: estimate # of folders ≈ rough heuristic, then check quota
         total_imgs = 0

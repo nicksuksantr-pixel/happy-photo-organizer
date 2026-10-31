@@ -170,8 +170,8 @@ function Get-FromRouteEvidence($M) {
 function Set-AppBusy($M) {
   # busy the way a user makes it busy: a dialog open. The kit calls this on the
   # candidate (TO). Up to v1.066 the step held the API key back so the app
-  # opened Settings by itself; from v1.067 a built-in key backs up a blank one
-  # and it never does. So the step drops the drill marker instead: the next start in drill
+  # opened Settings by itself; from v1.067 the built-in key is the only key (no
+  # saved key is read) and it never does. So the step drops the drill marker instead: the next start in drill
   # mode opens Settings once and deletes it (core/updater.take_drill_busy_marker).
   Stop-AppProcesses $M.exe_name
   $marker = Join-Path (Get-HpoDataDir $M) $script:HpoBusyMarker
