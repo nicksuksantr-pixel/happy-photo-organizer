@@ -63,8 +63,8 @@ With own-key-first they would have kept spending that key, not the built-in one.
 ## The drills (process bugs, not app bugs)
 
 - **K13 - Run 2's key check read as "key broken" when the PC had no internet.** The receipt said
-  `embedded_key_works FAIL ... error: [Errno 11001] getaddrinfo failed`: the PC's Wi-Fi had dropped to a printer's
-  network, and the request never left the machine. The verdict was right (no proof, so no pass), but the line did not
+  `embedded_key_works FAIL ... error: [Errno 11001] getaddrinfo failed`: the PC's Wi-Fi had dropped to the SSID "epsonCL", which
+  had no internet at that moment, and the request never left the machine. The verdict was right (no proof, so no pass), but the line did not
   say why.
   - **Fix: in the master kit (a458b00, adopted).**
     - With `embeds_key`, `Test-ApiReachable` (DNS + TCP 443, 5 s) runs before anything is installed. A dead network

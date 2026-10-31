@@ -82,7 +82,7 @@ Detail per change: `CHANGELOG.md` [1.067] · bugs and fixes: `bug/bug_v1.067.md`
 | Run | Candidate | Result | Why |
 |---|---|---|---|
 | 1 | 71435e02 (old, own-key path) | 14/15 | `no_update_loop` counted FROM's own feed fetch (kit bug, fixed in master 746d323) |
-| 2 | bf807b97 | 14/15 | `embedded_key_works`: `getaddrinfo failed`; the PC's Wi-Fi had dropped to a printer's SSID (K13) |
+| 2 | bf807b97 | 14/15 | `embedded_key_works`: `getaddrinfo failed`; the PC's Wi-Fi had dropped to the SSID "epsonCL", with no internet at that moment (K13) |
 | 3 | bf807b97 | void | my re-stage deleted the running drill's logs and feed (K14); it hung and Nick ended it |
 | 4 | bf807b97 | **15/15 PASS** | the API probe passed before the run; `embedded_key_works` status 200, fp e656add8f927 |
 
