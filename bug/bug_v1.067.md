@@ -59,3 +59,25 @@ the rule fully (it is the same account anyway). Removed:
 
 Why it mattered for v1.067 itself: Nick's PC and the ship PC have an old `api_key` in auth.json from the old key page.
 With own-key-first they would have kept spending that key, not the built-in one.
+
+## The drills (process bugs, not app bugs)
+
+- **K13 - Run 2's key check read as "key broken" when the PC had no internet.** The receipt said
+  `embedded_key_works FAIL ... error: [Errno 11001] getaddrinfo failed`: the PC's Wi-Fi had dropped to a printer's
+  network, and the request never left the machine. The verdict was right (no proof, so no pass), but the line did not
+  say why. **Fix (drills/hpo.ps1, the Director's request):** `Get-KeyCheckNetCause` puts
+  `could not reach Google (DNS)` or `(connection)` at the front of the evidence. It only does so when there is no HTTP
+  status, so a 403/429 still reads as a key or quota problem. The check still FAILs. 21 cases tested in PS 5.1,
+  including an end-to-end run against a fake app.
+- **K14 - My re-stage broke the running run 3.** Nick pressed RUN-ALL at 23:31:47. At about 23:33 I re-staged to ship
+  the K13 adapter. My guard looked for the lock at `C:\Users\Public\Drills\drill-busy.txt`, but the house lock is
+  `C:\Users\Public\drill-busy.txt`, so the guard saw nothing.
+  - Stage-Drill's `Remove-Item -Recurse` deleted `from/`, `kit/`, `out/logs/` and `feed-state.json` from under the
+    live run, and stopped only at the transcript, which the run held open. It was the second time today; at 21:5x
+    it stopped harmlessly on its first file.
+  - Run 3 went on (the transcript shows `embedded_key_works PASS`, status 200), but every log write failed.
+    `no_update_loop` counted from a feed log I had deleted, so its PASS proves nothing.
+  - **Run 3 is void as release evidence.** It needs a run 4.
+  - **Rule from now on:** before any re-stage, the lock at `C:\Users\Public\drill-busy.txt` is free AND `HPO.cmd` is
+    still waiting (a missing HPO.cmd means a run took it). Kit suggestion sent to the Director: Stage-Drill should
+    refuse while the house lock names its own app.

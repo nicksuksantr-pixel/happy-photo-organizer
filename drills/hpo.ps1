@@ -191,6 +191,19 @@ function Restore-AfterBusy($M) {
   if (Test-Path -LiteralPath $marker) { Remove-Item -LiteralPath $marker -Force }   # never consumed: leave nothing behind
 }
 
+function Get-KeyCheckNetCause([string]$Status, [string]$Err) {
+  # 'DNS' or 'connection' when the key check never reached Google, else ''.
+  # Only when there is no HTTP status: a status means Google answered, so the
+  # error is about the key or the quota and must read as that. The check still
+  # FAILs either way (no proof the key works); this only says why at a glance.
+  # Run 2 of the v1.067 drill: "[Errno 11001] getaddrinfo failed" while the
+  # PC's Wi-Fi had dropped to a printer's network.
+  if ($Status -or -not $Err) { return '' }
+  if ($Err -match 'getaddrinfo|Errno 1100[124]|Name or service not known|nodename nor servname|Temporary failure in name resolution') { return 'DNS' }
+  if ($Err -match 'WinError 100(5[01]|6[015])|timed out|Timeout|ConnectError|Connection refused|actively refused|Network is unreachable|connection attempt failed|Server disconnected|Remote end closed') { return 'connection' }
+  return ''
+}
+
 function Get-EmbeddedKeyEvidence($M) {
   # KEY_EMBED 7 (embedded_key_works): one real Gemini call from the UPDATED
   # build with its built-in key. The app makes the call itself and writes the
@@ -212,7 +225,9 @@ function Get-EmbeddedKeyEvidence($M) {
     return [ordered]@{ result = 'fail'; evidence = "exit $($p.ExitCode), no $out"; fp = ''; repo = ''; app = ''; status = ''; model = '' }
   }
   $ok = ($p.ExitCode -eq 0 -and [string]$r.status -eq '200' -and [string]$r.model -and [string]$r.fp)
-  $ev = "exit $($p.ExitCode); status $($r.status); model $($r.model); key fp sha256:$(([string]$r.fp).Substring(0, [Math]::Min(12, ([string]$r.fp).Length)))" +
+  $net = Get-KeyCheckNetCause ([string]$r.status) ([string]$r.error)
+  $ev = $(if ($net -and -not $ok) { "could not reach Google ($net) - the key was not tested; " } else { '' }) +
+        "exit $($p.ExitCode); status $($r.status); model $($r.model); key fp sha256:$(([string]$r.fp).Substring(0, [Math]::Min(12, ([string]$r.fp).Length)))" +
         $(if ($r.error) { "; error: $($r.error)" } else { '' })
   return [ordered]@{ result = $(if ($ok) { 'pass' } else { 'fail' }); evidence = $ev; fp = [string]$r.fp
                      repo = [string]$r.repo; app = [string]$r.app; status = [string]$r.status; model = [string]$r.model }
