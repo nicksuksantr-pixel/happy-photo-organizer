@@ -347,7 +347,7 @@ Verified individually against the real repos (Windows 11 / PowerShell).
 | 2.3 the commit that introduced/removed a symbol | `git -C <repo> log --oneline -S "<symbol>" -- <path>` |
 | 3.2 full history of one function | `git -C <repo> log -L <start>,<end>:<file> --oneline` |
 | 2.4 compare two sibling files | `git -C <repo> diff --no-index --stat -- <fileA> <fileB>` |
-| 2.3 grep **tracked** files only — skips untracked/ignored output and never leaves the repo (so a sibling `*-lucifer` worktree can't pollute the result). ⚠️ It does **not** skip `_trash/` or `build/` where those are *tracked* — add `':!_trash' ':!build'` to the pathspec, since rule #6 forbids reading `_trash/` | `git -C <repo> grep -n "<pattern>" -- <pathspec> ':!_trash' ':!build'` |
+| 2.3 grep **tracked** files only — skips untracked/ignored output and never leaves the repo (so a sibling `*-lucifer` worktree can't pollute the result). ⚠️ `_trash/` is gitignored and untracked in every repo since 2026-11-01 (#6), so a tracked-files grep never sees it; `build/` can still be tracked — exclude it with the long form `':(exclude)build'` (the short `':!build'` fails in this git with "Unimplemented pathspec magic", EMR 2026-11-01) | `git -C <repo> grep -n "<pattern>" -- <pathspec> ':(exclude)build'` |
 | check for unpushed commits (repos auto-push per #20) | `git -C <repo> log --oneline origin/main..HEAD` |
 
 ### Running tests — **every repo is different, do not guess**
