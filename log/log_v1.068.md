@@ -64,7 +64,7 @@ What it showed:
 
 Every log is named by the receipt name, and the receipt's `drill_log` is `drills/logs/1.068.from-1.065.log`. No key shape appears in any receipt or log.
 
-**Stale wording, not a defect of the run:** two `not_covered` lines in `drill.json` have named v1.066 since the bridge (ad00773), where they mean the version being drilled to: "v1.066's own updater against real GitHub: every check on v1.066 runs through the loopback feed" and "the 'Install now' button: in v1.066 ...". `drill.from-1.065.json` copied them. The receipts for v1.067 and v1.068 carry them as written and were not edited (#28). After the release, both manifests were reworded to "the updated version's own updater" and "since v1.066", so the next drills say it right.
+**Stale wording, not a defect of the run:** two `not_covered` lines in `drill.json` have named v1.066 since the bridge (ad00773), where they mean the version being drilled to: "v1.066's own updater against real GitHub: every check on v1.066 runs through the loopback feed" and "the 'Install now' button: in v1.066 ...". `drill.from-1.065.json` copied them. The receipts for v1.067 and v1.068 carry them as written and were not edited (#28). After the release, both manifests were reworded to "the updated version's own updater" and "since v1.066", so the next drills say it right. The Director then found the same old meaning in `drills/README.md` ("Not drilled here"), checked that no other repo or the master kit carried it, and the README was brought up to date: one drill per field version, the v1.065 route through the test repo, `embedded_key_works`, the `drill-open-settings` busy step, and commands that read the versions from `VERSION` and `drill.json`.
 
 ## In the field
 
