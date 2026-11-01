@@ -1,0 +1,95 @@
+{
+    "schema":  "update-drill/1",
+    "profile":  "desktop-self-update",
+    "app":  "Happy Photo Organizer",
+    "from_version":  "1.068",
+    "from_artifact_sha256":  "4345dc38d0072c5128d257991ebeed23bfc30f2bc3280cb7d7130eaf3944ed28",
+    "to_version":  "1.069",
+    "assets":  [
+                   {
+                       "name":  "HappyPhotoOrganizerSetup.exe",
+                       "sha256":  "6cb565fcfbcc3f741a650d53c3a806b825fbfb373203e0884eda21bd3e2258bf"
+                   }
+               ],
+    "drilled_at":  "2026-11-01T03:33:53Z",
+    "machine":  "NICKSUKSANTR, Windows user \u0027drill\u0027",
+    "layout":  "v1.068 installed by its own released setup (--silent: the default folder C:\\Users\\drill\\AppData\\Local\\HappyPhotoOrganizer, the layout the GUI setup leaves with its default boxes ticked), as standard user \u0027drill\u0027; shortcuts: C:\\Users\\drill\\Desktop\\Happy Photo Organizer.lnk; C:\\Users\\drill\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Happy Photo Organizer.lnk; C:\\Users\\drill\\AppData\\Roaming\\Microsoft\\Internet Explorer\\Quick Launch\\User Pinned\\TaskBar\\Happy Photo Organizer.lnk",
+    "drill_log":  "drills/logs/1.069.log",
+    "bootstrap":  false,
+    "routes":  [
+                   "v1.068\u0027s own updater via feed (nicksuksantr-pixel/hpo-update-drill)",
+                   "loopback feed 127.0.0.1:47665 for every check made on v1.069"
+               ],
+    "checks":  {
+                   "start_from_released_build":  {
+                                                     "result":  "pass",
+                                                     "evidence":  "FROM = C:\\Users\\Public\\HPO-drill\\from\\HappyPhotoOrganizerSetup.exe, sha256 4345dc38d0072c5128d257991ebeed23bfc30f2bc3280cb7d7130eaf3944ed28 = the released v1.068 file named in drills/drill.json"
+                                                 },
+                   "real_update_path":  {
+                                            "result":  "pass",
+                                            "evidence":  "the harness started only the FROM v1.068 exe; its own updater fetched: [2026-11-01 10:24:50] _fetch_latest_release: GET http://127.0.0.1:47665/latest | [2026-11-01 10:24:50] download_installer start: url=http://127.0.0.1:47665/asset/HappyPhotoOrganizerSetup.exe dest=C:\\Users\\drill\\.happy-photo-organizer\\updates\\HappyPhotoOrganizerSetup-v1.069.exe expected_size=91709120 | [2026-11-01 10:24:50]   attempt 1: SUCCESS — 91,709,120 bytes; then the TO installer: 2026-11-01T10:25:05+07:00 UPDATE SWAPPED 1.069 1898 files in C:\\Users\\drill\\AppData\\Local\\HappyPhotoOrganizer\\HappyPhotoOrganizer; pruned 0"
+                                        },
+                   "new_version_running":  {
+                                               "result":  "pass",
+                                               "evidence":  "2026-11-01T10:25:09+07:00 STARTED 1.069 C:\\Users\\drill\\AppData\\Local\\HappyPhotoOrganizer\\HappyPhotoOrganizer\\HappyPhotoOrganizer.exe"
+                                           },
+                   "one_process":  {
+                                       "result":  "pass",
+                                       "evidence":  "1 process(es): 30580 C:\\Users\\drill\\AppData\\Local\\HappyPhotoOrganizer\\HappyPhotoOrganizer\\HappyPhotoOrganizer.exe"
+                                   },
+                   "relaunched_itself":  {
+                                             "result":  "pass",
+                                             "evidence":  "the harness started nothing after FROM; \u00272026-11-01T10:25:09+07:00 STARTED 1.069 C:\\Users\\drill\\AppData\\Local\\HappyPhotoOrganizer\\HappyPhotoOrganizer\\HappyPhotoOrganizer.exe\u0027 and pid 30580 runs C:\\Users\\drill\\AppData\\Local\\HappyPhotoOrganizer\\HappyPhotoOrganizer\\HappyPhotoOrganizer.exe with its window (the installer\u0027s launch_app() after the swap)"
+                                         },
+                   "one_install":  {
+                                       "result":  "pass",
+                                       "evidence":  "install folders: C:\\Users\\drill\\AppData\\Local\\HappyPhotoOrganizer; exe copies: C:\\Users\\drill\\AppData\\Local\\HappyPhotoOrganizer\\HappyPhotoOrganizer\\HappyPhotoOrganizer.exe; .update left after cleanup: False (CLEANED line: 2026-11-01T10:25:21+07:00 UPDATE CLEANED 1.069 removed the rollback copy (1899 files) in C:\\Users\\drill\\AppData\\Local\\HappyPhotoOrganizer\\.update); Uninstall entry HKCU=True HKLM=False"
+                                   },
+                   "tree_matches_fresh_install":  {
+                                                      "result":  "pass",
+                                                      "evidence":  "updated 1900 files vs a fresh install of v1.069 1900 files, allowlist [uninstall.bat, HappyPhotoOrganizer/_internal/data/job_catalog.json]: identical"
+                                                  },
+                   "shortcuts_open_new":  {
+                                              "result":  "pass",
+                                              "evidence":  "C:\\Users\\drill\\Desktop\\Happy Photo Organizer.lnk -\u003e C:\\Users\\drill\\AppData\\Local\\HappyPhotoOrganizer\\HappyPhotoOrganizer\\HappyPhotoOrganizer.exe (the updated exe); C:\\Users\\drill\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Happy Photo Organizer.lnk -\u003e C:\\Users\\drill\\AppData\\Local\\HappyPhotoOrganizer\\HappyPhotoOrganizer\\HappyPhotoOrganizer.exe (the updated exe); C:\\Users\\drill\\AppData\\Roaming\\Microsoft\\Internet Explorer\\Quick Launch\\User Pinned\\TaskBar\\Happy Photo Organizer.lnk -\u003e C:\\Users\\drill\\AppData\\Local\\HappyPhotoOrganizer\\HappyPhotoOrganizer\\HappyPhotoOrganizer.exe (the updated exe); that exe sha256 35e527e7eed948e2392705a78a96022105ac76829823d76d3c46d4a5380101fe = fresh v1.069 exe: True; it ran as: 2026-11-01T10:25:09+07:00 STARTED 1.069 C:\\Users\\drill\\AppData\\Local\\HappyPhotoOrganizer\\HappyPhotoOrganizer\\HappyPhotoOrganizer.exe"
+                                          },
+                   "user_data_intact":  {
+                                            "result":  "pass",
+                                            "evidence":  "jobshot_filed.json byte-identical; auth.api_key before=sha256:34a706916020 after=sha256:34a706916020; auth.model before=gemini-3.5-flash-lite after=gemini-3.5-flash-lite; auth.auto_check_updates before=True after=True; auth.jobshot_token before=sha256:bdf0fe5c9a09 after=sha256:bdf0fe5c9a09; auth.last_dest_root before=C:\\Users\\drill\\Documents\\Drill archive after=C:\\Users\\drill\\Documents\\Drill archive; catalog.user_job before=1 after=1"
+                                        },
+                   "no_update_loop":  {
+                                          "result":  "pass",
+                                          "evidence":  "fed v1.069 itself: 2026-11-01T10:25:11+07:00 UPDATE CHECK 1.069 nothing newer: latest is v1.069 (feed http://127.0.0.1:47665/latest); FOUND/DOWNLOADED/HANDOVER since: 0; asset requests at the feed since v1.069 started: 0"
+                                      },
+                   "embedded_key_works":  {
+                                              "result":  "pass",
+                                              "evidence":  "exit 0; status 200; model gemini-3.5-flash-lite; key fp sha256:e656add8f927"
+                                          },
+                   "unknown_is_not_no":  {
+                                             "result":  "pass",
+                                             "evidence":  "feed 500 -\u003e 2026-11-01T10:25:57+07:00 UPDATE CHECK 1.069 could not check: GitHub answered HTTP 500 (feed http://127.0.0.1:47665/latest); feed 403 -\u003e 2026-11-01T10:26:03+07:00 UPDATE CHECK 1.069 could not check: GitHub answered HTTP 403 (feed http://127.0.0.1:47665/latest); feed drop -\u003e 2026-11-01T10:26:08+07:00 UPDATE CHECK 1.069 could not check: could not reach GitHub: Remote end closed connection without response (feed http://127.0.0.1:47665/latest)"
+                                         },
+                   "bad_download_refused":  {
+                                                "result":  "pass",
+                                                "evidence":  "fed v1.070 with one byte flipped: 2026-11-01T10:26:15+07:00 UPDATE REFUSED 1.070 the download\u0027s sha256 b06d9461db5546ad87a22ed7cc896bcd1e91333235966e1f8280b42baa1fe288 is not the release\u0027s 6cb565fcfbcc3f741a650d53c3a806b825fbfb373203e0884eda21bd3e2258bf; HANDOVER lines: 0; v1.069 still running: True"
+                                            },
+                   "sees_next_release":  {
+                                             "result":  "pass",
+                                             "evidence":  "fed a fake v1.070: 2026-11-01T10:31:33+07:00 UPDATE FOUND 1.070 HappyPhotoOrganizerSetup.exe 91709120 bytes sha256=6cb565fcfbcc3f741a650d53c3a806b825fbfb373203e0884eda21bd3e2258bf | 2026-11-01T10:31:33+07:00 UPDATE VERIFIED 1.070 sha256=6cb565fcfbcc3f741a650d53c3a806b825fbfb373203e0884eda21bd3e2258bf"
+                                         },
+                   "waits_while_busy":  {
+                                            "result":  "pass",
+                                            "evidence":  "busy (Settings dialog open - the drill marker drill-open-settings in the user data dir makes the app open Settings once at its next start (v1.067+, drill mode only; up to v1.066 the step held the API key back; from v1.067 the built-in key is the only key and no saved key is read, so Settings never opens by itself)) for 90 s after VERIFIED: HANDOVER lines 0; once idle: 2026-11-01T10:33:34+07:00 UPDATE HANDOVER 1.070 C:\\Users\\drill\\.happy-photo-organizer\\updates\\HappyPhotoOrganizerSetup-v1.070.exe --silent --upgrade | 2026-11-01T10:33:51+07:00 STARTED 1.069 C:\\Users\\drill\\AppData\\Local\\HappyPhotoOrganizer\\HappyPhotoOrganizer\\HappyPhotoOrganizer.exe"
+                                        }
+               },
+    "embedded_key":  {
+                         "fp":  "e656add8f92763f263ad415de132d318985aa48c79168969428e271c0be25d26",
+                         "repo":  "Happy-Photo-Organizer"
+                     },
+    "not_covered":  [
+                        "profile path: the drill account is plain ASCII \u0027drill\u0027 (C:\\Users\\drill); the ship PC\u0027s Windows username has not been read, so a profile path with a space or Thai characters is NOT covered by this drill (UPDATE_DRILL 5.2)",
+                        "the \u0027Install now\u0027 button: since v1.066 it matters only while the app is busy, where it refuses (unit test test_the_install_button_refuses_while_busy_and_says_why), so it is not driven here",
+                        "the updated version\u0027s own updater against real GitHub: every check made on the updated version runs through the loopback feed; tools/publish_release.py reads the real endpoint back after publishing",
+                        "a failed install: the attempt record (update-attempt.json), no automatic retry of that version, the Retry button, and a pre-v1.066 app relaunched with its update checks paused for that session are unit-tested only; the drill runs the success path"
+                    ]
+}
