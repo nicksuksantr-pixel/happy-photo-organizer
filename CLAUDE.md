@@ -72,6 +72,6 @@ A task is done only when its records are written:
 - `log/` and `V-Log.md` every version;
 - `bug/` every bug;
 - `memory/MEMORY.md` on a risk;
-- over-quota files moved to `_trash/`.
+- over-quota files moved to `_trash/` (local only, gitignored).
 
 Then commit and push. The final report to Nick shows one line: `📝 records: chat_log ✓ · log vX ✓ · bug — · MEMORY ✓ · V-Log ✓ · commit <sha>`.
