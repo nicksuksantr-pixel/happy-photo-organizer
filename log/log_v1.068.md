@@ -1,6 +1,6 @@
 # Log — v1.068 (2026-11-01) — When the free AI is back
 
-**Not released yet** (#28). It is drilled from every version still in the field (UPDATE_DRILL step 1, v3.26).
+**Both field-version drills PASSED 15/15** (#28, UPDATE_DRILL step 1, v3.26): from v1.067 (`drills/1.068.json`) and from v1.065 (`drills/1.068.from-1.065.json`), on the same bytes, sha256 `4345dc38d0072c5128d257991ebeed23bfc30f2bc3280cb7d7130eaf3944ed28`. `release-gate --check --tag v1.068` passed. Publishing follows.
 
 **Asked:** Nick, in this chat, answering *"Build v1.068 so the quota message names the 15:00 reset time?"*: **"Build
 v1.068"** (2026-11-01, about 01:15).
@@ -38,3 +38,28 @@ The candidate's app diff against v1.067 is `core/processor.py` only.
 |---|---|---|---|
 | 1.067 | Nick's PC | 2026-11-01, his update.log: STARTED 1.067 at 00:30:15 | `drills/drill.json`, the loopback feed, receipt `drills/1.068.json` |
 | 1.065 | the ship PC | 2026-10-30, V-Log v1.065 (21:09) | `drills/drill.from-1.065.json`, repo-env via the test repo, receipt `drills/1.068.from-1.065.json` |
+
+## The drills
+
+| FROM | Route | Run | Result |
+|---|---|---|---|
+| 1.067 (`bf807b97...`) | loopback feed | 2026-11-01 01:39:42-01:49:19 | **15/15 PASS**, receipt `drills/1.068.json` |
+| 1.065 (`46902c79...`), attempt 1 | repo-env, the test repo | 01:25:49-01:38:51 | 15/15, but filed under the FROM-1.067 log name, so not a receipt (the Director's ruling); kept as `drills/logs/1.068.from-1.065.run1.*` |
+| 1.065, attempt 2 | repo-env | 02:00:10 | FAIL in 6 s at the pre-run probe: DNS could not resolve the Gemini host, nothing installed (`run2-no-network.runner.log`); the Director measured the network fine at 02:04, so a resolver blip |
+| 1.065, attempt 3 | repo-env, kit fafc0e7, `-ReceiptName 1.068.from-1.065` | 08:31:30-08:43:13 (11.7 min) | **15/15 PASS**, receipt `drills/1.068.from-1.065.json` |
+
+Attempt 3 was run on Nick's go ("Re-run it", 2026-11-01 about 08:30), after the lock, the stage, the runner and the test repo were checked:
+- the test repo's latest was v1.068, `4345dc38`, 91,707,491 bytes;
+- the drill lock was free and `HPO.cmd` was absent.
+
+What it showed:
+- v1.065's own updater fetched `api.github.com/repos/nicksuksantr-pixel/hpo-update-drill/releases/latest` at 08:32:01 and handed over;
+- v1.068 started itself at 08:34:26, as one process in one install folder;
+- the 1900 files are identical to a fresh install (allowlist: `uninstall.bat`, `job_catalog.json`);
+- the shortcuts open the new exe;
+- `auth.json` and the job data are unchanged;
+- the built-in key answered 200, fp `e656add8f927`.
+
+Every log is named by the receipt name, and the receipt's `drill_log` is `drills/logs/1.068.from-1.065.log`. No key shape appears in any receipt or log.
+
+**Stale wording, not a defect of the run:** `drill.from-1.065.json` was copied from `drill.json`, so two of its `not_covered` lines still name v1.066 ("v1.066's own updater against real GitHub", "the 'Install now' button: in v1.066"). The receipt carries them as written; it was not edited (#28). For a FROM-1.065 manifest the first line should say that v1.065's updater does reach the real GitHub API, but the test repo's. To be corrected in the manifest before the next FROM-1.065 drill.
