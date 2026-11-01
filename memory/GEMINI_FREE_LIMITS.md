@@ -31,12 +31,12 @@
 
 ## Speech, audio, embeddings
 
-| Model | RPM | TPM | RPD | Used that day | API id |
-|---|---|---|---|---|---|
-| Gemini 3.8 Flash TTS | 3 | 10K | **10** | 3 / 365 / **18** | `gemini-3.8-flash-tts` |
-| Gemini 3.8 Flash Lite TTS | 3 | 10K | 10 | 0 | `gemini-3.8-flash-lite-tts` |
-| Gemini 3.1 Flash TTS | 3 | 10K | 10 | 0 | `gemini-3.1-flash-tts-preview` (shuts down 2026-11-17) |
-| Gemini 2.5 Flash TTS | 3 | 10K | 10 | 0 | `gemini-2.5-flash-preview-tts` (shuts down 2026-11-17) |
+| Model | RPM | TPM | RPD | Used that day | Speaks Thai | API id |
+|---|---|---|---|---|---|---|
+| Gemini 3.8 Flash TTS | 3 | 10K | **10** | 3 / 365 / **18** | ✔ (docs table, live page 2026-11-01) | `gemini-3.8-flash-tts` (no shutdown date) |
+| Gemini 3.8 Flash Lite TTS | 3 | 10K | 10 | 0 | **— no Thai** (docs table, live page 2026-11-01) | `gemini-3.8-flash-lite-tts` |
+| Gemini 3.1 Flash TTS | 3 | 10K | 10 | 0 | ✔ (TTVC probe, Aoede fallback) | `gemini-3.1-flash-tts-preview` (shuts down 2026-11-17) |
+| Gemini 2.5 Flash TTS | 3 | 10K | 10 | 0 | ✔ (TTVC probe, Aoede fallback) | `gemini-2.5-flash-preview-tts` (shuts down 2026-11-17) |
 | Gemini 3.5 Transcribe | 3 | 10K | 25 | 0 | `gemini-3.5-transcribe` |
 | Gemini Embedding 1 | 100 | 30K | 1K | 0 | `gemini-embedding-001` |
 | Gemini Embedding 2 | 100 | 30K | 1K | 0 | `gemini-embedding-2` |
@@ -65,14 +65,29 @@ Veo 3 Fast Generate · Veo 3 Generate · Veo 3 Lite Generate (the Veo rows show 
 | Search grounding | Gemini 2 · Gemini 2.5 · "Default" | 1.5K each |
 | Search grounding | Gemini 3 and newer | **0** |
 
+## Shutdowns that matter (deprecations page, last updated 2026-10-22, read 2026-11-01)
+
+The page's own caveat: the dates are the earliest a model might be retired.
+
+| Date | Model | Replacement Google names |
+|---|---|---|
+| 2026-11-17 | `gemini-3.1-flash-tts-preview` · `gemini-2.5-flash-preview-tts` · `gemini-2.5-pro-preview-tts` | `gemini-3.8-flash-tts` or `gemini-3.8-flash-lite-tts` (the Lite one has no Thai) |
+| 2026-11-17 | `gemini-3.1-flash-live-preview` · `gemini-2.5-flash-native-audio-preview-12-2025` | `gemini-3.8-live` |
+| 2027-05-07 | `gemini-3.1-flash-lite` | `gemini-3.5-flash-lite` |
+| none announced | `gemini-3.8-flash-tts` · `gemini-3.8-live` | — |
+
 ## What the numbers say (for the code)
 
 1. **Only the Flash-Lite models have a daily budget worth batching on: 500.** Every non-Lite Flash (3, 3.6, 3.8, 2.5)
    is **20 requests a day, 5 a minute**. A fallback chain that ends on a Flash model lands in a 20-a-day bucket, so
    bulk work must stay on Flash-Lite and use Flash only for the few calls that need it.
 2. **TTS is 10 requests a day per TTS model, 3 a minute, 10K tokens a minute.** Four buckets exist today; two of them
-   (3.1 Flash TTS, 2.5 Flash TTS) shut down on 2026-11-17, leaving **20 TTS calls a day on a free key, in total**.
-   A program that makes voice clips plans its day around that number.
+   (3.1 Flash TTS, 2.5 Flash TTS) shut down on 2026-11-17, leaving 3.8 Flash TTS + 3.8 Flash-Lite TTS = **20 TTS
+   calls a day on a free key, in total — for a language both of them speak.** **3.8 Flash-Lite TTS has no Thai**
+   (Google's language table, row "Thai": Flash TTS ✔, Flash-Lite TTS —; read on the live page 2026-11-01 after
+   TTVC's correction), so **a Thai project has 10 TTS requests a day on a free key from 2026-11-17.** A program that
+   makes Thai voice clips plans its day around ten, and a fallback onto a retired model answers 404, so the chain
+   must pass a retired model over instead of crashing (TTVC v0.004 does).
 3. **Gemma 4 (31B, 26B) is the high-count model: 14.4K a day, 30 a minute, but only 16K tokens a minute** — many short
    calls, not long documents.
 4. **Embeddings: 1K a day, 100 a minute, 30K TPM.** The Live API shows no request caps, only tokens per minute.
@@ -95,3 +110,4 @@ Veo 3 Fast Generate · Veo 3 Generate · Veo 3 Lite Generate (the Veo rows show 
 | 2026-08-16 | 3.5 Flash-Lite confirmed at the same limits as 3.1; default moved up | Nick |
 | 2026-10-31 | 500 a day for 3.5 Flash-Lite read in AI Studio by Nook | NP |
 | 2026-11-01 | Every model's row above | Nick's three screenshots of AI Studio, transcribed by the Director and checked by an independent read |
+| 2026-11-01 | TTVC's correction: 3.8 Flash-Lite TTS has no Thai, so a Thai project has 10 TTS a day after 2026-11-17, not 20; the shutdown table | TTVC (`docs/GEMINI_FREE_KEY.md` §4/§6, probes with its own key) · verified by the Director on the live docs page (row "Thai": ✔ / —) and the deprecations page |
