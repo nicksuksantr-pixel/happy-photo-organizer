@@ -82,8 +82,8 @@ that is not `VERSION`, a stale CODEMAP, or no passing drill receipt for these ex
 |---|---|
 | **Where to change the code** | `docs/CODEMAP.md` (open it before every edit) |
 | Version history | `V-Log.md` (one line per version) · `CHANGELOG.md` (detail) |
-| What each version's work was | `log/` (v1.057 on; older logs were moved to `_trash/old_records/` under the quota rule) |
-| Bugs found and how they were fixed | `bug/` (v1.055 on; older ones in `_trash/old_records/`) |
+| What each version's work was | `log/` (v1.057 on; older logs were rotated out of the repo under the quota rule, #6/#7, and are kept on the dev PC only) |
+| Bugs found and how they were fixed | `bug/` (v1.055 on; older ones were rotated out the same way and are not in the repo) |
 | Session history | `chat_log/` (newest file) |
 | Workflow snapshot, risks, house rules | `memory/MEMORY.md` · `memory/nick-workflow.md` |
 | How to release | "Release, in this order" above · `tools/publish_release.py` · `drills/README.md` (`RELEASE.md` = one-time setup and old notes) |

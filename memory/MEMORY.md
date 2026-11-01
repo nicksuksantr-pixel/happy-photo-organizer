@@ -102,7 +102,7 @@ session รีสตาร์ท และชื่อ "Coddy" ไม่โผ�
 3. **Branding** — Icon (camera) = Identity (taskbar/installer) · Mascot (robot) = Helper (welcome/dropzone) · ห้ามสลับ
 4. **อัปเดต MEMORY** เมื่อพบ bug / code เสี่ยงสูง — ระบุ file/function/line + วิธีแก้
 5. **Tester** trigger → spawn 3 agent ขนาน (functional gaps / code correctness / holistic) → แก้ทันทีไม่รอ approve → test → build → อัปเดต memory → รายงาน + สรุป token
-6. **จัดโฟลเดอร์ให้เป็นระเบียบ** — มี `_trash\` (แยกหมวด, ห้ามลบตรงๆ ให้ย้าย)
+6. **จัดโฟลเดอร์ให้เป็นระเบียบ** — มี `_trash\` (แยกหมวด, ห้ามลบตรงๆ ให้ย้าย) · **`_trash/` is local only: gitignored and untracked since 2026-11-01** (Nick, option 1). The 2026-10-30 rotation had published 20 files to the PUBLIC repo because `.gitignore` lacked the line; they are still in history before that commit, which was not rewritten. Lesson `gitignore-does-not-untrack-what-is-already-tracked` (`memory/SHARED_LESSONS.md`).
 7. **Changelog/log/bug** — แยกโฟลเดอร์ · max 20 entries/ไฟล์ · max 10 ไฟล์/ระบบ · เกินโยน `_trash`
 8. **อ่าน memory (log/bug/changelog)** สูงสุด 5 ไฟล์ล่าสุด (=100 entries) ยกเว้น Nick สั่งอ่านหมด
 9. **Log** — บันทึกการคุย+คำสั่งแยกตาม version ใน `log\log_vX.md`
