@@ -1,6 +1,7 @@
 # Log — v1.069 (2026-11-01) — The next day keeps its own folder
 
-**Built, NOT released yet** (#28): candidate sha256 `6cb565fcfbcc3f741a650d53c3a806b825fbfb373203e0884eda21bd3e2258bf`,
+**Both field-version drills PASSED 15/15** (#28): from v1.068 (`drills/1.069.json`) and from v1.065
+(`drills/1.069.from-1.065.json`). `release-gate --check --tag v1.069` passed. Publishing follows. Candidate sha256 `6cb565fcfbcc3f741a650d53c3a806b825fbfb373203e0884eda21bd3e2258bf`,
 91,709,120 bytes. It is drilled from every version in the field: v1.068 (Nick's PC) and v1.065 (the ship PC).
 
 **Asked:** Nick, in this chat, answering "Fix L1 and L2 as v1.069 with its drills?": **"Fix as v1.069"**
@@ -53,3 +54,37 @@
 |---|---|---|---|
 | 1.068 | Nick's PC | 2026-11-01, his update.log: STARTED 1.068 at 08:50:50 | `drills/drill.json`, the loopback feed, receipt `drills/1.069.json` |
 | 1.065 | the ship PC | 2026-10-30, V-Log v1.065 (21:09) | `drills/drill.from-1.065.json`, repo-env via the test repo, receipt `drills/1.069.from-1.065.json` |
+
+## The drills
+
+| FROM | Route | Run | Result |
+|---|---|---|---|
+| 1.068 (`4345dc38...`) | the loopback feed | 10:24:19-10:33:53 (9.6 min) | **15/15 PASS**, receipt `drills/1.069.json` |
+| 1.065 (`46902c79...`) | repo-env, the test repo | 10:35:03-10:45:37 (10.6 min) | **15/15 PASS**, receipt `drills/1.069.from-1.065.json` |
+
+**Before staging:**
+- the lock was free and `HPO.cmd` was absent;
+- the FROM setups hashed to the released files;
+- the candidate went on the test repo draft-first (`drill v1.069`), and its public `releases/latest` read back as
+  v1.069, 91,709,120 bytes, digest `6cb565fc…`.
+
+**The FROM-1.068 run:**
+- v1.068 fetched the loopback feed;
+- v1.069 started itself at 10:25:09.
+
+**The FROM-1.065 run:**
+- v1.065's own updater fetched `api.github.com/repos/nicksuksantr-pixel/hpo-update-drill/releases/latest` at
+  10:35:38;
+- v1.069 started itself at 10:36:52.
+
+**Both runs:**
+- one process, one install folder;
+- 1900 files identical to a fresh install;
+- the shortcuts open the new exe;
+- the user data is unchanged;
+- `embedded_key_works` status 200, fp `e656add8f927`;
+- no key shape in any receipt or log.
+
+`release-gate --check --tag v1.069 dist/HappyPhotoOrganizerSetup.exe` exit 0. It reads both receipts, and the v3.27
+docs check finds README naming v1.069 and a real CODEMAP. The publish script's local gates (`--dry-run`) passed
+before the drills.
