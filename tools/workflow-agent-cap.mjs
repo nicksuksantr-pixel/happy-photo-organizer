@@ -23,6 +23,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 const CAP = 5                    // #16: default <=3, absolute max 5, >5 = ask Nick
+const SESSION_CAP = 10           // #16.2 (Nick 2026-11-01): agents running at once, per session, all workflows together
+const STALE_MS = 90 * 60 * 1000  // a journal silent this long = a dead run (network drop), not counted
 const HOME = process.env.USERPROFILE || process.env.HOME || ''
 const APPROVAL = path.join(HOME, '.claude', 'workflow-approval.json')
 
@@ -43,16 +45,82 @@ if (hook.tool_name !== 'Workflow') allow()
 
 const input = hook.tool_input || {}
 
+// ── GATE F — the SESSION cap: agents still running + this launch <= SESSION_CAP ─
+// 2026-11-01 (NookerProjects): two 3-agent workflows overlapped. Each script declared
+// MAX_AGENTS: 3, each passed every gate above, six agents ran at once — MAX_AGENTS
+// counts one script, not the rounds already running. Nick's numbers (2026-11-01):
+// CAP per launch (gate C) and SESSION_CAP running at once per session, every
+// workflow of the session together, house triggers included.
+// The harness journals every run of this session under
+//   <projects>/<project>/<session_id>/subagents/workflows/<runId>/journal.jsonl
+// as {type:"started",key,...} and {type:"result",key,...} lines, so "running now"
+// is started minus result, per run. A journal silent for STALE_MS belongs to a
+// dead run (a network drop kills a whole round at once, NP 2026-10-31) and is not
+// counted, or one dead run would block the session for ever. No session_id or
+// transcript_path in the hook input => the gate cannot count and stays open,
+// like every other gate in this file (fail open, never break the session).
+const sessionDir = (() => {
+  const sid = typeof hook.session_id === 'string' ? hook.session_id : ''
+  const tp = typeof hook.transcript_path === 'string' ? hook.transcript_path : ''
+  return sid && tp ? path.join(path.dirname(tp), sid) : ''
+})()
+const inFlight = () => {
+  const runs = []
+  if (!sessionDir) return { known: false, total: 0, runs }
+  const wfDir = path.join(sessionDir, 'subagents', 'workflows')
+  let names = []
+  try { names = fs.readdirSync(wfDir) } catch { return { known: true, total: 0, runs } }
+  const now = Date.now()
+  for (const name of names) {
+    const journal = path.join(wfDir, name, 'journal.jsonl')
+    let st
+    try { st = fs.statSync(journal) } catch { continue }
+    const ageMs = now - st.mtimeMs
+    if (ageMs > STALE_MS) continue
+    const started = new Set(), finished = new Set()
+    for (const line of read(journal).split('\n')) {
+      if (!line.trim()) continue
+      let o
+      try { o = JSON.parse(line) } catch { continue }
+      if (o.type === 'started' && o.key) started.add(o.key)
+      else if (o.type === 'result' && o.key) finished.add(o.key)
+    }
+    let n = 0
+    for (const k of started) if (!finished.has(k)) n++
+    if (n > 0) runs.push({ runId: name, n, ageMin: Math.max(0, Math.round(ageMs / 60000)) })
+  }
+  return { known: true, total: runs.reduce((s, r) => s + r.n, 0), runs }
+}
+const gateF = (width, what) => {
+  const live = inFlight()
+  if (!live.known || live.total + width <= SESSION_CAP) return
+  const list = live.runs.map(r => `    ${r.runId}: ${r.n} running (last journal line ${r.ageMin} min ago)`).join('\n')
+  deny(`RULE #16.2 — Workflow BLOCKED: ${live.total} agent(s) still running in this session + ${width} for ${what} = ${live.total + width}; the session cap is ${SESSION_CAP} running at once.
+
+Running now (started minus result in each run's journal.jsonl):
+${list}
+
+Nick's numbers (2026-11-01): ${CAP} agents per launch, ${SESSION_CAP} running at once per session, all
+workflows of the session together. Wait for the running workflow's completion notice — or
+for a "result" line per agent in its journal under
+  ${path.join(sessionDir, 'subagents', 'workflows')}
+— then launch again. A run whose journal has been silent for ${Math.round(STALE_MS / 60000)} min is a dead run and
+is not counted. Nick's one-shot note approves a launch's NUMBER (gate C); it does not raise this cap.`)
+}
+
 // ── resolve the script text ──────────────────────────────────────────────────
 let script = typeof input.script === 'string' ? input.script : ''
 let origin = 'inline script'
 if (!script && input.scriptPath) {
-  if (HOUSE.has(path.basename(input.scriptPath))) allow()          // house trigger, fixed at 3
+  if (HOUSE.has(path.basename(input.scriptPath))) {                 // house trigger, fixed at 3 (Lucifer: 1 -> 1 -> 3 at once)
+    gateF(3, path.basename(input.scriptPath))                        // the session cap still counts it (#16.2)
+    allow()
+  }
   script = read(input.scriptPath)
   origin = input.scriptPath
 }
 if (!script && input.name) {
-  if (HOUSE.has(input.name) || HOUSE.has(input.name + '.js')) allow()
+  if (HOUSE.has(input.name) || HOUSE.has(input.name + '.js')) { gateF(3, input.name); allow() }
   deny(`RULE #16 — Workflow BLOCKED: saved workflow "${input.name}" cannot be counted from here.
 Read its script, state the worst-case agent count to Nick, and relaunch with an inline
 script carrying a "// MAX_AGENTS: <n>" line.`)
@@ -168,7 +236,7 @@ Default <=3 per round, absolute max ${CAP}. More than ${CAP} => STOP and ask Nic
 saying how many and why. Count it before you launch; do not launch to find out.`)
 }
 const declared = Number(decl[1])
-
+gateF(declared, 'this launch')                                      // #16.2 — the session cap, before the shape gates
 // ── GATE B — the uncapped fan-out shape, the one that actually cost us ───────
 // Every parallel()/pipeline() must fan out over something COUNTABLE at author time:
 // a literal array, an Array.from({length: N}), or an explicit .slice(0, N).

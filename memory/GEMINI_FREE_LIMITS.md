@@ -101,6 +101,13 @@ The page's own caveat: the dates are the earliest a model might be retired.
    page** when the two disagree.
 8. **Newest family on the free tier is 3.8.** Gemini 4 (Argon) is listed with 0 free quota, so it is paid only.
 9. Daily buckets reset at **midnight Pacific** (15:00 Thai from 2026-11-02 to 2027-03-14, then 14:00).
+10. **Routed ids and access** (NP's read of the docs, changelog and `models.list`, 2026-11-01; promoted from NP's
+    `memory/TO_PROMOTE.md`): `gemini-3.7-flash` is served by `gemini-3.8-flash` and `gemini-3.5-flash` by
+    `gemini-3.6-flash`; `gemini-flash-latest` follows the newest Flash (3.8) and `gemini-flash-lite-latest` the newest
+    Flash-Lite (3.5). **The 2.5 models are kept only for keys that used them before 2026-09-18**: a new key gets 404 on
+    `gemini-2.5-pro` and `gemini-2.5-flash-lite` although the pricing page lists them as free. **Google no longer
+    publishes free-tier numbers**: the rate-limits page says to view them in AI Studio, which is why this file exists
+    and why "RPM 15 / 250K / 500" was only ever one model's row.
 
 ## History
 
@@ -111,3 +118,4 @@ The page's own caveat: the dates are the earliest a model might be retired.
 | 2026-10-31 | 500 a day for 3.5 Flash-Lite read in AI Studio by Nook | NP |
 | 2026-11-01 | Every model's row above | Nick's three screenshots of AI Studio, transcribed by the Director and checked by an independent read |
 | 2026-11-01 | TTVC's correction: 3.8 Flash-Lite TTS has no Thai, so a Thai project has 10 TTS a day after 2026-11-17, not 20; the shutdown table | TTVC (`docs/GEMINI_FREE_KEY.md` §4/§6, probes with its own key) · verified by the Director on the live docs page (row "Thai": ✔ / —) and the deprecations page |
+| 2026-11-01 | Third independent transcription of the same screenshots (NP, from Nook's copy): 0 differences on 64 rows. Item 10 (routed ids, 2.5 restriction, numbers unpublished) promoted from NP's `memory/TO_PROMOTE.md` | NP (`secretary/work/gemini-free-limits/2026-11-01_ai-studio-rate-limits.md`, `config/gemini_limits.json`) |
