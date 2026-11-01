@@ -9,7 +9,7 @@ Cosmetic / design / V2-scope items that survived round 6 + 7 + 8. All
 catalogued in detail at the bottom of this file under "Round 6
 deferred".
 
-## [1.069] — not released yet (needs its update drills, #28) — The next day keeps its own folder
+## [1.069] — 2026-11-01 — The next day keeps its own folder (released after its drills from v1.068 and v1.065 passed, #28)
 
 ### Fixed
 - **A burst of photos that runs past midnight no longer drags the whole next

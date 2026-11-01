@@ -1,7 +1,13 @@
 # Log — v1.069 (2026-11-01) — The next day keeps its own folder
 
 **Both field-version drills PASSED 15/15** (#28): from v1.068 (`drills/1.069.json`) and from v1.065
-(`drills/1.069.from-1.065.json`). `release-gate --check --tag v1.069` passed. Publishing follows. Candidate sha256 `6cb565fcfbcc3f741a650d53c3a806b825fbfb373203e0884eda21bd3e2258bf`,
+(`drills/1.069.from-1.065.json`). `release-gate --check --tag v1.069` passed.
+
+**RELEASED 2026-11-01 10:48** (tag `v1.069` at `785c494`) through `tools/publish_release.py --previous 1.068`.
+Every gate passed: the local gates, including README v1.069 and a fresh CODEMAP; the lock; the draft upload with
+its size verified; and, read from outside after publishing: `latest` is v1.069, a v1.068 user is offered it, and
+the re-downloaded asset hashes to the drilled file.
+ Candidate sha256 `6cb565fcfbcc3f741a650d53c3a806b825fbfb373203e0884eda21bd3e2258bf`,
 91,709,120 bytes. It is drilled from every version in the field: v1.068 (Nick's PC) and v1.065 (the ship PC).
 
 **Asked:** Nick, in this chat, answering "Fix L1 and L2 as v1.069 with its drills?": **"Fix as v1.069"**
