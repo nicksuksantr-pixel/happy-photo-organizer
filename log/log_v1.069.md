@@ -94,3 +94,14 @@ the re-downloaded asset hashes to the drilled file.
 `release-gate --check --tag v1.069 dist/HappyPhotoOrganizerSetup.exe` exit 0. It reads both receipts, and the v3.27
 docs check finds README naming v1.069 and a real CODEMAP. The publish script's local gates (`--dry-run`) passed
 before the drills.
+
+## In the field
+
+**Nick's PC, v1.068 → v1.069, read-only from his `logs\update.log`:**
+- 10:52:41 DOWNLOADED, then VERIFIED (sha256 `6cb565fc…`) and HANDOVER;
+- 10:52:48 STAGED, 1898 files;
+- 10:52:54 SWAPPED;
+- 10:52:56 STARTED 1.069.
+
+That is four minutes after publishing, with no click: the route drilled in `drills/1.069.json`. The ship PC (v1.065)
+is not read; its route is the one drilled in `drills/1.069.from-1.065.json`.
