@@ -1,0 +1,23 @@
+[2026-11-01 10:35:38] _fetch_latest_release: GET https://api.github.com/repos/nicksuksantr-pixel/hpo-update-drill/releases/latest
+[2026-11-01 10:35:39] download_installer start: url=https://github.com/nicksuksantr-pixel/hpo-update-drill/releases/download/v1.069/HappyPhotoOrganizerSetup.exe dest=C:\Users\drill\.happy-photo-organizer\updates\HappyPhotoOrganizerSetup-v1.069.exe expected_size=91709120
+[2026-11-01 10:35:39]   attempt 1/3: resume_from=0
+[2026-11-01 10:35:40]     HTTP 200 CL=91709120 CR='' expected_total=91709120
+[2026-11-01 10:36:17]   attempt 1: SUCCESS — 91,709,120 bytes
+[2026-11-01 10:36:54] _fetch_latest_release: GET http://127.0.0.1:47665/latest
+[2026-11-01 10:37:41] _fetch_latest_release: GET http://127.0.0.1:47665/latest
+[2026-11-01 10:37:41] _fetch_latest_release: HTTP 500
+[2026-11-01 10:37:46] _fetch_latest_release: GET http://127.0.0.1:47665/latest
+[2026-11-01 10:37:47] _fetch_latest_release: HTTP 403
+[2026-11-01 10:37:53] _fetch_latest_release: GET http://127.0.0.1:47665/latest
+[2026-11-01 10:37:53] _fetch_latest_release: unreachable: Remote end closed connection without response
+[2026-11-01 10:37:59] _fetch_latest_release: GET http://127.0.0.1:47665/latest
+[2026-11-01 10:37:59] download_installer start: url=http://127.0.0.1:47665/asset/HappyPhotoOrganizerSetup.exe dest=C:\Users\drill\.happy-photo-organizer\updates\HappyPhotoOrganizerSetup-v1.070.exe expected_size=91709120
+[2026-11-01 10:37:59]   attempt 1/3: resume_from=0
+[2026-11-01 10:37:59]     HTTP 200 CL=91709120 CR='' expected_total=91709120
+[2026-11-01 10:38:00]   attempt 1: SUCCESS — 91,709,120 bytes
+[2026-11-01 10:38:17] _fetch_latest_release: GET http://127.0.0.1:47665/latest
+[2026-11-01 10:43:17] _fetch_latest_release: GET http://127.0.0.1:47665/latest
+[2026-11-01 10:43:17] download_installer start: url=http://127.0.0.1:47665/asset/HappyPhotoOrganizerSetup.exe dest=C:\Users\drill\.happy-photo-organizer\updates\HappyPhotoOrganizerSetup-v1.070.exe expected_size=91709120
+[2026-11-01 10:43:17]   attempt 1/3: resume_from=0
+[2026-11-01 10:43:17]     HTTP 200 CL=91709120 CR='' expected_total=91709120
+[2026-11-01 10:43:18]   attempt 1: SUCCESS — 91,709,120 bytes

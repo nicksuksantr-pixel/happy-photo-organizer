@@ -1,0 +1,11 @@
+{"port":47665,"t":"2026-11-01T10:35:31.7370735+07:00","event":"listening"}
+{"mode":"serve","path":"/latest","method":"GET","t":"2026-11-01T10:36:54.5239774+07:00","tag":"v1.069","status":200}
+{"path":"/latest","t":"2026-11-01T10:37:41.3435101+07:00","status":500,"mode":"500","method":"GET"}
+{"path":"/latest","t":"2026-11-01T10:37:47.0360894+07:00","status":403,"mode":"403","method":"GET"}
+{"path":"/latest","t":"2026-11-01T10:37:53.8350256+07:00","status":"dropped","mode":"drop","method":"GET"}
+{"mode":"serve","path":"/latest","method":"GET","t":"2026-11-01T10:37:59.7359329+07:00","tag":"v1.070","status":200}
+{"path":"/asset/HappyPhotoOrganizerSetup.exe","method":"GET","t":"2026-11-01T10:38:00.2596325+07:00","range":null,"asset":"HappyPhotoOrganizerSetup.exe","bytes":91709120,"status":200,"fault":"flip"}
+{"mode":"serve","path":"/latest","method":"GET","t":"2026-11-01T10:38:17.5313795+07:00","tag":"v1.069","status":200}
+{"mode":"serve","path":"/latest","method":"GET","t":"2026-11-01T10:43:17.5189736+07:00","tag":"v1.070","status":200}
+{"path":"/asset/HappyPhotoOrganizerSetup.exe","method":"GET","t":"2026-11-01T10:43:18.0461210+07:00","range":null,"asset":"HappyPhotoOrganizerSetup.exe","bytes":91709120,"status":200,"fault":"none"}
+{"event":"stopped","t":"2026-11-01T10:45:37.6511891+07:00"}
