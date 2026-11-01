@@ -65,3 +65,14 @@ What it showed:
 Every log is named by the receipt name, and the receipt's `drill_log` is `drills/logs/1.068.from-1.065.log`. No key shape appears in any receipt or log.
 
 **Stale wording, not a defect of the run:** two `not_covered` lines in `drill.json` have named v1.066 since the bridge (ad00773), where they mean the version being drilled to: "v1.066's own updater against real GitHub: every check on v1.066 runs through the loopback feed" and "the 'Install now' button: in v1.066 ...". `drill.from-1.065.json` copied them. The receipts for v1.067 and v1.068 carry them as written and were not edited (#28). After the release, both manifests were reworded to "the updated version's own updater" and "since v1.066", so the next drills say it right.
+
+## In the field
+
+**Nick's PC, v1.067 → v1.068, read-only from his `logs\update.log`:**
+- 08:50:48 SWAPPED, 1898 files;
+- 08:50:50 STARTED 1.068;
+- 08:50:55 "nothing newer";
+- 08:51:02 CLEANED (the rollback copy was removed).
+
+It took four minutes after publishing and needed no click. This is the route drilled in `drills/1.068.json`. The ship
+PC (v1.065) is not read yet; its route is the one drilled in `drills/1.068.from-1.065.json`.
