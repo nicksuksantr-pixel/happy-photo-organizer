@@ -1,0 +1,78 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20261101083133
+Username: NICKSUKSANTR\drill
+RunAs User: NICKSUKSANTR\drill
+Configuration Name: 
+Machine: NICKSUKSANTR (Microsoft Windows NT 10.0.26300.0)
+Host Application: powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\Public\HPO-drill\run.ps1
+Process ID: 18608
+PSVersion: 5.1.26100.9711
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.9711
+BuildVersion: 10.0.26100.9711
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+2026-11-01T08:31:34.0396901+07:00 to stop this run from any account: create the file C:\Users\Public\HPO-drill\out\STOP (every wait polls it; the receipt is then a FAIL with that reason)
+2026-11-01T08:31:34.2313248+07:00 network: the Gemini API host resolves and accepts a connection (probed before the run)
+2026-11-01T08:31:34.2587888+07:00 drill of Happy Photo Organizer 1.065 -> 1.068 as NICKSUKSANTR\drill on NICKSUKSANTR
+2026-11-01T08:31:34.3034803+07:00 drill lock taken: C:\Users\Public\drill-busy.txt (Happy Photo Organizer | pid 18608 | drill | started 2026-11-01T08:31:34.2870225+07:00)
+2026-11-01T08:31:34.8288163+07:00 FROM C:\Users\Public\HPO-drill\from\HappyPhotoOrganizerSetup.exe sha256=46902c7913499f5dd303825593d2e10781abe237e1d5b6101c5f1fe861bccb88
+2026-11-01T08:31:34.8315784+07:00 TO   C:\Users\Public\HPO-drill\to\HappyPhotoOrganizerSetup.exe sha256=4345dc38d0072c5128d257991ebeed23bfc30f2bc3280cb7d7130eaf3944ed28
+2026-11-01T08:31:34.8508005+07:00 CHECK start_from_released_build PASS :: FROM = C:\Users\Public\HPO-drill\from\HappyPhotoOrganizerSetup.exe, sha256 46902c7913499f5dd303825593d2e10781abe237e1d5b6101c5f1fe861bccb88 = the released v1.065 file named in drills/drill.json
+2026-11-01T08:31:34.8991254+07:00 MSIX sanity marker: C:\Users\drill\AppData\Local\drill-marker-455ab71c.txt (confirm it from a second, unpackaged shell)
+2026-11-01T08:31:34.9059586+07:00 installing FROM: C:\Users\Public\HPO-drill\from\HappyPhotoOrganizerSetup.exe --silent
+2026-11-01T08:31:47.6132230+07:00 FROM setup exit 0; app launched by it: True
+2026-11-01T08:31:48.8953759+07:00 fixtures: auth.json (placeholder key + pairing token + destination), jobshot_filed.json (1 receipt), 1 user job in the catalog, a taskbar-pin .lnk
+2026-11-01T08:31:54.2104970+07:00 FROM installed: 1898 files under C:\Users\drill\AppData\Local\HappyPhotoOrganizer
+2026-11-01T08:31:54.2240452+07:00   data jobshot_filed.json sha256=a098d6e07ca395092b248b61aa86dead8af36d71b0d675218c88e564ee332264
+2026-11-01T08:31:54.2279798+07:00   shortcut C:\Users\drill\Desktop\Happy Photo Organizer.lnk -> C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe
+2026-11-01T08:31:54.2304938+07:00   shortcut C:\Users\drill\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Happy Photo Organizer.lnk -> C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe
+2026-11-01T08:31:54.2342177+07:00   shortcut C:\Users\drill\AppData\Roaming\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\Happy Photo Organizer.lnk -> C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe
+2026-11-01T08:31:54.2392166+07:00   fixture auth.api_key = sha256:34a706916020
+2026-11-01T08:31:54.2432516+07:00   fixture auth.model = gemini-3.5-flash-lite
+2026-11-01T08:31:54.2455730+07:00   fixture auth.auto_check_updates = True
+2026-11-01T08:31:54.2498148+07:00   fixture auth.jobshot_token = sha256:bdf0fe5c9a09
+2026-11-01T08:31:54.2524572+07:00   fixture auth.last_dest_root = C:\Users\drill\Documents\Drill archive
+2026-11-01T08:31:54.2557863+07:00   fixture catalog.user_job = 1
+2026-11-01T08:31:55.0608472+07:00 route: FROM's own updater, pointed by HAPPY_UPDATE_REPO at the public test repo nicksuksantr-pixel/hpo-update-drill
+2026-11-01T08:31:55.0905400+07:00 started FROM; the harness starts nothing else until the checks
+2026-11-01T08:32:55.2731271+07:00   waiting for v1.068 to start: 60 s; update.log +0 line(s), last: -; FROM says: [2026-11-01 08:32:03]     HTTP 200 CL=91707491 CR='' expected_total=91707491
+2026-11-01T08:33:55.3625455+07:00   waiting for v1.068 to start: 120 s; update.log +0 line(s), last: -; FROM says: [2026-11-01 08:33:51]   attempt 1: SUCCESS — 91,707,491 bytes
+2026-11-01T08:34:27.3160694+07:00   update.log: 2026-11-01T08:34:15+07:00 UPDATE HANDOVER 1.068 the app that handed over (pid 26696) had not exited after 20 s; ended it (bug D1: up to v1.066 its tray thread outlives sys.exit)
+2026-11-01T08:34:27.3195748+07:00   update.log: 2026-11-01T08:34:20+07:00 UPDATE STAGED 1.068 1898 files, 129623459 bytes in C:\Users\drill\AppData\Local\HappyPhotoOrganizer\.update\new
+2026-11-01T08:34:27.3231783+07:00   update.log: 2026-11-01T08:34:24+07:00 UPDATE SWAPPED 1.068 1898 files in C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer; pruned 0
+2026-11-01T08:34:27.3272344+07:00   update.log: 2026-11-01T08:34:26+07:00 STARTED 1.068 C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe
+2026-11-01T08:34:27.3846001+07:00   route evidence: [2026-11-01 08:32:01] _fetch_latest_release: GET https://api.github.com/repos/nicksuksantr-pixel/hpo-update-drill/releases/latest
+2026-11-01T08:34:27.3881044+07:00   route evidence: [2026-11-01 08:32:02] download_installer start: url=https://github.com/nicksuksantr-pixel/hpo-update-drill/releases/download/v1.068/HappyPhotoOrganizerSetup.exe dest=C:\Users\drill\.happy-photo-organizer\updates\HappyPhotoOrganizerSetup-v1.068.exe expected_size=91707491
+2026-11-01T08:34:27.3923298+07:00   route evidence: [2026-11-01 08:33:51]   attempt 1: SUCCESS — 91,707,491 bytes
+2026-11-01T08:34:27.4173824+07:00 CHECK real_update_path PASS :: the harness started only the FROM v1.065 exe; its own updater fetched: [2026-11-01 08:32:01] _fetch_latest_release: GET https://api.github.com/repos/nicksuksantr-pixel/hpo-update-drill/releases/latest | [2026-11-01 08:32:02] download_installer start: url=https://github.com/nicksuksantr-pixel/hpo-update-drill/releases/download/v1.068/HappyPhotoOrganizerSetup.exe dest=C:\Users\drill\.happy-photo-organizer\updates\HappyPhotoOrganizerSetup-v1.068.exe expected_size=91707491 | [2026-11-01 08:33:51]   attempt 1: SUCCESS — 91,707,491 bytes; then the TO installer: 2026-11-01T08:34:24+07:00 UPDATE SWAPPED 1.068 1898 files in C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer; pruned 0
+2026-11-01T08:34:27.4233938+07:00 CHECK new_version_running PASS :: 2026-11-01T08:34:26+07:00 STARTED 1.068 C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe
+2026-11-01T08:34:39.9384989+07:00 CHECK one_process PASS :: 1 process(es): 31064 C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe
+2026-11-01T08:34:39.9577151+07:00 CHECK relaunched_itself PASS :: the harness started nothing after FROM; '2026-11-01T08:34:26+07:00 STARTED 1.068 C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe' and pid 31064 runs C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe with its window (the installer's launch_app() after the swap)
+2026-11-01T08:34:40.0500772+07:00 CHECK one_install PASS :: install folders: C:\Users\drill\AppData\Local\HappyPhotoOrganizer; exe copies: C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe; .update left after cleanup: False (CLEANED line: 2026-11-01T08:34:38+07:00 UPDATE CLEANED 1.068 removed the rollback copy (1898 files) in C:\Users\drill\AppData\Local\HappyPhotoOrganizer\.update); Uninstall entry HKCU=True HKLM=False
+2026-11-01T08:34:50.3910820+07:00 fresh install of the candidate into C:\Users\Public\HPO-drill\out\fresh-1.068 exited 0
+2026-11-01T08:35:01.2809996+07:00 CHECK tree_matches_fresh_install PASS :: updated 1900 files vs a fresh install of v1.068 1900 files, allowlist [uninstall.bat, HappyPhotoOrganizer/_internal/data/job_catalog.json]: identical
+2026-11-01T08:35:01.3331839+07:00 CHECK shortcuts_open_new PASS :: C:\Users\drill\Desktop\Happy Photo Organizer.lnk -> C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe (the updated exe); C:\Users\drill\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Happy Photo Organizer.lnk -> C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe (the updated exe); C:\Users\drill\AppData\Roaming\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\Happy Photo Organizer.lnk -> C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe (the updated exe); that exe sha256 70955f3ffa3c2e83586b6d768accf5dcf5f4c2409a7711253c9c9669b7c4cfa6 = fresh v1.068 exe: True; it ran as: 2026-11-01T08:34:26+07:00 STARTED 1.068 C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe
+2026-11-01T08:35:01.3664022+07:00 CHECK user_data_intact PASS :: jobshot_filed.json byte-identical; auth.api_key before=sha256:34a706916020 after=sha256:34a706916020; auth.model before=gemini-3.5-flash-lite after=gemini-3.5-flash-lite; auth.auto_check_updates before=True after=True; auth.jobshot_token before=sha256:bdf0fe5c9a09 after=sha256:bdf0fe5c9a09; auth.last_dest_root before=C:\Users\drill\Documents\Drill archive after=C:\Users\drill\Documents\Drill archive; catalog.user_job before=1 after=1
+2026-11-01T08:35:01.4566577+07:00 CHECK no_update_loop PASS :: fed v1.068 itself: 2026-11-01T08:34:28+07:00 UPDATE CHECK 1.068 nothing newer: latest is v1.068 (feed http://127.0.0.1:47665/latest); FOUND/DOWNLOADED/HANDOVER since: 0; asset requests at the feed since v1.068 started: 0
+2026-11-01T08:35:05.1180801+07:00 CHECK embedded_key_works PASS :: exit 0; status 200; model gemini-3.5-flash-lite; key fp sha256:e656add8f927
+2026-11-01T08:35:19.5174108+07:00 CHECK unknown_is_not_no PASS :: feed 500 -> 2026-11-01T08:35:09+07:00 UPDATE CHECK 1.068 could not check: GitHub answered HTTP 500 (feed http://127.0.0.1:47665/latest); feed 403 -> 2026-11-01T08:35:14+07:00 UPDATE CHECK 1.068 could not check: GitHub answered HTTP 403 (feed http://127.0.0.1:47665/latest); feed drop -> 2026-11-01T08:35:19+07:00 UPDATE CHECK 1.068 could not check: could not reach GitHub: Remote end closed connection without response (feed http://127.0.0.1:47665/latest)
+2026-11-01T08:35:35.6107860+07:00 CHECK bad_download_refused PASS :: fed v1.069 with one byte flipped: 2026-11-01T08:35:24+07:00 UPDATE REFUSED 1.069 the download's sha256 a7669e6b6484332a9182ed44e32be29d9c56d3c09a3a054f2cfb791df6bdf6c9 is not the release's 4345dc38d0072c5128d257991ebeed23bfc30f2bc3280cb7d7130eaf3944ed28; HANDOVER lines: 0; v1.068 still running: True
+2026-11-01T08:35:41.7963292+07:00 the app is busy (Settings dialog open - the drill marker drill-open-settings in the user data dir makes the app open Settings once at its next start (v1.067+, drill mode only; up to v1.066 the step held the API key back; from v1.067 the built-in key is the only key and no saved key is read, so Settings never opens by itself)); now feeding v1.069
+2026-11-01T08:36:42.0454339+07:00   waiting for the app's next check to find v1.069: 60 s
+2026-11-01T08:37:42.5447063+07:00   waiting for the app's next check to find v1.069: 121 s
+2026-11-01T08:38:42.8387705+07:00   waiting for the app's next check to find v1.069: 181 s
+2026-11-01T08:39:43.1040722+07:00   waiting for the app's next check to find v1.069: 241 s
+2026-11-01T08:40:42.4630366+07:00 CHECK sees_next_release PASS :: fed a fake v1.069: 2026-11-01T08:40:41+07:00 UPDATE FOUND 1.069 HappyPhotoOrganizerSetup.exe 91707491 bytes sha256=4345dc38d0072c5128d257991ebeed23bfc30f2bc3280cb7d7130eaf3944ed28 | 2026-11-01T08:40:42+07:00 UPDATE VERIFIED 1.069 sha256=4345dc38d0072c5128d257991ebeed23bfc30f2bc3280cb7d7130eaf3944ed28
+2026-11-01T08:42:12.5292427+07:00 closed 1 'Settings...' window(s): the app is idle now
+2026-11-01T08:43:12.3018265+07:00 CHECK waits_while_busy PASS :: busy (Settings dialog open - the drill marker drill-open-settings in the user data dir makes the app open Settings once at its next start (v1.067+, drill mode only; up to v1.066 the step held the API key back; from v1.067 the built-in key is the only key and no saved key is read, so Settings never opens by itself)) for 90 s after VERIFIED: HANDOVER lines 0; once idle: 2026-11-01T08:42:42+07:00 UPDATE HANDOVER 1.069 C:\Users\drill\.happy-photo-organizer\updates\HappyPhotoOrganizerSetup-v1.069.exe --silent --upgrade | 2026-11-01T08:43:10+07:00 STARTED 1.068 C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe
+2026-11-01T08:43:13.3630601+07:00 drill lock released: C:\Users\Public\drill-busy.txt
+2026-11-01T08:43:13.4289966+07:00 RESULT: PASS - every check passed; receipt C:\Users\Public\HPO-drill\out\1.068.from-1.065.json
+**********************
+Windows PowerShell transcript end
+End time: 20261101084313
+**********************
