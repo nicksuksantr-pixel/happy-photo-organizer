@@ -219,6 +219,7 @@ def get_payload_path() -> Path | None:
 
 
 def get_asset(name: str) -> Path | None:
+    """Return the path of a bundled asset by name, or None if it does not exist."""
     if hasattr(sys, "_MEIPASS"):
         p = Path(sys._MEIPASS) / "assets" / name
     else:
@@ -646,6 +647,7 @@ exit
 
 
 class SetupWindow(ctk.CTk):
+    """Installer window that walks through setup options, install progress and the done screen."""
     PHASE_SETUP = "setup"
     PHASE_INSTALLING = "installing"
     PHASE_DONE = "done"
@@ -960,6 +962,7 @@ def desktop_shortcut_path() -> Path:
 
 
 def start_menu_shortcut_path() -> Path:
+    """The Start Menu shortcut path in the current user's Programs folder (under APPDATA)."""
     return (Path(os.environ.get("APPDATA", "")) / "Microsoft" / "Windows"
             / "Start Menu" / "Programs" / f"{APP_NAME}.lnk")
 
@@ -1082,6 +1085,7 @@ def _run_fresh_into(target: Path) -> int:
 
 
 def main() -> int:
+    """Entry point: --fresh-into for the drill, --silent/--upgrade headless, else the setup window."""
     args = sys.argv[1:]
     if "--fresh-into" in args:
         i = args.index("--fresh-into")

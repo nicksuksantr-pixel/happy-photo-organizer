@@ -21,6 +21,7 @@ from ui.theme import (
 
 
 class StepCard(ctk.CTkFrame):
+    """Numbered workflow step card with a status circle, title, status label and a `body` frame."""
     STATUS_TEXT = {
         "pending": "Pending",
         "ready": "Ready",

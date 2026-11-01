@@ -112,6 +112,7 @@ def _native_dialog_open(thread_id: int | None) -> bool:
 
 
 class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
+    """Main app window: drop photos, group and resize them, name each job with AI, then file them."""
     def __init__(self):
         super().__init__()
         self.TkdndVersion = TkinterDnD._require(self)
@@ -2298,6 +2299,7 @@ class MainWindow(ctk.CTk, TkinterDnD.DnDWrapper):
 
 
 def main() -> int:
+    """Entry point: enforce a single instance, sweep stale leftovers, then run the main window."""
     # KEY_EMBED §7: the drill's one real call with the built-in key, from the
     # updated build. Before the single-instance gate: it opens no window and
     # may run beside the app. Drill mode only.

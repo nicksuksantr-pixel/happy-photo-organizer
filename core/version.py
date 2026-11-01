@@ -13,6 +13,7 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 def read_version() -> str:
+    """The first non-empty VERSION file (bundle first, then project root), else "0.0.0"."""
     candidates: list[Path] = []
     meipass = getattr(sys, "_MEIPASS", None)
     if meipass:

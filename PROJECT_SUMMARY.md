@@ -1,5 +1,7 @@
 # 🎨 Happy Photo Organizer — Project Summary
 
+> 📦 **History file, frozen on 2026-11-01.** The project's front page is now [README.md](README.md), and where to change code is [docs/CODEMAP.md](docs/CODEMAP.md) (rule #15). Its status line was last current at v1.057 and its measurements at v1.041. It is kept for the audit history and the lessons below, not updated.
+
 **Status:** v1.057 (2026-09-26 — **RELEASED** — **the destination folder is remembered across restarts and updates**, so the phone stops being told there is nowhere to send · a finished batch can be cleared without restarting ("Start a new batch") · **a job sent from the phone over Wi-Fi** files itself with its report draft and a per-job map from the phone's photo names to the archive's — proven end to end on a real job at 14:18:55 today · tests 134/134)
 **Author:** Nick (with Codey — Claude Code)
 **Family:** Happy AI Family (sibling: HAPPY AI Agent)

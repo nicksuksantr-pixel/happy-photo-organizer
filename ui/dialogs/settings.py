@@ -24,6 +24,7 @@ from ui.theme import (
 
 
 class SettingsDialog(ctk.CTkToplevel):
+    """Modal dialog for the AI model, UI scale and update-check setting, saved to the app config."""
     def __init__(self, master, on_save=None):
         # fg_color is REQUIRED — without it CTkToplevel uses the theme's
         # light-mode background even when set_appearance_mode("dark") is active.

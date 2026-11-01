@@ -1,5 +1,7 @@
 # Release Process — Happy Photo Organizer
 
+> **2026-11-01: the per-release steps below are old notes.** Today's release path is README.md "Release, in this order": build, the update drills (`drills/README.md`, #28), then `tools/publish_release.py`, whose gates refuse anything else. A direct `gh release create` is refused by the release lock. The one-time setup and troubleshooting notes still apply.
+
 ## One-time setup (ครั้งเดียว)
 
 ### 1. สร้าง GitHub repo

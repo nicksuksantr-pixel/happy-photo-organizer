@@ -38,7 +38,9 @@ import argparse
 import contextlib
 import functools
 import hashlib
+import importlib.util
 import json
+import re
 import subprocess
 import tempfile
 import sys
@@ -54,6 +56,8 @@ LATEST_API = f"https://api.github.com/repos/{REPO}/releases/latest"
 ASSET = "HappyPhotoOrganizerSetup.exe"
 INSTALLER = ROOT / "dist" / ASSET
 BUNDLED_VERSION = ROOT / "dist" / "HappyPhotoOrganizer" / "_internal" / "VERSION"
+README = ROOT / "README.md"
+CODEMAP_TOOL = ROOT / "tools" / "gen_codemap.py"
 
 
 class Refused(Exception):
@@ -121,6 +125,7 @@ def run(args: list[str], *, timeout: int = 900) -> str:
 
 
 def gate_tree_is_clean(*, runner=run) -> None:
+    """Nothing uncommitted, and local main is neither ahead of nor behind origin."""
     if runner(["git", "status", "--porcelain"]).strip():
         raise Refused("the working tree has uncommitted changes — commit first, "
                       "or the tag will not describe what was built")
@@ -146,6 +151,41 @@ def gate_version_agrees(version: str, *, bundled: Path = BUNDLED_VERSION) -> Non
     if inside != version:
         raise Refused(f"VERSION says {version!r} but the built bundle says "
                       f"{inside!r} — rebuild, do not publish the old one")
+
+
+def gate_readme_names_this_version(version: str, *, readme: Path = README) -> None:
+    """README.md's Version line must name the version being released (rule #15).
+
+    PROJECT_SUMMARY.md said "v1.057" while v1.068 shipped: a doc whose version
+    nobody is made to move stops moving. The house release gate will refuse a
+    README without the tag's version too; this one says which line to fix.
+    """
+    try:
+        text = readme.read_text(encoding="utf-8-sig")
+    except OSError as e:
+        raise Refused(f"cannot read README.md ({e}) — it is the project's front "
+                      f"page (rule #15), write it before releasing") from e
+    found = re.findall(r"\*\*Version: v(\d+\.\d+)\*\*", text)
+    if len(found) != 1:
+        raise Refused(f"README.md needs exactly one '**Version: vX.XXX**' line, "
+                      f"found {len(found)} — set it to v{version}")
+    if found[0] != version:
+        raise Refused(f"README.md says v{found[0]} but VERSION is {version} — "
+                      f"set its Version line to v{version}, then commit")
+
+
+def gate_codemap_is_fresh(*, root: Path = ROOT) -> None:
+    """docs/CODEMAP.md layer B must match the code as committed (rule #15)."""
+    spec = importlib.util.spec_from_file_location("gen_codemap", CODEMAP_TOOL)
+    gen = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gen)
+    try:
+        fresh = gen.is_fresh(root)
+    except gen.CodemapError as e:
+        raise Refused(f"{e} — fix it, then run `{gen.COMMAND}`") from e
+    if not fresh:
+        raise Refused(f"docs/CODEMAP.md is stale (layer B no longer matches the "
+                      f"code) — run `{gen.COMMAND}`, then commit")
 
 
 def gate_bundle_is_not_stale(*, installer: Path = INSTALLER,
@@ -175,6 +215,7 @@ def gate_bundle_is_not_stale(*, installer: Path = INSTALLER,
 
 
 def sha256_file(path: Path) -> str:
+    """The file's SHA-256 as lowercase hex, read in 1 MiB chunks."""
     h = hashlib.sha256()
     with open(path, "rb") as f:
         for chunk in iter(lambda: f.read(1 << 20), b""):
@@ -390,8 +431,11 @@ def _fetch_latest() -> dict:
 
 
 def local_gates(version: str) -> int:
+    """Every gate that needs no network beyond git; returns the installer's size."""
     gate_tree_is_clean()
     gate_version_agrees(version)
+    gate_readme_names_this_version(version)
+    gate_codemap_is_fresh()
     gate_bundle_is_not_stale()
     gate_asset_is_named_correctly()
     size = INSTALLER.stat().st_size
@@ -400,6 +444,7 @@ def local_gates(version: str) -> int:
 
 
 def publish(version: str, previous: str, notes: str) -> None:
+    """Gate, tag, upload as a draft, verify, publish, then read it all back from outside."""
     size = local_gates(version)
     tag = f"v{version}"
     gate_a_drill_saw_these_bytes(tag)
@@ -437,6 +482,7 @@ def publish(version: str, previous: str, notes: str) -> None:
 
 
 def main() -> int:
+    """Publish the version in VERSION, or --check / --dry-run; 1 on a refusal."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", metavar="VERSION", help="verify a published version")
     ap.add_argument("--dry-run", action="store_true", help="local gates only")

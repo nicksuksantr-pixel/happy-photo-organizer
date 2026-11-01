@@ -213,6 +213,7 @@ _default_log: UsageLog | None = None
 
 
 def get_usage_log() -> UsageLog:
+    """The app-wide UsageLog, created on first use."""
     global _default_log
     if _default_log is None:
         _default_log = UsageLog()

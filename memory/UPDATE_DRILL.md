@@ -74,6 +74,9 @@ The drill runs:
 
 It writes `drills/<version>.json`, the receipt, with the SHA-256 of every published file, next to its own log. The lock
 refuses `gh release create/upload/edit` and `adb install` for any file with no passing receipt **for those exact bytes**.
+Since 2026-11-01 it also refuses when the navigation docs are missing for the version being released (command_pattern #15.7):
+no `README.md` at the repo root, a README that does not name that version, or no `docs/CODEMAP.md` without a `CODEMAP: lite`
+line in README. The note waives those like a drill; the regen-before-build check stays in the repo's own publish script.
 - A receipt for another build does not count.
 - "I tested it from source" does not count.
 - Only Nick can waive it, once per tag (§8).

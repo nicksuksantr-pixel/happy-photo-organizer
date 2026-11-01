@@ -94,6 +94,7 @@ def _debug_log(msg: str) -> None:
 
 @dataclass
 class UpdateInfo:
+    """A newer release that may be installed: its version, notes, installer URL, size and SHA-256."""
     version: str              # "1.025" (stripped 'v' prefix)
     tag: str                  # "v1.025"
     name: str                 # release title
@@ -156,6 +157,7 @@ def is_newer(current: str, latest: str) -> bool:
 
 
 def drill_mode() -> bool:
+    """True when this run is an update drill, i.e. HAPPY_UPDATE_DRILL is set to "1"."""
     return os.environ.get(DRILL_ENV, "").strip() == "1"
 
 
@@ -561,6 +563,7 @@ def launch_installer_and_exit(installer_path: Path, silent: bool = True,
 
 
 def cache_dir() -> Path:
+    """The folder downloaded installers go to, ~/.happy-photo-organizer/updates, created if missing."""
     p = Path.home() / ".happy-photo-organizer" / "updates"
     p.mkdir(parents=True, exist_ok=True)
     return p

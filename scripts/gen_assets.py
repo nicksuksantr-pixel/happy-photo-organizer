@@ -110,6 +110,7 @@ def _add_sparkle(img: Image.Image) -> None:
 
 
 def make_logo(size: int = 256) -> Image.Image:
+    """Draw the app logo (gradient circle, glow, camera glyph, sparkle) as a square RGBA image."""
     img = _gradient_circle(size)
     # subtle inner glow — slight blur of bright circle
     glow = Image.new("RGBA", (size, size), (0, 0, 0, 0))
@@ -127,6 +128,7 @@ def make_logo(size: int = 256) -> Image.Image:
 
 
 def main() -> int:
+    """Write the large and small logo PNGs and the multi-size happy_icon.ico into assets/."""
     print("Generating logo + icon...")
     # Big logo PNG
     logo = make_logo(256)

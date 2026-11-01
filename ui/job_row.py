@@ -45,6 +45,7 @@ def _make_tile(size: int, bg: str, text: str = "", fg: str = "#64748B") -> Image
 
 
 class JobRow(ctk.CTkFrame):
+    """One job folder's row in the Review & Edit pane: thumbnail, date, name box and AI confidence."""
     THUMB_SIZE = 64
     THUMB_POLL_MS = 100   # Tk-thread poll for the decoded thumbnail
 

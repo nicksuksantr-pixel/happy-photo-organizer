@@ -35,6 +35,7 @@ from core.image_io import collect_images
 
 
 def section(title: str) -> None:
+    """Print a banner heading for the next smoke-test step."""
     print(f"\n{'=' * 60}\n{title}\n{'=' * 60}")
 
 
@@ -67,6 +68,7 @@ def _resolve_sample_photos() -> tuple[list[Path], bool]:
 
 
 def test_auth() -> bool:
+    """Check a key is set, a client builds and the live connection works; list some vision models."""
     section("1. AUTH")
     key = auth.get_api_key()
     if not key:
@@ -94,6 +96,7 @@ def test_auth() -> bool:
 
 
 def test_catalog() -> bool:
+    """Load the job catalog and check that find() round-trips on its first name."""
     section("2. CATALOG")
     cat = catalog.JobCatalog()
     names = cat.names()
@@ -110,6 +113,7 @@ def test_catalog() -> bool:
 
 
 def test_exif(samples: list[Path]) -> bool:
+    """Print the capture date and its source for up to three sample images."""
     section("3. EXIF READER")
     for img in samples[:3]:
         dt, src = exif_reader.get_capture_date(img)
@@ -118,6 +122,7 @@ def test_exif(samples: list[Path]) -> bool:
 
 
 def test_resizer(samples: list[Path]) -> bool:
+    """Resize the first sample to a temp file, report the size change, then delete the copy."""
     section("4. RESIZER")
     src = samples[0]
     dst = Path(tempfile.gettempdir()) / "_happy_smoke_resized.jpg"
@@ -135,6 +140,7 @@ def test_resizer(samples: list[Path]) -> bool:
 
 
 def test_grouper(samples: list[Path]) -> bool:
+    """Group the samples into shooting sessions and check that at least one comes out."""
     section("5. GROUPER")
     groups = grouper.group_by_session(samples)
     print(f"+ {len(samples)} image(s) → {len(groups)} session(s)")
@@ -144,6 +150,7 @@ def test_grouper(samples: list[Path]) -> bool:
 
 
 def test_analyzer(samples: list[Path]) -> bool:
+    """Send the first sample and up to 30 job names to live Gemini Vision and check the reply parses."""
     section("6. ANALYZER (live Gemini Vision)")
     if os.environ.get("HAPPY_SKIP_AI", "").strip() in ("1", "true", "yes"):
         print("  (skipped via HAPPY_SKIP_AI)")
@@ -173,6 +180,7 @@ def test_analyzer(samples: list[Path]) -> bool:
 
 
 def main() -> int:
+    """Run every smoke-test step, print a pass/fail summary, and return 1 if any step failed."""
     samples, synthetic = _resolve_sample_photos()
     if synthetic:
         print("  NOTE: using synthetic/sample image — AI match result is not meaningful, "

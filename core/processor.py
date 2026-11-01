@@ -44,6 +44,7 @@ _INVALID_FN_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
 
 def sanitize_filename(s: str, max_len: int = 80) -> str:
+    """Replace characters Windows forbids with spaces, collapse whitespace and cut to max_len."""
     s = _INVALID_FN_CHARS.sub(" ", s).strip()
     s = re.sub(r"\s+", " ", s)
     return s[:max_len].strip()
@@ -198,6 +199,7 @@ class JobAssignment:
 
 @dataclass
 class Plan:
+    """One run's work: the job folder assignments under dest_root, with counts and any AI failure."""
     assignments: list[JobAssignment] = field(default_factory=list)
     dest_root: Path = Path(".")
     total_images: int = 0
@@ -217,6 +219,7 @@ class Plan:
 
 @dataclass
 class CommitResult:
+    """What phase4_rename_folders did: folders renamed, rows skipped or already done, and errors."""
     renamed: int = 0
     skipped: int = 0
     errors: list[str] = field(default_factory=list)
@@ -825,6 +828,7 @@ _AI_DOWN_LINES = {
 
 
 def ai_down_line(cause: str, *, now: datetime | None = None, local_tz=None) -> str:
+    """The one line telling the user why the AI cannot run, by cause; "day" says when it is back."""
     if cause == "day":
         back = quota_back_at(now, local_tz)
         today = (now or datetime.now(timezone.utc)).astimezone(back.tzinfo).date()

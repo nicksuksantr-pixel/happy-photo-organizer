@@ -26,6 +26,7 @@ PAYLOAD_ZIP = ROOT / "dist" / "HappyPhotoOrganizer.zip"
 
 
 def zip_payload() -> None:
+    """Zip the built app folder in dist/ into the payload zip, or exit if the app is not built."""
     if not APP_DIST.exists():
         print(f"[!] Main app not built at {APP_DIST}")
         print("    Run: pyinstaller HappyPhotoOrganizer.spec --noconfirm")
@@ -45,6 +46,7 @@ def zip_payload() -> None:
 
 
 def build_installer() -> None:
+    """Run PyInstaller on the installer spec to build dist/HappyPhotoOrganizerSetup.exe."""
     spec = ROOT / "installer" / "HappyPhotoOrganizerSetup.spec"
     print(f"[*] Building installer with {spec.name}")
     result = subprocess.run(
@@ -60,6 +62,7 @@ def build_installer() -> None:
 
 
 def main() -> int:
+    """Zip the payload, build the installer exe and print its size."""
     zip_payload()
     build_installer()
     out = ROOT / "dist" / "HappyPhotoOrganizerSetup.exe"

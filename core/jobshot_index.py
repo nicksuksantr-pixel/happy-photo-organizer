@@ -53,6 +53,7 @@ _LOCK = threading.RLock()
 
 
 def valid_job_id(job_id: str) -> bool:
+    """True when job_id is 1-128 characters of letters, digits, dot, underscore or hyphen."""
     return bool(_JOB_ID_RE.match(str(job_id or "")))
 
 
@@ -100,17 +101,20 @@ def end_filing(job_ids: list[str]) -> None:
 
 
 def is_filing(job_id: str) -> bool:
+    """True while this job is registered as being filed (between begin_filing and end_filing)."""
     with _FLIGHT:
         return str(job_id) in _IN_FLIGHT
 
 
 def begin_receiving() -> None:
+    """Count one more phone request as being received - pair it with `end_receiving`."""
     global _RECEIVING
     with _FLIGHT:
         _RECEIVING += 1
 
 
 def end_receiving() -> None:
+    """Release one request counted by `begin_receiving`; the count never drops below zero."""
     global _RECEIVING
     with _FLIGHT:
         _RECEIVING = max(0, _RECEIVING - 1)

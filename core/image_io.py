@@ -46,6 +46,7 @@ AI_VISION_NATIVE = {"image/jpeg", "image/png", "image/webp", "image/heic", "imag
 
 
 def is_supported_image(path: Path) -> bool:
+    """True when the file's extension is one of SUPPORTED_EXTS (case-insensitive)."""
     return path.suffix.lower() in SUPPORTED_EXTS
 
 

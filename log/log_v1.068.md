@@ -76,3 +76,70 @@ Every log is named by the receipt name, and the receipt's `drill_log` is `drills
 
 It took four minutes after publishing and needed no click. This is the route drilled in `drills/1.068.json`. The ship
 PC (v1.065) is not read yet; its route is the one drilled in `drills/1.068.from-1.065.json`.
+
+## After the release: README + CODEMAP + a docs gate (rule #15; no version, no build, no drill)
+
+**Asked:** Nick, in the Director chat (about 09:2x), after he asked "why is there no CODEMAP": "Both of them".
+- **Item 1, here:** README, CODEMAP and a docs gate in HPO.
+- **Item 2, the Director's:** the same check in the house release gate.
+
+**Why it was missing:** GitHub history starts at v1.027 with no README. PROJECT_SUMMARY.md took the README's place,
+and it froze at "v1.057" because nothing made it move. Rule #15 (2026-06-09) never reached this repo's records.
+
+### What was added
+
+- **`README.md`** with the five #15.2 blocks:
+  - the name and purpose;
+  - the stack and `**Version: v1.068**`;
+  - run, build, and the release order;
+  - one line per feature;
+  - the doc map.
+- **`docs/CODEMAP.md`:**
+  - layer A is hand-written: 61 rows of task → file → entry point;
+  - layer B is generated: 41 modules with their public names and first docstring lines.
+- **`tools/gen_codemap.py`**, a repo-local generator:
+  - same markers and bullet shape as the house one, plus each module's first docstring line;
+  - `--check` writes nothing and exits 1 with the command to run;
+  - console output is ASCII;
+  - why repo-local: the house generator maps only `features/` folders and would empty layer B here, and a gate must
+    not read outside the repo (#22). The Director agreed.
+- **57 one-line docstrings** where layer B found none (#15.4):
+  - 52 were added by 3 agents, each on its own files, docstrings only;
+  - 5 were mine, in `tools/publish_release.py`;
+  - checked mechanically: every changed `.py` has an AST identical to HEAD once docstrings are removed, and the diff
+    is added lines only;
+  - one agent's edit had dropped a space in 5 code lines (AST-equal, so only the diff showed it); I restored them.
+- **Gate 5 in `publish_release.local_gates()`**, after `gate_version_agrees`:
+  - `gate_readme_names_this_version` refuses unless README.md has exactly one `**Version: vX.XXX**` line equal to
+    `VERSION`, and names the line to fix;
+  - `gate_codemap_is_fresh` loads the generator in-process, refuses a stale layer B or missing markers, names
+    `python tools/gen_codemap.py`, and writes nothing.
+- **`PROJECT_SUMMARY.md` stays as history,** with a "frozen 2026-11-01" banner pointing to README and CODEMAP.
+  `RELEASE.md` got a banner too: its per-release steps are old notes.
+
+### How it was checked
+
+- **Tests:**
+  - `test_the_readme_gate_refuses_a_readme_still_on_the_previous_version` covers a previous version, no line, two
+    lines, a missing file, and a BOM pass;
+  - `test_the_codemap_gate_refuses_a_stale_map_and_names_the_command` covers stale → refused, fresh → passes, code
+    moved → refused with the check writing nothing, and no markers → refused;
+  - each test is red with its gate swapped for a no-op;
+  - suite 247/247.
+- **The house gate's view** (`release-gate --check --tag v1.068`, v3.27 docs check): exit 0.
+- **An independent accuracy check:** 2 read-only agents tried to refute every README sentence (66 claims) and every
+  CODEMAP layer A row (50). They found 29 problems, and all were fixed. Among them:
+  - the build prerequisites (pyinstaller 6.20.0, pywin32, node, gh);
+  - the release order;
+  - stale doc pointers (RELEASE.md, GEMINI_LIMITS.md, log/ and bug/ coverage);
+  - the update.log path;
+  - "aims for" 10–25 KB;
+  - rows pointing at a mechanism instead of the decision: digest verify in `update_worker`, install timing, where the
+    10/25 numbers and the 90-min gap are really set, the prompt constant, `discard_assignment`, two Pacific-day
+    computations, the installer's own colours and paste;
+  - five missing rows: button states, the update button, the EN translate prompt, the pre-flight estimate, window
+    state.
+- **Two findings are app bugs:** L1 (a midnight burst pulls the next day in) and L2 (a custom RPD above 500 is not
+  clamped with the built-in key). Both were reproduced and are filed OPEN in `bug/bug_v1.068.md`, not fixed here. The
+  README names both.
+- **Not done:** no build. `dist/` is now older than the docstring edits by mtime, so the next release rebuilds anyway.

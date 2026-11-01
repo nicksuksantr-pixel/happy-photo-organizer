@@ -45,6 +45,7 @@ def set_enabled(on: bool) -> None:
 
 
 def log_path() -> Path:
+    """The update log every stage appends to: ~/.happy-photo-organizer/logs/update.log."""
     return Path.home() / ".happy-photo-organizer" / "logs" / "update.log"
 
 
@@ -118,6 +119,7 @@ PAUSED_REPO = "update paused/after a failed install"
 
 
 def attempt_path() -> Path:
+    """The record of the install in flight, update-attempt.json beside update.log."""
     return log_path().parent / "update-attempt.json"
 
 
@@ -126,6 +128,7 @@ def _vkey(v: object) -> tuple[int, ...]:
 
 
 def read_attempt() -> dict | None:
+    """The recorded install attempt, or None when there is none or it is unreadable - never raises."""
     try:
         d = json.loads(attempt_path().read_text(encoding="utf-8-sig"))
     except Exception:
@@ -146,6 +149,7 @@ def _write_attempt(d: dict) -> bool:
 
 
 def clear_attempt() -> None:
+    """Delete the recorded install attempt, if any - never raises."""
     try:
         attempt_path().unlink(missing_ok=True)
     except OSError:

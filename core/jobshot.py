@@ -80,6 +80,7 @@ RESERVED_SIDECAR_NAMES = frozenset({"report_history.json"})
 
 @dataclass
 class ImportResult:
+    """The outcome of filing one arrived JobShot folder: where it went, what was filed, any errors."""
     ok: bool = False
     error: str = ""
     job_id: str = ""

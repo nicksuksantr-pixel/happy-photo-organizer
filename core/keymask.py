@@ -42,6 +42,7 @@ KEY_SHAPE_BYTES_RE = re.compile(KEY_SHAPE.encode("ascii"))
 
 
 def embed_key_file() -> Path:
+    """The embed-key file outside the repo: ~/.embed-keys/Happy-Photo-Organizer.json."""
     return Path.home() / ".embed-keys" / f"{EMBED_APP}.json"
 
 

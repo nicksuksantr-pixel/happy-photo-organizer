@@ -86,6 +86,7 @@ def read_from_filename(path: Path) -> datetime | None:
 
 
 def read_from_mtime(path: Path) -> datetime | None:
+    """The file's last-modified time as a local datetime, or None if it cannot be read."""
     try:
         return datetime.fromtimestamp(path.stat().st_mtime)
     except Exception:

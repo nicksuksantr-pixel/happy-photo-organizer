@@ -42,6 +42,13 @@
 //                           registered FREE for THIS repo (~/.embed-keys/registry.json, fingerprints only), or a
 //                           registered key the drill receipt does not declare (embedded_key + check embedded_key_works)
 // The note waives the drill, never a key: a leak is not a release decision. Standard: memory/KEY_EMBED.md.
+//
+// SINCE 2026-11-01 IT ALSO ENFORCES command_pattern #15: THE NAVIGATION DOCS TRAVEL WITH A RELEASE.
+// HPO v1.068 shipped from a repo with no README.md and no docs/CODEMAP.md (#15 never reached it; nothing checked);
+// Ena Bug 25 the same week: a README whose version line stayed behind. Nick: "both of them" - the repo's publish
+// script checks freshness, and this gate checks at every release-shaped command (and in --check) that README.md
+// exists at the root and names THIS version, and that docs/CODEMAP.md exists or README records "CODEMAP: lite".
+// The note waives these like a drill (a release decision). No generator runs here: see docsProblems().
 
 import fs from 'node:fs'
 import os from 'node:os'
@@ -573,6 +580,33 @@ function passingReceiptFor(root, { sha, tag }) {
   return null
 }
 
+// ── command_pattern #15 — README + CODEMAP travel with a release (2026-11-01) ─────────────────────
+// HPO v1.068 shipped from a repo with no README.md and no docs/CODEMAP.md: #15 had existed since 2026-06-09 and
+// never reached that repo, because nothing checked it (the same way log/ and bug/ stopped, #20.0). Ena Bug 25 the
+// same week: a README whose version line did not move with the release. So the gate reads the docs at the moment
+// of publishing. It runs no generator (freshness is the repo's own publish script's job); it asks for what any
+// reader would ask for: a README at the root that names THIS version, and a code map or the recorded lite choice.
+/** The navigation-doc problems for releasing `version` from `root` (#15); waivable by Nick's note, like a drill. */
+export function docsProblems(root, version) {
+  const out = []
+  const v = normTag(version)
+  const readme = path.join(root, 'README.md')
+  if (!fs.existsSync(readme)) { out.push(`#15 docs: no README.md at the repo root; every app has one, and its version line moves with every release (Ena Bug 25). Template: Nick\\templates\\README.template.md`); return out }
+  const text = read(readme)
+  if (v) {
+    const esc = v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    if (!new RegExp(`(^|[^0-9A-Za-z.])v?${esc}(?![0-9A-Za-z]|\\.[0-9])`, 'i').test(text))
+      out.push(`#15 docs: README.md does not name v${v}; its version line moves with every release (Ena Bug 25) - edit it before publishing`)
+  }
+  const map = path.join(root, 'docs', 'CODEMAP.md')
+  if (!fs.existsSync(map)) {
+    if (!/CODEMAP:\s*lite/i.test(text)) out.push('#15 docs: no docs/CODEMAP.md, and README.md does not record the lite choice; generate the map (the repo\'s tools/gen_codemap.py, or the shared Nick\\tools\\gen_codemap.py) or, for a small app, write "CODEMAP: lite" in README\'s doc map (#15.6)')
+  } else if (/ยังไม่พบโฟลเดอร์ features/.test(read(map))) {
+    out.push('#15 docs: docs/CODEMAP.md layer B is the generator\'s "no features folder found" placeholder - a map of nothing; point a generator at the code (the repo\'s own tools/gen_codemap.py) and regenerate')
+  }
+  return out
+}
+
 // ── shell parsing (good enough for one command line; refuses what it cannot read) ───────────────────
 function splitSegments(cmd) {
   const segs = []; let cur = ''; let q = null
@@ -792,6 +826,7 @@ export function judge(cmd, cwd) {
     }
   }
   const intents = publishIntents(cmd)
+  const versions = new Set()                                           // #15: every version this command puts in front of users
   if (intents.some((it) => it.kind === 'asset' || it.kind === 'publish-tag')) hard.push(...secretProblems(root))
   for (const it of intents) {
     if (it.repo && isDrillRepo(root, it.repo)) continue               // publishing to the drill's test repo is the drill
@@ -813,6 +848,7 @@ export function judge(cmd, cwd) {
     }
     if (it.kind === 'publish-tag') {
       if (!it.tag || isVar(it.tag)) { problems.push(`cannot read the tag in "${it.seg}"; write it literally.`); continue }
+      versions.add(normTag(it.tag))
       const hit = passingReceiptFor(root, { tag: it.tag })
       if (!hit) problems.push(`no drill receipt in drills/ for ${it.tag}.`)
       else splitReceipt(hit, `${hit.file} for ${it.tag}`, problems, hard)
@@ -825,9 +861,10 @@ export function judge(cmd, cwd) {
     let sha; try { sha = sha256(p) } catch (e) { problems.push(`asset ${it.file} cannot be read (${e.message}).`); continue }
     const hit = passingReceiptFor(root, { sha })
     if (!hit) problems.push(`no drill receipt in drills/ lists ${path.basename(p)} (sha256 ${sha.slice(0, 12)}…). A receipt for a different build does not count.`)
-    else splitReceipt(hit, `${hit.file} lists ${path.basename(p)} but`, problems, hard)
+    else { splitReceipt(hit, `${hit.file} lists ${path.basename(p)} but`, problems, hard); if (hit.r.to_version) versions.add(normTag(hit.r.to_version)) }
     hard.push(...embeddedKeyProblems(root, p, hit ? hit.r : null))
   }
+  for (const v of versions) problems.push(...docsProblems(root, v))
   return { root, problems, hard: [...new Set(hard)] }
 }
 /** A receipt's problems: the drill ones (the note may waive) and the key ones (it may not). */
@@ -863,6 +900,8 @@ one install and no second folder, every shortcut opens the new version, it relau
 user data intact, no update loop, the next release still visible, a bad download refused.
 The drill writes drills/<version>.json (schema "update-drill/1") with the SHA-256 of each asset.
 Check one:   node tools/release-gate.mjs --validate drills/<version>.json
+Docs (#15):  README.md at the repo root naming this version (its version line moves with every release),
+             and docs/CODEMAP.md - or "CODEMAP: lite" written in README's doc map for a small app.
 Repo: ${root}
 Only Nick can waive it, once, by having ~/.claude/release-approval.json written with this tag.
 A publish script reaches that note by naming its tag: node tools/release-gate.mjs --check --tag <tag> <assets>`
@@ -916,14 +955,16 @@ if (isMain) {
       else files.push(args[i])
     }
     if (!files.length) problems.push('--check needs the asset paths it is about to publish')
+    const versions = new Set(); if (tag) versions.add(normTag(tag))
     for (const f of files) {
       if (!fs.existsSync(f)) { problems.push(`asset ${f} not found`); continue }
       let sha; try { sha = sha256(f) } catch (e) { problems.push(`asset ${f} cannot be read (${e.message})`); continue }
       const hit = passingReceiptFor(root, { sha })
       if (!hit) problems.push(`no drill receipt in drills/ lists ${path.basename(f)} (sha256 ${sha.slice(0, 12)}…)`)
-      else splitReceipt(hit, hit.file, problems, hard)
+      else { splitReceipt(hit, hit.file, problems, hard); if (hit.r.to_version) versions.add(normTag(hit.r.to_version)) }
       hard.push(...embeddedKeyProblems(root, f, hit ? hit.r : null))
     }
+    for (const v of versions) problems.push(...docsProblems(root, v))                      // #15, judged with the drill
     if (hard.length) { console.error(KEY_MESSAGE([...new Set(hard)], root)); process.exit(1) }   // before the note: never consumed for a leak
     if (problems.length && files.length && tag && approvalForTag(tag)) process.exit(0)
     if (problems.length) { console.error(MESSAGE(problems, root)); process.exit(1) }

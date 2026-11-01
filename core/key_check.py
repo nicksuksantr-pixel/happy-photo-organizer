@@ -23,6 +23,7 @@ PROMPT = "Reply with the single word OK."
 
 
 def result_path() -> Path:
+    """Where `run` writes the key-check result by default: logs/embedded-key-check.json."""
     return auth.CONFIG_DIR / "logs" / RESULT_NAME
 
 

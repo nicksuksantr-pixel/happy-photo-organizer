@@ -43,6 +43,7 @@ def needles() -> list[bytes]:
 
 
 def holds_key(raw: bytes, extra: list[bytes] | None = None) -> bool:
+    """True if raw matches a Google key shape or holds a needle (the registered key unless extra)."""
     if keymask.KEY_SHAPE_BYTES_RE.search(raw):
         return True
     return any(n and n in raw for n in (needles() if extra is None else extra))
@@ -79,6 +80,7 @@ def scan_index(root: Path = ROOT) -> list[str]:
 
 
 def main(argv: list[str]) -> int:
+    """Run the scan argv asks for (--index or --message FILE); 0 clean, 1 key or error, 2 usage."""
     try:
         if argv[:1] == ["--index"]:
             hits = scan_index()

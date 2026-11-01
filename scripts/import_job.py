@@ -48,6 +48,7 @@ def _resolve_dest(folders: list[Path], dest: str | None) -> tuple[Path | None, s
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Parse the command line, file the JobShot job folders it names, and return an exit code."""
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("folders", nargs="+", help="job folder(s) pushed by JobShot")
     ap.add_argument("--dest", help="destination photo folder (default: the one "

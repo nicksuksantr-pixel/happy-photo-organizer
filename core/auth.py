@@ -227,6 +227,7 @@ def using_bundled_key() -> bool:
 
 
 def get_model() -> str:
+    """The Gemini model saved in auth.json, or DEFAULT_MODEL when it is missing or blank."""
     # Same null-value guard as get_api_key — a hand-edited or partially-written
     # `"model": null` must not crash with AttributeError on .strip().
     return (load_config().get("model") or DEFAULT_MODEL).strip() or DEFAULT_MODEL

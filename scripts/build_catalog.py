@@ -138,6 +138,7 @@ def register_job(raw_name: str, ship: str, month: str | None, jobs: dict) -> Non
 
 
 def main() -> int:
+    """Scan every SOURCES ship folder and write the deduplicated job catalog to OUTPUT_PATH."""
     jobs: dict[str, dict] = defaultdict(
         lambda: {
             "name": "",

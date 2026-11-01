@@ -7595,6 +7595,66 @@ def test_a_published_asset_with_the_wrong_digest_is_refused():
         assert "digest" in msg, msg
 
 
+def test_the_readme_gate_refuses_a_readme_still_on_the_previous_version():
+    """Rule #15, 2026-11-01: PROJECT_SUMMARY.md said "v1.057" while v1.068
+    shipped, because no gate asked. README.md's Version line must name the
+    version being released, exactly once, and the refusal says which line."""
+    mod = _release_tool()
+    with tempfile.TemporaryDirectory() as td:
+        readme = Path(td) / "README.md"
+        readme.write_text("# HPO\n> **Stack:** Python · **Version: v1.067**\n", encoding="utf-8")
+        msg = _refuses(mod.gate_readme_names_this_version, "1.068", readme=readme)
+        assert "v1.067" in msg and "v1.068" in msg and "Version line" in msg, msg
+        # no Version line, or two of them: refused, never guessed
+        readme.write_text("# HPO\nv1.068 is mentioned, but not as the Version line\n", encoding="utf-8")
+        assert "found 0" in _refuses(mod.gate_readme_names_this_version, "1.068", readme=readme)
+        readme.write_text("**Version: v1.068**\n**Version: v1.067**\n", encoding="utf-8")
+        assert "found 2" in _refuses(mod.gate_readme_names_this_version, "1.068", readme=readme)
+        readme.unlink()
+        assert "README.md" in _refuses(mod.gate_readme_names_this_version, "1.068", readme=readme)
+        # and the right one passes, BOM or not
+        readme.write_text("﻿# HPO\n> **Version: v1.068**\n", encoding="utf-8")
+        mod.gate_readme_names_this_version("1.068", readme=readme)
+
+
+def test_the_codemap_gate_refuses_a_stale_map_and_names_the_command():
+    """Rule #15.5: "a stale map is worse than none". Layer B of docs/CODEMAP.md
+    is generated from the code; once the code moves without a regeneration, the
+    release is refused with the command that fixes it. The check writes nothing."""
+    import importlib.util
+    mod = _release_tool()
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        (root / "core").mkdir()
+        (root / "docs").mkdir()
+        src = root / "core" / "thing.py"
+        src.write_text('"""thing.py - a module."""\n\n\ndef find():\n    """Find it."""\n',
+                       encoding="utf-8")
+        codemap = root / "docs" / "CODEMAP.md"
+        codemap.write_text("# CODEMAP\n| layer A |\n<!-- CODEMAP:AUTO:START -->\n"
+                           "<!-- CODEMAP:AUTO:END -->\n", encoding="utf-8")
+        assert "stale" in _refuses(mod.gate_codemap_is_fresh, root=root)
+        # regenerate the way the command does, then the gate passes
+        spec = importlib.util.spec_from_file_location("gen_codemap", mod.CODEMAP_TOOL)
+        gen = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(gen)
+        _, fresh = gen.render(root)
+        codemap.write_text(fresh, encoding="utf-8")
+        assert "`find()` — Find it." in fresh and "| layer A |" in fresh, fresh
+        mod.gate_codemap_is_fresh(root=root)
+        # the code moves: a new public function the map does not have
+        src.write_text(src.read_text(encoding="utf-8") + '\n\ndef lose():\n    """Lose it."""\n',
+                       encoding="utf-8")
+        before = codemap.read_text(encoding="utf-8")
+        msg = _refuses(mod.gate_codemap_is_fresh, root=root)
+        assert "stale" in msg and "python tools/gen_codemap.py" in msg, msg
+        assert codemap.read_text(encoding="utf-8") == before, "the check wrote the map"
+        # a map whose markers are gone is refused, not regenerated somewhere else
+        codemap.write_text("# CODEMAP\n", encoding="utf-8")
+        msg = _refuses(mod.gate_codemap_is_fresh, root=root)
+        assert "CODEMAP:AUTO:START" in msg and "python tools/gen_codemap.py" in msg, msg
+
+
 def main() -> int:
     tests = [(n, f) for n, f in sorted(globals().items())
              if n.startswith("test_") and callable(f)]

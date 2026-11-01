@@ -174,6 +174,7 @@ _SAFE_SEGMENT_RE = re.compile(r"^[^\x00-\x1f<>:\"|?*\\/]+$")
 
 @dataclass
 class ReceiveResult:
+    """The outcome of one upload from the phone: the jobs filed, skipped and any errors or warnings."""
     ok: bool = False
     error: str = ""
     filed: list[dict] = field(default_factory=list)      # one per job filed

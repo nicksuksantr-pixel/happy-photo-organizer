@@ -76,6 +76,7 @@ class _CancelledError(RuntimeError):
 
 @dataclass
 class TierConfig:
+    """One rate tier: its RPM/RPD/TPM limits, whether to throttle, and the model it implies."""
     name: str = DEFAULT_TIER
     label: str = ""
     rpm: int = 15
@@ -308,6 +309,7 @@ _default_limiter: RateLimiter | None = None
 
 
 def get_rate_limiter() -> RateLimiter:
+    """The app-wide RateLimiter, created on first use with the default tier."""
     global _default_limiter
     if _default_limiter is None:
         _default_limiter = RateLimiter()
