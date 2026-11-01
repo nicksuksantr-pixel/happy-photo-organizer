@@ -61,13 +61,13 @@
   },
   "_from_route_note": "From v1.066 on, kind 'feed': in drill mode the FROM's own updater reads HAPPY_UPDATE_FEED (the kit's loopback feed) for every check, and hpo.ps1 Get-FromRouteEvidence reads its 127.0.0.1 breadcrumbs. The v1.065 bridge used kind 'repo-env' (HAPPY_UPDATE_REPO -> the public test repo drill_repo), because v1.065 had no drill feed.",
   "field_versions": [
-    {"version": "1.067", "where": "Nick's PC", "read_on": "2026-11-01", "by": "his update.log: STARTED 1.067 at 00:30:15"},
+    {"version": "1.068", "where": "Nick's PC", "read_on": "2026-11-01", "by": "his update.log: STARTED 1.068 at 08:50:50"},
     {"version": "1.065", "where": "the ship PC", "read_on": "2026-10-30", "by": "V-Log v1.065: on the ship PC 21:09 (Nick)"}
   ],
-  "_field_versions_note": "UPDATE_DRILL step 1 (v3.26): drilled from the previous release (this file, FROM 1.067, the feed) AND from every older field version: 1.065 by drills/drill.from-1.065.json (repo-env, the test repo), receipt drills/<to>.from-1.065.json.",
+  "_field_versions_note": "UPDATE_DRILL step 1 (v3.26): drilled from the previous release (this file, FROM 1.068, the feed) AND from every older field version: 1.065 by drills/drill.from-1.065.json (repo-env, the test repo), receipt drills/<to>.from-1.065.json.",
   "from": {
-    "version": "1.067",
-    "sha256": "bf807b97243c71b3e3b72239e6275afdd1aab9b63b07eb7c32b87f545d429364"
+    "version": "1.068",
+    "sha256": "4345dc38d0072c5128d257991ebeed23bfc30f2bc3280cb7d7130eaf3944ed28"
   },
   "timeouts": {
     "update_s": 1800,

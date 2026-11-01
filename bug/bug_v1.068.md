@@ -3,7 +3,13 @@
 v1.068 changed only the used-up-quota line (`log/log_v1.068.md`). K15, the publish gates writing into Nick's logs,
 was fixed in `tools/` and is recorded in `bug/bug_v1.067.md`.
 
-## Open — found 2026-11-01 by the README/CODEMAP accuracy check, not fixed here
+## Found 2026-11-01 by the README/CODEMAP accuracy check — FIXED in v1.069 (`log/log_v1.069.md`)
+
+Nick, answering "Fix L1 and L2 as v1.069 with its drills?": "Fix as v1.069". Both are fixed red-first:
+- `test_grouper_midnight_bridge_does_not_pull_the_next_day_in` for L1;
+- the 15/5000 and 15/500/1M cases in `test_the_built_in_key_is_throttled_as_free_whatever_tier_was_saved` for L2.
+
+The text below is as filed, when they were still open.
 
 Two read-only checkers compared the new README and CODEMAP with the code (rule #15 work, no version). Two of their
 findings are app defects, not doc wording. I reproduced both on the dev PC.

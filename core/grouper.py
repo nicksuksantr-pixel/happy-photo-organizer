@@ -90,7 +90,13 @@ def group_by_session(
         # (23:59 → 00:01). Items are sorted ascending, so "different day but
         # within the gap" is exactly that case, and it stays with the earlier
         # day (representative_date = min(dates)). Keeps the v1.041 midnight fix.
-        same_day = dt.date() == last_dt.date()
+        #
+        # v1.069 (L1): "same day" means the GROUP's day, not the previous
+        # photo's. Compared with the previous photo, a 00:10 photo that joined
+        # the 23:50 burst made every later photo of that day "same day" too, so
+        # a whole day of work was filed under the day before, and a photo near
+        # each midnight chained the days on. The bridge carries the burst only.
+        same_day = dt.date() == current.dates[0].date()
         midnight_burst = (dt - last_dt) <= gap
         if same_day or midnight_burst:
             current.images.append(img)

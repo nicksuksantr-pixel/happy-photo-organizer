@@ -1,6 +1,6 @@
 # Happy Photo Organizer — sorts ship-maintenance photos into dated, AI-named job folders
 
-> **Stack:** Python 3.13 + CustomTkinter (Windows desktop), Gemini through `google-genai` · **Version: v1.068**
+> **Stack:** Python 3.13 + CustomTkinter (Windows desktop), Gemini through `google-genai` · **Version: v1.069**
 > **Path:** `C:\Users\NickSuksanTr\Documents\Projects\Happy-Photo-Organizer\`
 
 ## What it does
@@ -45,8 +45,8 @@ that is not `VERSION`, a stale CODEMAP, or no passing drill receipt for these ex
 
 - **Capture date** from EXIF, then the file name, then the file time.
 - **Resize** every photo towards 10–25 KB, with a JPEG integrity check; photos that stay over are counted and reported.
-- **One shooting day = one folder.** A burst that crosses midnight stays with the day it started.
-  - Open bug L1: that bridge also pulls the rest of the next day in (`bug/bug_v1.068.md`).
+- **One shooting day = one folder.** A burst that crosses midnight stays with the day it started; the next day's
+  later photos get their own folder.
 - **AI job names** (Gemini Vision, 1–3 sample photos per folder), fuzzy-matched to the job catalog.
   - Non-work photos (screenshots, people, food) are flagged instead of being given a job name.
 - **Step 3 review:**
@@ -58,7 +58,7 @@ that is not `VERSION`, a stale CODEMAP, or no passing drill receipt for these ex
   - photos are named after their folder;
   - the destination folder is remembered.
 - **Built-in free Gemini key, and the only key.**
-  - The free per-minute limit always applies. Open bug L2: a custom daily cap above 500 is not clamped.
+  - The free limits (15 a minute, 500 a day) always apply, whatever tier was saved.
   - When AI is down, one line says why, and the run goes on without it.
   - A used-up day names the local time AI is back.
 - **AI Health:** usage bars, 7-day history, recent calls, the quota and a pre-flight estimate.

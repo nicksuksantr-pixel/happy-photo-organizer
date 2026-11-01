@@ -139,6 +139,27 @@ def test_grouper_different_days_stay_separate():
         assert [g.representative_date.day for g in groups] == [15, 16, 18]
 
 
+def test_grouper_midnight_bridge_does_not_pull_the_next_day_in():
+    """L1 (bug_v1.068, found 2026-11-01): the bridge compared each photo with the
+    PREVIOUS one, so once a 00:10 photo had joined the 23:50 group, every later
+    photo of the 16th joined it too as "same day" - a full day of work filed
+    under the 15th, and with a photo near each midnight the chain ran on for
+    days. The bridge carries only the burst; the next day starts its own folder."""
+    with tempfile.TemporaryDirectory() as d:
+        tmp = Path(d)
+        imgs = _make_dated_files(tmp, [
+            "20260315_235000", "20260316_001000", "20260316_005000",  # a burst past midnight
+            "20260316_090000", "20260316_150000",                     # the 16th's own work
+            "20260316_235000", "20260317_001000",                     # another midnight burst
+        ])
+        groups = grouper.group_by_session(imgs, time_gap_minutes=90)
+        assert [g.representative_date.day for g in groups] == [15, 16], \
+            [(g.representative_date, len(g.images)) for g in groups]
+        assert [len(g.images) for g in groups] == [3, 4], [len(g.images) for g in groups]
+        # and the 16th's folder holds the 16th's work plus its own midnight burst
+        assert sorted(t.hour for t in groups[1].dates) == [0, 9, 15, 23], groups[1].dates
+
+
 def test_grouper_empty():
     assert grouper.group_by_session([]) == []
 
@@ -491,10 +512,14 @@ def test_the_built_in_key_is_throttled_as_free_whatever_tier_was_saved():
         try:
             auth.load_config = lambda: {}
             auth.BUNDLED_KEY_FILES = [(bundled, "bundled")]
+            # L2 (bug_v1.068): 15/5000 passed, because only RPM was clamped and the
+            # 60/5000 case here was replaced for its RPM - the day cap never ran
             for cfg in ({"tier": "paid"}, {"tier": "custom", "custom_rpm": 60, "custom_rpd": 5000},
+                        {"tier": "custom", "custom_rpm": 15, "custom_rpd": 5000},
+                        {"tier": "custom", "custom_rpm": 15, "custom_rpd": 500, "custom_tpm": 1_000_000},
                         {"tier": "custom", "custom_rpm": 0, "custom_rpd": 0}, {"tier": "no-such-tier"}):
                 t = rate_limiter.update_tier_from_config(cfg).tier
-                assert t.throttle and 0 < t.rpm <= 15 and t.rpd > 0, (cfg, t)
+                assert t.throttle and 0 < t.rpm <= 15 and 0 < t.rpd <= 500 and t.tpm <= 250_000, (cfg, t)
             t = rate_limiter.update_tier_from_config({"tier": "free-2.5-flash"}).tier
             assert t.rpm == 10, "a slower free tier was replaced"
             t = rate_limiter.update_tier_from_config(

@@ -340,10 +340,13 @@ def update_tier_from_config(cfg: dict) -> RateLimiter:
     # custom one above the free limits - would fire it unthrottled into
     # per-minute 429s on every run (review, 2026-10-31). While the built-in
     # key is the one in use, the free limits are the ceiling.
+    # v1.069 (L2): every limit, not just the per-minute one - a custom 15/5000
+    # passed, so the app's own day cap stopped at Google's 429, not at 500.
     if _builtin_key_in_use():
         free = TierConfig.from_preset(DEFAULT_TIER)
         if tier_name == "custom":
-            if not tier.throttle or tier.rpm <= 0 or tier.rpm > free.rpm or tier.rpd <= 0:
+            if (not tier.throttle or tier.rpm <= 0 or tier.rpm > free.rpm
+                    or tier.rpd <= 0 or tier.rpd > free.rpd or tier.tpm > free.tpm):
                 tier = free
         elif not TIER_PRESETS.get(tier_name, {}).get("throttle", False):
             tier = free

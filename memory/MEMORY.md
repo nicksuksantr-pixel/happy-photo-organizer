@@ -18,7 +18,7 @@
   - README's Version line is not `VERSION`;
   - layer B is stale (`python tools/gen_codemap.py --check`).
   So move the README line together with `VERSION`, and run the generator after any code change, before building.
-- ⚠ **Open app bugs found 2026-11-01 (`bug/bug_v1.068.md`), for the next version with its own drill:**
+- ✅ **App bugs found 2026-11-01 (`bug/bug_v1.068.md`), fixed in v1.069:**
   - **L1:** a midnight burst pulls the whole next day into the earlier day's folder (`core/grouper.py`);
   - **L2:** a custom daily cap above 500 is not clamped while the built-in key is in use (`core/rate_limiter.py`).
 

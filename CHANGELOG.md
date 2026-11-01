@@ -9,6 +9,19 @@ Cosmetic / design / V2-scope items that survived round 6 + 7 + 8. All
 catalogued in detail at the bottom of this file under "Round 6
 deferred".
 
+## [1.069] — not released yet (needs its update drills, #28) — The next day keeps its own folder
+
+### Fixed
+- **A burst of photos that runs past midnight no longer drags the whole next
+  day into the day before.** Photos at 23:50 and 00:10 still share one
+  folder, but that day's 09:00 and 15:00 work used to join them too, and was
+  filed under the wrong date; with a photo near every midnight it ran on for
+  days. Now the bridge carries only the burst, and the next day starts its
+  own folder. (L1, wrong since v1.044.)
+- **The built-in free key is held to the free daily limit too.** A custom
+  tier with a daily cap above 500 was kept as typed; only the per-minute
+  limit was clamped. Now every limit is. (L2)
+
 ## [1.068] — 2026-11-01 — When the free AI is back (released after its drills from v1.067 and v1.065 passed, #28)
 
 ### Fixed

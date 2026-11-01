@@ -25,7 +25,7 @@ The batch has four phases:
 | Capture date (EXIF → file name → file time) | `core/exif_reader.py` | `get_capture_date` |
 | Resize: the algorithm | `core/resizer.py` | `resize_to_target` |
 | Resize: the 10/25 KB numbers actually used | `main.py` · `core/processor.py` · `core/jobshot.py` | `MainWindow.__init__` (`target_kb_min` / `target_kb_max`) · `phase1_resize_and_group` defaults · `import_job` / `import_batch` defaults |
-| One shooting day = one folder (midnight bridge; open bug L1) | `core/grouper.py` · `core/processor.py` | `group_by_session` · the gap actually used: `phase1_resize_and_group(time_gap_minutes=…)` |
+| One shooting day = one folder (the midnight bridge) | `core/grouper.py` · `core/processor.py` | `group_by_session` · the gap actually used: `phase1_resize_and_group(time_gap_minutes=…)` |
 | **Phase 2**: the AI pass over every folder | `core/processor.py` | `phase2_ai_analyze` |
 | The Gemini prompt | `core/analyzer.py` | `ANALYZER_SYSTEM_PROMPT`, `_build_user_prompt`, the group suffix in `analyze_group` (`analyze_image` is used only by `scripts/smoke_test.py`) |
 | The reply parsing, retries | `core/analyzer.py` | `_parse_json_response`, `_generate_with_retry`, `_is_transient_error` |
@@ -41,7 +41,7 @@ The batch has four phases:
 | Delete a folder, or all non-work folders | `main.py` · `core/processor.py` | `MainWindow._delete_assignment`, `_delete_flagged` (confirm) · `discard_assignment` (decides what may be deleted) |
 | The Gemini key (built in, the only key) | `core/auth.py` · `core/keymask.py` | `get_api_key`, `using_bundled_key`, `create_client` · `read_bundled_key`, `fingerprint` |
 | The model: default, choice, saving | `core/auth.py` · `core/rate_limiter.py` · `ui/dialogs/settings.py` · `ui/dialogs/ai_health.py` | `DEFAULT_MODEL`, `get_model` · `DEFAULT_TIER`, `TIER_PRESETS` · the model list in `SettingsDialog.__init__`, `SettingsDialog._save` · `AIHealthDialog._apply_tier` |
-| Free-tier limits, RPM/RPD throttle, tier presets (open bug L2) | `core/rate_limiter.py` | `TIER_PRESETS`, `RateLimiter.acquire`, `update_tier_from_config` |
+| Free-tier limits, RPM/RPD throttle, tier presets, the built-in key's ceiling | `core/rate_limiter.py` | `TIER_PRESETS`, `RateLimiter.acquire`, `update_tier_from_config` |
 | The pre-flight estimate before Start | `core/rate_limiter.py` · `main.py` · `ui/dialogs/ai_health.py` | `RateLimiter.estimate_eta` · the pre-flight block in `MainWindow._start_phase12` · `AIHealthDialog._update_preflight` |
 | Usage counts, the 7-day history | `core/usage_log.py` | `UsageLog.record_call`, `UsageLog.snapshot` |
 | The Pacific day (two separate computations) | `core/usage_log.py` · `core/processor.py` | `PT_TZ`, `_now_pt`, `_seconds_until_pt_midnight` · `quota_back_at` (its own US daylight-time rule): change both together |
