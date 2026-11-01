@@ -9,7 +9,7 @@ Cosmetic / design / V2-scope items that survived round 6 + 7 + 8. All
 catalogued in detail at the bottom of this file under "Round 6
 deferred".
 
-## [1.068] — not released yet (needs its update drill, #28) — When the free AI is back
+## [1.068] — 2026-11-01 — When the free AI is back (released after its drills from v1.067 and v1.065 passed, #28)
 
 ### Fixed
 - **"Today's shared free quota is used up" now says when AI is back, on

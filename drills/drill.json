@@ -47,8 +47,8 @@
   "drill_user_like": "drill*",
   "not_covered": [
     "profile path: the drill account is plain ASCII 'drill' (C:\\Users\\drill); the ship PC's Windows username has not been read, so a profile path with a space or Thai characters is NOT covered by this drill (UPDATE_DRILL 5.2)",
-    "the 'Install now' button: in v1.066 it matters only while the app is busy, where it refuses (unit test test_the_install_button_refuses_while_busy_and_says_why), so it is not driven here",
-    "v1.066's own updater against real GitHub: every check on v1.066 runs through the loopback feed; tools/publish_release.py reads the real endpoint back after publishing",
+    "the 'Install now' button: since v1.066 it matters only while the app is busy, where it refuses (unit test test_the_install_button_refuses_while_busy_and_says_why), so it is not driven here",
+    "the updated version's own updater against real GitHub: every check made on the updated version runs through the loopback feed; tools/publish_release.py reads the real endpoint back after publishing",
     "a failed install: the attempt record (update-attempt.json), no automatic retry of that version, the Retry button, and a pre-v1.066 app relaunched with its update checks paused for that session are unit-tested only; the drill runs the success path"
   ],
   "feed": {

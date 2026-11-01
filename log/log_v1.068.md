@@ -1,6 +1,8 @@
 # Log — v1.068 (2026-11-01) — When the free AI is back
 
-**Both field-version drills PASSED 15/15** (#28, UPDATE_DRILL step 1, v3.26): from v1.067 (`drills/1.068.json`) and from v1.065 (`drills/1.068.from-1.065.json`), on the same bytes, sha256 `4345dc38d0072c5128d257991ebeed23bfc30f2bc3280cb7d7130eaf3944ed28`. `release-gate --check --tag v1.068` passed. Publishing follows.
+**Both field-version drills PASSED 15/15** (#28, UPDATE_DRILL step 1, v3.26): from v1.067 (`drills/1.068.json`) and from v1.065 (`drills/1.068.from-1.065.json`), on the same bytes, sha256 `4345dc38d0072c5128d257991ebeed23bfc30f2bc3280cb7d7130eaf3944ed28`. `release-gate --check --tag v1.068` passed.
+
+**RELEASED 2026-11-01 08:46** (tag `v1.068` at `f482697`) through `tools/publish_release.py --previous 1.067`. Every gate passed: the lock, the draft upload with its size verified, then, read from outside after publishing, `latest` is v1.068, a v1.067 user is offered it, and the re-downloaded asset hashes to the drilled file.
 
 **Asked:** Nick, in this chat, answering *"Build v1.068 so the quota message names the 15:00 reset time?"*: **"Build
 v1.068"** (2026-11-01, about 01:15).
@@ -62,4 +64,4 @@ What it showed:
 
 Every log is named by the receipt name, and the receipt's `drill_log` is `drills/logs/1.068.from-1.065.log`. No key shape appears in any receipt or log.
 
-**Stale wording, not a defect of the run:** `drill.from-1.065.json` was copied from `drill.json`, so two of its `not_covered` lines still name v1.066 ("v1.066's own updater against real GitHub", "the 'Install now' button: in v1.066"). The receipt carries them as written; it was not edited (#28). For a FROM-1.065 manifest the first line should say that v1.065's updater does reach the real GitHub API, but the test repo's. To be corrected in the manifest before the next FROM-1.065 drill.
+**Stale wording, not a defect of the run:** two `not_covered` lines in `drill.json` have named v1.066 since the bridge (ad00773), where they mean the version being drilled to: "v1.066's own updater against real GitHub: every check on v1.066 runs through the loopback feed" and "the 'Install now' button: in v1.066 ...". `drill.from-1.065.json` copied them. The receipts for v1.067 and v1.068 carry them as written and were not edited (#28). After the release, both manifests were reworded to "the updated version's own updater" and "since v1.066", so the next drills say it right.
