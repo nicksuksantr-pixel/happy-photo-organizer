@@ -1,4 +1,8 @@
-# Gemini free tier — per-model limits as AI Studio shows them
+# Gemini limits — the free tier, and the house's one paid project (Tier 2), as AI Studio shows them
+
+> Two tiers live in this file: the **free tier** (every free key in the house; sections below) and the **paid Tier 2
+> project** that TTVC uses (its own section near the end, measured 2026-11-02). Rule #2.1 still stands: a paid key is
+> never built into an app and never borrowed by another project (#2); its numbers are here so a session can plan.
 
 > **Measured 2026-11-01** from three screenshots Nick took of https://aistudio.google.com/rate-limit for one free key
 > (afternoon, Thai time). The **limit** half of every cell is the free tier's cap: it is set per Google Cloud project,
@@ -65,6 +69,51 @@ Veo 3 Fast Generate · Veo 3 Generate · Veo 3 Lite Generate (the Veo rows show 
 | Search grounding | Gemini 2 · Gemini 2.5 · "Default" | 1.5K each |
 | Search grounding | Gemini 3 and newer | **0** |
 
+## Paid tier — Tier 2, the house's one paid project ("Gemini Project", TTVC's key), measured 2026-11-02
+
+> Nick's four screenshots of the same AI Studio page for the paid project (header "Tier 2", time range 90 days; the
+> used column is that project's 90-day peak). TTVC is the only project on it (`GEMINI_VIDEO_API_KEY`, TTVC's
+> `docs/GEMINI_FREE_KEY.md` §5). Transcribed by the Director and checked by an independent read. Google can change
+> the tier's numbers without notice; re-read the page before planning a big batch.
+
+| Model | RPM | TPM | RPD | 90-day peak use |
+|---|---|---|---|---|
+| Gemini 2 Flash · 2 Flash Lite | 10K · 20K | 10M | Unlimited | 0 |
+| Gemini 2.5 Flash Lite | 10K | 10M | Unlimited | 0 |
+| Gemini 3.5 Flash Lite · 3.1 Flash Lite | 10K | 10M | 350K | 0 |
+| Gemini 3.8 Flash · 3.6 Flash · 3 Flash · 2.5 Flash | 2K | 3M | 100K | 0 |
+| Gemini 4 Argon | 2K | 8M | Unlimited | 0 |
+| Gemini 3.1 Pro · 2.5 Pro | 1K | 5M | 50K | 0 |
+| Computer Use Preview | 1K | 5M | 50K | 0 |
+| Gemini Robotics ER 2 Preview | 2K | 3M | 100K | 0 |
+| Gemini Embedding 1 · 2 | 5K | 5M | Unlimited | 0 |
+| Gemma 4 26B · 31B | 30 | 16K | 14.4K | 0 (same as the free tier) |
+| Gemini 3.8 Flash TTS · 3.8 Flash Lite TTS · 3.1 Flash TTS · 2.5 Flash TTS | 1K | 100K | 10K | 3.8 Flash TTS: 2 / 61 / 5 |
+| Gemini 2.5 Pro TTS | 250 | 25K | 2.5K | 0 |
+| Gemini 3.5 Transcribe | 1K | 100K | 10K | 0 |
+| Nano Banana (2.5 Flash Preview Image) | 2K | 1.5M | 50K | 0 |
+| Nano Banana Pro (3 Pro Image) · Nano Banana 2 Lite (3.1 Flash Lite Image) | 500 | 500K | 15K | 0 |
+| Nano Banana 2 (3.1 Flash Image) · Gemini Nano Banana 2.1 | 500 | 1M | 10K | Nano Banana 2.1: 5 / 13.16K / 73 |
+| Gemini Omni 1.1 Flash | **8** | Unlimited | **100** | 5 / 61.14K / **27** |
+| Lyria 3 Clip · Lyria 3 Pro | 500 | 10M | 10K | 1 / 167–337 / 2 |
+| Veo 3 Fast Generate · Veo 3 Generate · Veo 3 Lite Generate | **4** | — | **50** | 0 |
+| Live API: 2.5 Flash Native Audio Dialog | Unlimited | 10M | Unlimited | 0 |
+| Live API: 3 Flash Live · 3.8 Live | Unlimited | 400K | Unlimited | 0 |
+| Live API: 3.8 Live Extended Thinking | Unlimited | 600K | Unlimited | 0 |
+| Live API: 3.5 Live Translate · 3.5 Transcribe Live | Unlimited | 300K | Unlimited | 0 |
+| Antigravity (Agents) | 200 | 300K | 10K | 0 |
+| Deep Research Pro Preview (Agents) | 10 | 10M | 14.4K | 0 |
+
+Tools on Tier 2: **Search grounding** 5K a day on Gemini 2 / 2.5 / Default and **1.5K a day on Gemini 3 and newer**
+(0 on the free tier) · **Map grounding 25K a day on every model** (0 on the free tier).
+
+What the paid numbers say:
+1. **Everything the free tier shows as 0 opens here**: the image models, Veo, Lyria, Omni, the Pro models, Deep Research, Computer Use, grounding on Gemini 3+.
+2. **The tight ones are still tight**: Veo 3 is **4 a minute, 50 a day** per model; Omni 1.1 Flash is **8 a minute, 100 a day** (TTVC's 90-day peak already used 27 of them in one day); Deep Research 10 a minute. A video or lip-sync batch is planned against those, not against "paid = unlimited".
+3. **Gemma 4 does not change with the tier** (30 / 16K / 14.4K on both).
+4. **TTS is 1K a minute, 10K a day per model** here, against 3 / 10K / 10 on a free key: a paid key is the road for any voice work that outgrows ten lines a day — and it stays TTVC's, never built into an app (#2.1) and never borrowed (#2).
+5. Text models: Flash-Lite 10K RPM / 350K a day; Flash 2K / 100K; Pro 1K / 50K; the 2.x models and Gemini 4 Argon have no daily cap.
+
 ## Shutdowns that matter (deprecations page, last updated 2026-10-22, read 2026-11-01)
 
 The page's own caveat: the dates are the earliest a model might be retired.
@@ -119,3 +168,4 @@ The page's own caveat: the dates are the earliest a model might be retired.
 | 2026-11-01 | Every model's row above | Nick's three screenshots of AI Studio, transcribed by the Director and checked by an independent read |
 | 2026-11-01 | TTVC's correction: 3.8 Flash-Lite TTS has no Thai, so a Thai project has 10 TTS a day after 2026-11-17, not 20; the shutdown table | TTVC (`docs/GEMINI_FREE_KEY.md` §4/§6, probes with its own key) · verified by the Director on the live docs page (row "Thai": ✔ / —) and the deprecations page |
 | 2026-11-01 | Third independent transcription of the same screenshots (NP, from Nook's copy): 0 differences on 64 rows. Item 10 (routed ids, 2.5 restriction, numbers unpublished) promoted from NP's `memory/TO_PROMOTE.md` | NP (`secretary/work/gemini-free-limits/2026-11-01_ai-studio-rate-limits.md`, `config/gemini_limits.json`) |
+| 2026-11-02 | The paid Tier 2 project's table (TTVC's key): "this is the paid one that is available, remember it; TTVC uses it" | Nick's four screenshots of AI Studio, transcribed by the Director and checked by an independent read |
