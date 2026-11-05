@@ -106,4 +106,4 @@ gh release download v1.065 --repo nicksuksantr-pixel/happy-photo-organizer -p Ha
   the test repo, not the release repo.
 - **A failed install.** The attempt record (`logs/update-attempt.json`), no automatic retry of that version, the
   `Retry vX` button, and a pre-v1.066 app relaunched with its update checks paused for that session are unit tests
-  (bug S1 in `bug/bug_v1.066.md`). The drill runs the success path.
+  (bug S1, `bug/bug_v1.055.md` Bug 3). The drill runs the success path.

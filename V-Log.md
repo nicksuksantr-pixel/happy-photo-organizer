@@ -1,7 +1,8 @@
 # V-Log — Happy Photo Organizer (version timeline)
 
 Full version history, oldest → newest. Detail per version lives in `CHANGELOG.md`,
-`log/log_vX.md`, and `bug/bug_vX.md`. (Created 2026-06-04 per command_pattern #11.)
+and in the rolling records: one entry per version in `log/`, one per bug in `bug/` (#7, since 2026-11-05;
+until then, one `log_vX.md` and one `bug_vX.md` per version). (Created 2026-06-04 per command_pattern #11.)
 
 | Version | Date | Highlight |
 |---------|------|-----------|

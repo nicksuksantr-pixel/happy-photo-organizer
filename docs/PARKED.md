@@ -13,7 +13,7 @@ Everything below is in git. **Nothing of this project exists only in a session.*
 **No HPO release can ship until v1.065 has updated itself to it in a drill** (`memory/UPDATE_DRILL.md`,
 lock `tools/release-gate.mjs`). Plan sent to the Director the same night.
 
-**2026-10-31: v1.066 and the harness are built** (`log/log_v1.066.md`, `bug/bug_v1.066.md`, `drills/README.md`).
+**2026-10-31: v1.066 and the harness are built** (`log/log_v1.057.md` Entry 11, `bug/bug_v1.055.md` Bug 3, `drills/README.md`).
 U1–U7, U9, U10 fixed; U8 open. **Not released.** What is left, in order:
 1. Nick: go-ahead to create the public test repo `nicksuksantr-pixel/hpo-update-drill` and upload the candidate
    to it (`drills/README.md`, "Each drill" step 2).
