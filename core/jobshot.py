@@ -744,7 +744,19 @@ def _file_group(
         # day that is not its work_date; that is the rule working, not a
         # conflict, so work_date is left alone and the `filed` block records
         # where the job actually landed.
-        target_ym = detect_target_month(dest_root) or (work_date.year, work_date.month)
+        #
+        # The MONTH is the work_date's, never the folder's majority (M1,
+        # 2026-11-23: a 23 November job filed as 31-10-26 into a folder that
+        # was mostly October). `detect_target_month` is for camera photos,
+        # whose clock can be wrong; a phone's work_date was set by a person.
+        target_ym = (work_date.year, work_date.month)
+        majority = detect_target_month(dest_root)
+        if majority is not None and majority != target_ym:
+            for r in results:
+                r.warnings.append(
+                    f"the destination holds mostly {majority[1]:02d}-{majority[0] % 100:02d} "
+                    f"folders; this job is dated {target_ym[1]:02d}-{target_ym[0] % 100:02d} "
+                    f"and was filed under its own month. Is the destination the right folder?")
         assign_unique_dates(plan, scan_used_days(dest_root), target_year_month=target_ym)
 
     final_folder = dest_root / assignment.folder_name

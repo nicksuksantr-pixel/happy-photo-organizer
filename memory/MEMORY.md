@@ -18,6 +18,7 @@
   - README's Version line is not `VERSION`;
   - layer B is stale (`python tools/gen_codemap.py --check`).
   So move the README line together with `VERSION`, and run the generator after any code change, before building.
+- 🐛 **M1 (2026-11-23, `bug/bug_v1.055.md` Bug 6): fixed in source, NOT released.** A phone job took the destination's majority month (23-11 → `31-10-26`). Now the month is always `work_date`'s, and a mismatch is a warning. Ships in v1.070 after its drill. The ship PC's destination is probably still the October folder.
 - ✅ **App bugs found 2026-11-01 (`bug/bug_v1.055.md` Bug 5), fixed in v1.069:**
   - **L1:** a midnight burst pulls the whole next day into the earlier day's folder (`core/grouper.py`);
   - **L2:** a custom daily cap above 500 is not clamped while the built-in key is in use (`core/rate_limiter.py`).

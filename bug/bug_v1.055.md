@@ -479,3 +479,27 @@ because of its RPM, so the RPD clamp was never exercised. The effect is that the
 - **The frozen build carries `tzdata`** (`dist/HappyPhotoOrganizer/_internal/tzdata`). So `usage_log.PT_TZ` is the real
   America/Los_Angeles zone in the app, not its fixed UTC-8 fallback. The usage day and `processor.quota_back_at` agree
   on the reset hour.
+
+## Bug 6 — 2026-11-23 — v1.069 — M1: a phone job filed under another month (23 November → `31-10-26`)
+
+- **Seen (Nick, JobShot screen, relayed by the Director):** job `20261123-150739-0da816`, done on 23 November,
+  sent over the ship network, filed as "31-10-26 Replaced Light Cover Passageway Laundry RM." (5 photos, 15:10).
+  Nick: the storage is set to the November folder, and EMR reads November.
+- **Cause (`core/jobshot.py`, the archive-rule branch of the filing step):** the month came from
+  `detect_target_month(dest_root)`, the most common month among the destination's dated folders, not from the
+  job's `work_date`. That guess exists for camera photos, whose clocks can be wrong; a phone's work_date was set
+  by a person. With a destination that was mostly October, the job was moved to October, and the unique-day rule
+  then gave it the only free October number.
+- **What the result says about the ship PC (inferred, not seen):** 31 is only chosen when 23 and every day 1–30
+  are taken, so that destination held day numbers 1–30 and was mostly October. A folder Nick had just set up for
+  November would not look like that. The likely state: **the ship PC's HPO still points at the October folder.**
+- **Fixed in source (not built, not released):** the month is the work_date's, always. The day still follows
+  the unique-day rule. When the destination's majority month differs from the job's month, the PC log and the
+  reply to the phone now say so: "the destination holds mostly 10-26 folders; this job is dated 11-26 …".
+  A wrong destination is no longer silent.
+- **Test:** `test_a_phone_job_keeps_its_own_month` reproduces the exact name `31-10-26 Replaced Light Cover …`
+  before the fix; after it, `23-11-26 …`, plus the warning. A job of the folder's own month gets no warning.
+  Suite 249/249. CODEMAP unchanged.
+- **The job already filed:** see `chat_log/chat_2026-11-05.md` Entry 2 for what Nick is advised to do.
+- **Not checked here:** the ship PC itself (no access from this PC), and whether the phone's manifest really
+  carried `work_date` 2026-11-23 (the Director asked JS to confirm).

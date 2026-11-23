@@ -4283,6 +4283,51 @@ def test_a_full_month_says_so_in_the_filed_block():
         assert result.final_folder.name.startswith("02-10-26"), result.final_folder.name
 
 
+def test_a_phone_job_keeps_its_own_month():
+    """M1 (2026-11-23, Nick's phone screen): job 20261123-150739-0da816, done on
+    23 November, was filed as "31-10-26 Replaced Light Cover Passageway Laundry
+    RM.". The phone path asked `detect_target_month` for the folder's month, and
+    a destination that is mostly October answered October; the unique-day rule
+    then took the one free October number, 31.
+
+    That month guess exists for camera photos, whose clocks can be wrong. A
+    phone job's work_date is a date a person set. The day may still move (the
+    unique-day rule, Nick confirmed it three times), the month may not. The shape
+    here is the one the result implies: days 1-30 taken, 31 free, all October.
+    """
+    if not _have_pillow():
+        return
+    from core import jobshot
+
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        dest = tmp / "dest"
+        dest.mkdir()
+        for d in range(1, 31):
+            (dest / f"{d:02d}-10-26 Placeholder {d:02d}").mkdir()
+
+        arrival = _arrival(tmp, photos=1, job="Replaced Light Cover Passageway Laundry RM",
+                           work_date="2026-11-23", plain=True,
+                           job_id="20261123-150739-0da816")
+        result = jobshot.import_job(arrival, dest)
+        assert result.ok, result.error
+        assert result.final_folder.name.startswith("23-11-26"), result.final_folder.name
+        assert result.folder_date.month == 11, result.folder_date
+        # November's 30 numbers are all taken across the folder, so the job keeps
+        # its own day and says so, as on any full month
+        assert result.date_was_capped is True
+        # ...and the PC says the destination looks like another month's folder
+        assert any("10-26" in w and "11-26" in w for w in result.warnings), result.warnings
+
+        # a job of the folder's own month gets no such warning
+        same = _arrival(tmp / "oct", photos=1, job="Inspected Tumble Dryer",
+                        work_date="2026-10-31", plain=True,
+                        job_id="20261031-090000-oct000")
+        r2 = jobshot.import_job(same, dest)
+        assert r2.ok, r2.error
+        assert not any("destination" in w for w in r2.warnings), r2.warnings
+
+
 def test_two_capped_jobs_share_a_day_without_sharing_a_folder():
     """The property that makes a full month SAFE, and it was reasoned rather
     than measured until 2026-10-02.
