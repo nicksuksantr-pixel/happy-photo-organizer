@@ -1,6 +1,6 @@
 # Happy Photo Organizer — sorts ship-maintenance photos into dated, AI-named job folders
 
-> **Stack:** Python 3.13 + CustomTkinter (Windows desktop), Gemini through `google-genai` · **Version: v1.069**
+> **Stack:** Python 3.13 + CustomTkinter (Windows desktop), Gemini through `google-genai` · **Version: v1.070**
 > **Path:** `C:\Users\NickSuksanTr\Documents\Projects\Happy-Photo-Organizer\`
 
 ## What it does

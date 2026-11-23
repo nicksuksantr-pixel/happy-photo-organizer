@@ -9,6 +9,18 @@ Cosmetic / design / V2-scope items that survived round 6 + 7 + 8. All
 catalogued in detail at the bottom of this file under "Round 6
 deferred".
 
+## [1.070] — 2026-11-23 — A phone job keeps its own month
+
+### Fixed
+- **A job sent from the phone is filed under its own month.** It used to take
+  the month most of the destination's folders were in, so ten November jobs
+  went into October folders (a 23 November job became `31-10-26 ...`), even
+  after the destination was set to November, because October-named folders
+  moved in by hand still outnumbered the November ones. The day can still
+  move under the one-number-per-day rule; the month no longer can. (M1)
+- **A destination that looks like another month's folder now says so**, in
+  the PC's log and in the reply to the phone.
+
 ## [1.069] — 2026-11-01 — The next day keeps its own folder (released after its drills from v1.068 and v1.065 passed, #28)
 
 ### Fixed
