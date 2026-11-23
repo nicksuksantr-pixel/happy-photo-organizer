@@ -746,3 +746,12 @@ the oldest listed version (UPDATE_DRILL step 1).
 - **The test repo:** the candidate went on it draft-first (`drill v1.070`), and its public `releases/latest` read
   back as v1.070, 91,709,318 bytes, digest `e5670b50…`.
 - **Both receipts:** `release-gate --validate` exit 0 at collection. The embedded key worked, fp `e656add8f927`.
+
+### Released
+
+- **RELEASED 2026-11-23**, tag `v1.070` at `26513d1`, through `tools/publish_release.py --previous 1.069`.
+  - The #28 lock passed, and the release went up draft-first.
+  - The asset was verified on the draft, then re-downloaded from `latest`: sha256 `e5670b50…`, the drilled file.
+- **`--check 1.070 --previous 1.065`:** published, the asset matches the local build, and the app offers it to a
+  v1.065 user.
+- **Not yet seen:** the field updating. Read Nick's `update.log` and the ship PC for a `STARTED 1.070` line.
