@@ -500,6 +500,8 @@ because of its RPM, so the RPD clamp was never exercised. The effect is that the
 - **Test:** `test_a_phone_job_keeps_its_own_month` reproduces the exact name `31-10-26 Replaced Light Cover …`
   before the fix; after it, `23-11-26 …`, plus the warning. A job of the folder's own month gets no warning.
   Suite 249/249. CODEMAP unchanged.
-- **The job already filed:** see `chat_log/chat_2026-11-05.md` Entry 2 for what Nick is advised to do.
+- **Scope (JS read Nick's phone, relayed by the Director):** not one job but **ten**: every November job, 6–23 Nov, landed in October
+  folders; the 28 jobs of 23 Sep–29 Oct are in their own months. The phone clock is right. The re-filing plan is
+  `chat_log/chat_2026-11-05.md` Entry 3.
 - **Not checked here:** the ship PC itself (no access from this PC), and whether the phone's manifest really
   carried `work_date` 2026-11-23 (the Director asked JS to confirm).
