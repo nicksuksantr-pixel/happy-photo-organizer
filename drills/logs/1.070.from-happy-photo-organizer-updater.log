@@ -1,0 +1,23 @@
+[2026-11-23 15:57:14] _fetch_latest_release: GET http://127.0.0.1:47665/latest
+[2026-11-23 15:57:15] download_installer start: url=http://127.0.0.1:47665/asset/HappyPhotoOrganizerSetup.exe dest=C:\Users\drill\.happy-photo-organizer\updates\HappyPhotoOrganizerSetup-v1.070.exe expected_size=91709318
+[2026-11-23 15:57:15]   attempt 1/3: resume_from=0
+[2026-11-23 15:57:15]     HTTP 200 CL=91709318 CR='' expected_total=91709318
+[2026-11-23 15:57:16]   attempt 1: SUCCESS — 91,709,318 bytes
+[2026-11-23 15:57:43] _fetch_latest_release: GET http://127.0.0.1:47665/latest
+[2026-11-23 15:58:50] _fetch_latest_release: GET http://127.0.0.1:47665/latest
+[2026-11-23 15:58:50] _fetch_latest_release: HTTP 500
+[2026-11-23 15:58:56] _fetch_latest_release: GET http://127.0.0.1:47665/latest
+[2026-11-23 15:58:56] _fetch_latest_release: HTTP 403
+[2026-11-23 15:59:01] _fetch_latest_release: GET http://127.0.0.1:47665/latest
+[2026-11-23 15:59:01] _fetch_latest_release: unreachable: Remote end closed connection without response
+[2026-11-23 15:59:07] _fetch_latest_release: GET http://127.0.0.1:47665/latest
+[2026-11-23 15:59:08] download_installer start: url=http://127.0.0.1:47665/asset/HappyPhotoOrganizerSetup.exe dest=C:\Users\drill\.happy-photo-organizer\updates\HappyPhotoOrganizerSetup-v1.071.exe expected_size=91709318
+[2026-11-23 15:59:08]   attempt 1/3: resume_from=0
+[2026-11-23 15:59:08]     HTTP 200 CL=91709318 CR='' expected_total=91709318
+[2026-11-23 15:59:08]   attempt 1: SUCCESS — 91,709,318 bytes
+[2026-11-23 15:59:28] _fetch_latest_release: GET http://127.0.0.1:47665/latest
+[2026-11-23 16:04:28] _fetch_latest_release: GET http://127.0.0.1:47665/latest
+[2026-11-23 16:04:28] download_installer start: url=http://127.0.0.1:47665/asset/HappyPhotoOrganizerSetup.exe dest=C:\Users\drill\.happy-photo-organizer\updates\HappyPhotoOrganizerSetup-v1.071.exe expected_size=91709318
+[2026-11-23 16:04:28]   attempt 1/3: resume_from=0
+[2026-11-23 16:04:29]     HTTP 200 CL=91709318 CR='' expected_total=91709318
+[2026-11-23 16:04:29]   attempt 1: SUCCESS — 91,709,318 bytes

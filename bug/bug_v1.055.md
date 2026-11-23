@@ -493,7 +493,7 @@ because of its RPM, so the RPD clamp was never exercised. The effect is that the
 - **What the result says about the ship PC (inferred, not seen):** 31 is only chosen when 23 and every day 1–30
   are taken, so that destination held day numbers 1–30 and was mostly October. A folder Nick had just set up for
   November would not look like that. The likely state: **the ship PC's HPO still points at the October folder.**
-- **Fixed in source (not built, not released):** the month is the work_date's, always. The day still follows
+- **Fixed in v1.070 (released 2026-11-23 after its drills, `log/log_v1.057.md` Entry 15):** the month is the work_date's, always. The day still follows
   the unique-day rule. When the destination's majority month differs from the job's month, the PC log and the
   reply to the phone now say so: "the destination holds mostly 10-26 folders; this job is dated 11-26 …".
   A wrong destination is no longer silent.

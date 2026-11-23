@@ -702,3 +702,47 @@ before the drills.
 
 That is four minutes after publishing, with no click: the route drilled in `drills/1.069.json`. The ship PC (v1.065)
 is not read; its route is the one drilled in `drills/1.069.from-1.065.json`.
+
+## Entry 15 — 2026-11-23 — v1.070 — A phone job keeps its own month
+
+**Asked:** *"ให้ HPO ซ้อมอัปเดตแล้วปล่อย v1.070 เลย"* (Nick, 2026-11-23, relayed by the Director).
+
+### What changed in the app
+
+- **M1** (`bug/bug_v1.055.md` Bug 6, fix `abbbafe`): a job from the phone is filed under its `work_date`'s month.
+  It used to take the destination's majority month (`detect_target_month`).
+  - Ten November jobs landed in October folders, and they kept landing there after the Destination was set to
+    November, because October-named folders moved into it by hand out-voted the November ones.
+  - The day still follows the one-number-per-day rule.
+  - A majority month that differs from the job's month is now a warning, on the PC and in the reply to the phone.
+
+### The build
+
+- `python -m PyInstaller HappyPhotoOrganizer.spec --noconfirm --clean`, then `python installer/build_installer.py`.
+- Bundle VERSION 1.070. The setup is 91,709,318 bytes, sha256 `e5670b50…`.
+- **The key:** one bundled `gemini.key`, registered free for Happy-Photo-Organizer (`register-key.mjs whose`). No
+  other file in the app folder holds anything key-shaped, and neither do the receipts or logs.
+- The publish script's local gates (`--dry-run`) passed. Suite 249/249. CODEMAP current; README names v1.070.
+
+### Field versions (drill.json `field_versions`)
+
+| Version | Where | Read | Drill |
+|---|---|---|---|
+| 1.069 | Nick's PC | 2026-11-23, his update.log: STARTED 1.069 at 2026-11-01 10:52:56 | `drills/drill.json`, the loopback feed, receipt `drills/1.070.json` |
+| 1.065 | the ship PC | 2026-10-30, V-Log v1.065 | `drills/drill.from-1.065.json`, repo-env via the test repo, receipt `drills/1.070.from-1.065.json` |
+
+The ship PC was reported (relayed) as v1.069 on 2026-11-23, but nobody read it. So it was still drilled from 1.065,
+the oldest listed version (UPDATE_DRILL step 1).
+
+### The drills
+
+| FROM | Route | Run | Result |
+|---|---|---|---|
+| 1.069 (`6cb565fc…`, the released file) | the loopback feed | 15:55:59–16:06:57 (11 min) | **15/15 PASS**, receipt `drills/1.070.json` |
+| 1.065 (`46902c79…`, the released file) | repo-env, the test repo | 16:07:47–16:23:02 (15.2 min) | **15/15 PASS**, receipt `drills/1.070.from-1.065.json` |
+
+- **Before staging:** the drill lock was free and `HPO.cmd` absent.
+- **The watcher:** picked up each stage within about 20 s.
+- **The test repo:** the candidate went on it draft-first (`drill v1.070`), and its public `releases/latest` read
+  back as v1.070, 91,709,318 bytes, digest `e5670b50…`.
+- **Both receipts:** `release-gate --validate` exit 0 at collection. The embedded key worked, fp `e656add8f927`.

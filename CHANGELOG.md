@@ -9,7 +9,7 @@ Cosmetic / design / V2-scope items that survived round 6 + 7 + 8. All
 catalogued in detail at the bottom of this file under "Round 6
 deferred".
 
-## [1.070] — 2026-11-23 — A phone job keeps its own month
+## [1.070] — 2026-11-23 — A phone job keeps its own month (released after its drills from v1.069 and v1.065 passed, #28)
 
 ### Fixed
 - **A job sent from the phone is filed under its own month.** It used to take

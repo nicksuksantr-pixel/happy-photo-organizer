@@ -1,0 +1,27 @@
+2026-11-23T16:13:39+07:00 UPDATE HANDOVER 1.070 the app that handed over (pid 21980) had not exited after 20 s; ended it (bug D1: up to v1.066 its tray thread outlives sys.exit)
+2026-11-23T16:13:45+07:00 UPDATE STAGED 1.070 1898 files, 129624997 bytes in C:\Users\drill\AppData\Local\HappyPhotoOrganizer\.update\new
+2026-11-23T16:13:54+07:00 UPDATE SWAPPED 1.070 1898 files in C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer; pruned 0
+2026-11-23T16:13:58+07:00 STARTED 1.070 C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe
+2026-11-23T16:14:00+07:00 UPDATE CHECK 1.070 nothing newer: latest is v1.070 (feed http://127.0.0.1:47665/latest)
+2026-11-23T16:14:11+07:00 UPDATE CLEANED 1.070 removed the rollback copy (1898 files) in C:\Users\drill\AppData\Local\HappyPhotoOrganizer\.update
+2026-11-23T16:14:58+07:00 STARTED 1.070 C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe
+2026-11-23T16:15:00+07:00 UPDATE CHECK 1.070 could not check: GitHub answered HTTP 500 (feed http://127.0.0.1:47665/latest)
+2026-11-23T16:15:05+07:00 STARTED 1.070 C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe
+2026-11-23T16:15:07+07:00 UPDATE CHECK 1.070 could not check: GitHub answered HTTP 403 (feed http://127.0.0.1:47665/latest)
+2026-11-23T16:15:11+07:00 STARTED 1.070 C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe
+2026-11-23T16:15:13+07:00 UPDATE CHECK 1.070 could not check: could not reach GitHub: Remote end closed connection without response (feed http://127.0.0.1:47665/latest)
+2026-11-23T16:15:17+07:00 STARTED 1.070 C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe
+2026-11-23T16:15:19+07:00 UPDATE CHECK 1.070 v1.071 is newer (feed http://127.0.0.1:47665/latest)
+2026-11-23T16:15:19+07:00 UPDATE FOUND 1.071 HappyPhotoOrganizerSetup.exe 91709318 bytes sha256=e5670b50bd17bfa33047195930bc249b2a006aff5e2f477ae750db979c37d672
+2026-11-23T16:15:20+07:00 UPDATE DOWNLOADED 1.071 C:\Users\drill\.happy-photo-organizer\updates\HappyPhotoOrganizerSetup-v1.071.exe 91709318 bytes
+2026-11-23T16:15:20+07:00 UPDATE REFUSED 1.071 the download's sha256 ffb76c128cae366a06877ddd69fe2ccc02abcd85a1020ce46f2e222955558679 is not the release's e5670b50bd17bfa33047195930bc249b2a006aff5e2f477ae750db979c37d672
+2026-11-23T16:15:35+07:00 STARTED 1.070 C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe
+2026-11-23T16:15:37+07:00 UPDATE CHECK 1.070 nothing newer: latest is v1.070 (feed http://127.0.0.1:47665/latest)
+2026-11-23T16:20:37+07:00 UPDATE CHECK 1.070 v1.071 is newer (feed http://127.0.0.1:47665/latest)
+2026-11-23T16:20:37+07:00 UPDATE FOUND 1.071 HappyPhotoOrganizerSetup.exe 91709318 bytes sha256=e5670b50bd17bfa33047195930bc249b2a006aff5e2f477ae750db979c37d672
+2026-11-23T16:20:38+07:00 UPDATE DOWNLOADED 1.071 C:\Users\drill\.happy-photo-organizer\updates\HappyPhotoOrganizerSetup-v1.071.exe 91709318 bytes
+2026-11-23T16:20:38+07:00 UPDATE VERIFIED 1.071 sha256=e5670b50bd17bfa33047195930bc249b2a006aff5e2f477ae750db979c37d672
+2026-11-23T16:22:38+07:00 UPDATE HANDOVER 1.071 C:\Users\drill\.happy-photo-organizer\updates\HappyPhotoOrganizerSetup-v1.071.exe --silent --upgrade
+2026-11-23T16:22:50+07:00 UPDATE STAGED 1.070 1898 files, 129624997 bytes in C:\Users\drill\AppData\Local\HappyPhotoOrganizer\.update\new
+2026-11-23T16:22:57+07:00 UPDATE SWAPPED 1.070 1898 files in C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer; pruned 0
+2026-11-23T16:23:01+07:00 STARTED 1.070 C:\Users\drill\AppData\Local\HappyPhotoOrganizer\HappyPhotoOrganizer\HappyPhotoOrganizer.exe
