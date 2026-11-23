@@ -503,5 +503,7 @@ because of its RPM, so the RPD clamp was never exercised. The effect is that the
 - **Scope (JS read Nick's phone, relayed by the Director):** not one job but **ten**: every November job, 6–23 Nov, landed in October
   folders; the 28 jobs of 23 Sep–29 Oct are in their own months. The phone clock is right. The re-filing plan is
   `chat_log/chat_2026-11-05.md` Entry 3.
+- **Destination was already November (Nick, 2026-11-23):** still October, because the October-named folders moved into
+  the November folder by hand out-voted the November ones. Same cause, inside the right folder. Entry 4.
 - **Not checked here:** the ship PC itself (no access from this PC), and whether the phone's manifest really
   carried `work_date` 2026-11-23 (the Director asked JS to confirm).
