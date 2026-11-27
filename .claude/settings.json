@@ -28,6 +28,16 @@
           }
         ]
       }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/tools/repeat-mistakes-hook.mjs\""
+          }
+        ]
+      }
     ]
   }
 }
