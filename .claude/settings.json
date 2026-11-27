@@ -27,6 +27,15 @@
             "command": "node \"$CLAUDE_PROJECT_DIR/tools/records-quota-check.mjs\""
           }
         ]
+      },
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/tools/no-stdin-python.mjs\""
+          }
+        ]
       }
     ],
     "SessionStart": [
