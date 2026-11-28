@@ -46,6 +46,14 @@
             "command": "node \"$CLAUDE_PROJECT_DIR/tools/repeat-mistakes-hook.mjs\""
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/tools/disk-space-hook.mjs\""
+          }
+        ]
       }
     ]
   }

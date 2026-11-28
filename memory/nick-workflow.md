@@ -12,7 +12,7 @@
 
 | File | State |
 |---|---|
-| command_pattern.md | **v3.32** · 2026-11-28 · English · **29 rules** (+ §2.1, §4.1, §4.2, §15.7, §16.1, **§16.2 session cap 10**, §20.0, §25.2/25.3; §2 free-tier limits measured → `memory/GEMINI_FREE_LIMITS.md`; v3.31 #7 enforced; **v3.32 #29 the repeat-mistakes ledger**) |
+| command_pattern.md | **v3.33** · 2026-11-28 · English · **29 rules** (+ §2.1, §4.1, §4.2, §15.7, §16.1, **§16.2 session cap 10**, §20.0, §25.2/25.3; §2 free-tier limits measured → `memory/GEMINI_FREE_LIMITS.md`; v3.31 #7 enforced; **v3.32 #29 the repeat-mistakes ledger**) |
 | MASTER.md | 2026-06-11 · English · Section 0 Fast Path |
 | SHARED.md | 2026-06-11 · English (tool data as of 2026-06-09) |
 | Note Master.txt | Nick's handwritten (Thai) — ⚠ **0 bytes since at least 2026-08-16** (content lost; ask Nick before relying on anything said to be in it) · versioning is #14.7 `vX.NNN` |
@@ -85,7 +85,12 @@
 
 ## Latest changes (newest first — keep max 10, move older lines to the bottom note)
 
-★ **2026-11-28 (newest)** — **v3.32 · #29 the repeat-mistakes ledger: never rotated, shown to every session by a hook.**
+★ **2026-11-28 (newest)** — **v3.33 · #29.1 second mechanism: tools/disk-space-hook.mjs warns every session when the disk runs low.**
+- **Why.** C: filled for the 5th time (08-17, 09-26, 11-12, 11-20, 11-28), always noticed below 60 GB, each time a different project hoarding its own output (this time TTVC 62 GB: ~20 GB superseded renders + 10.7 GB live session scratch).
+- **What.** A SessionStart hook in every repo. Above 80 GB free (`DISK_WARN_GB`) it prints nothing; below, it prints `DISK LOW` / `CRITICAL` (<40 GB) and the top 5 eaters by project from `~/.claude/disk-eaters.json`, refreshed by a detached background scan at most every 6 h. ~0.1 s. Never deletes.
+- **What you do when you see it.** Tell Nick. If your own project is on the list, free your own hoard (superseded renders, build dirs, your scratch) before new heavy work; anything else, name it to Nick or the Director (#1).
+
+★ **2026-11-28** — **v3.32 · #29 the repeat-mistakes ledger: never rotated, shown to every session by a hook.**
 - **What happened.** Nick: the same bugs and slips keep recurring, and nobody reads the bug log before work, because the log has already rotated away. He asked TTVC and SM to keep a separate, permanent log.
   - SM built `memory/REPEAT_MISTAKES.md`: 9 rows with counts and mechanisms, plus a hook for its 12× `python -` hang.
   - TTVC wrote a deep one-time analysis of 15 recurring code-film classes. It is not a running ledger, and it is not read at session start.
